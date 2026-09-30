@@ -291,6 +291,8 @@ local function standInLengthFor(locoModelId)
 	local ok, model = pcall(api.res.modelRep.getAsTable, locoModelId)
 	local ext = ok and type(model) == "table" and model.metadata and model.metadata.extent
 	if ext and ext.bbMax and ext.bbMin then return ext.bbMax[1] - ext.bbMin[1] end
+	local he = ok and type(model) == "table" and model.collider and model.collider.params and model.collider.params.halfExtents
+	if he and he[1] then return he[1] * 2 end
 	return nil
 end
 
@@ -394,9 +396,10 @@ end
 -- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
 -- wagons, so that it can pull them: a loco at the front of the parts list is
 -- not reversed, one at the rear is.
-local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId)
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId, locoReversed)
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
-	local loco = partFromSnapshot(locoSnap, attachAtRear)
+	if locoReversed == nil then locoReversed = attachAtRear end
+	local loco = partFromSnapshot(locoSnap, locoReversed)
 	local parts = {}
 	if not attachAtRear then parts[1] = loco end
 	for _, part in ipairs(config.vehicles) do
@@ -457,6 +460,7 @@ end
 -- ---------------------------------------------------------------------
 local REVERSAL_PENALTY = 250.0 -- metres-equivalent cost of stopping to reverse at a click point
 local REVERSAL_PAUSE = 1.5     -- seconds the ghost loco waits when it reverses
+local CLEAR_M = 10.0          -- a reversal happens this far into the track piece, i.e. just clear of the points, not at the piece's end
 local STATES = { { true, true }, { true, false }, { false, true }, { false, false } } -- {arrive dir, depart dir}
 
 local function getTnEdge(entity, index)
@@ -868,10 +872,39 @@ end
 
 -- Advances one run's ghost loco by dt seconds. Returns true once it has
 -- reached the end of its loop's loopEdges.
+local function routeFinished(run)
+	-- With the flip enabled the run is not over when the route is: the train is
+	-- flipped and the ghost glides on to where the loco will appear.
+	if CONFIG.reverseBeforeRecouple and run.phase == nil then
+		run.phase = "flip"
+		return false
+	end
+	return true
+end
+
+-- After the flip: glide in a straight line to run.target (where the stand-in
+-- now is, i.e. where the loco will be put back), so nothing snaps. The facing
+-- stays as it was.
+local function advanceApproach(run, dt)
+	local dx, dy, dz = run.target.x - run.gx, run.target.y - run.gy, run.target.z - run.gz
+	local dist = math.sqrt(dx * dx + dy * dy)
+	local speed = math.min(run.loopSpeed or 8.0, math.max(1.5, dist * 0.5))
+	local step = speed * dt
+	local arrived = step >= dist
+	local f = arrived and 1.0 or (step / dist)
+	run.gx, run.gy, run.gz = run.gx + dx * f, run.gy + dy * f, run.gz + dz * f
+	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
+	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
+	return arrived
+end
+
 local function advanceGhost(run, dt)
 	local loop = run.loop
+	if run.phase == "flip" then return false end -- waiting for the train to be flipped
+	if run.phase == "approach" then return advanceApproach(run, dt) end
+	if run.phase == "done" then return true end
 	if run.edgeCursor > #loop.loopEdges then
-		return true
+		return routeFinished(run)
 	end
 
 	-- Waiting at a reversal point (loco changing ends).
@@ -892,10 +925,18 @@ local function advanceGhost(run, dt)
 		run.edgeLength = estimateEdgeLength(getEdgeGeometry(edgeDef))
 		run.edgeProgress = run.startOffset or 0.0
 		run.startOffset = nil
+		-- A piece that is about to be driven back over (a reversal) is only
+		-- driven far enough to clear the points, not to its far end.
+		run.edgeLimit = nil
+		local nextDef = loop.loopEdges[run.edgeCursor + 1]
+		if nextDef ~= nil and nextDef.reversal and sameEdge(nextDef, edgeDef) and run.edgeLength > CLEAR_M * 1.5 then
+			run.edgeLimit = math.max(CLEAR_M, run.edgeProgress + 1.0)
+		end
 	end
 
 	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
-	run.edgeProgress = run.edgeProgress + run.speed * dt
+	local endAt = run.edgeLimit or run.edgeLength
+	run.edgeProgress = math.min(run.edgeProgress + run.speed * dt, endAt)
 	local t = run.edgeLength > 0 and math.min(run.edgeProgress / run.edgeLength, 1.0) or 1.0
 
 	-- Position along the piece's geometry (u runs start -> end); travel is
@@ -910,21 +951,41 @@ local function advanceGhost(run, dt)
 	local pb = calc(geometry, math.min(1.0, u + 0.02))
 	local dx, dy = pb.x - pa.x, pb.y - pa.y
 	if not forward then dx, dy = -dx, -dy end
-	local yaw = math.atan2(dy, dx)
+	local travelYaw = math.atan2(dy, dx)
+	-- The ghost starts facing exactly as the real loco did (yawOffset is 0 or
+	-- half a turn, fixed on the first step) and keeps that facing through
+	-- every reversal: a loco that reverses does not turn round.
+	if run.yawOffset == nil then
+		run.yawOffset = 0.0
+		if run.locoYaw ~= nil then
+			local diff = math.atan2(math.sin(run.locoYaw - travelYaw), math.cos(run.locoYaw - travelYaw))
+			run.yawOffset = (math.abs(diff) > math.pi / 2) and math.pi or 0.0
+			logInfo(string.format("ghost facing: %s the first direction of travel", run.yawOffset == 0.0 and "along" or "against"))
+		end
+	end
+	local yaw = travelYaw + run.yawOffset
 	if run.headingFlipped then
 		yaw = yaw + math.pi -- driving backwards: the loco keeps facing the way it faced
 	end
 	local transf = api.type.Mat4f.rotZTransl(yaw, pos)
+	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
+	run.loopSpeed = loop.speed
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
 
-	if run.edgeProgress >= run.edgeLength then
+	if run.edgeProgress >= endAt then
+		if run.edgeLimit ~= nil then
+			run.startOffset = run.edgeLength - run.edgeLimit -- drive back from here
+		end
 		run.edgeCursor = run.edgeCursor + 1
 		run.edgeLength = nil
 		run.reversalDone = false
 	end
 
-	return run.edgeCursor > #loop.loopEdges
+	if run.edgeCursor > #loop.loopEdges then
+		return routeFinished(run)
+	end
+	return false
 end
 
 -- Lets a train that was held for a run-around go again. Used on every failure
@@ -966,10 +1027,10 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 end
 
 -- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
-local function recouple(run, tv, atRear, why)
-	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist, facing outward -", why)
+local function recouple(run, tv, atRear, locoReversed, why)
+	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed (tender first)" or "not reversed", "-", why)
 
-	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId)
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed)
 	if not okBuild then
 		-- The ghost is deliberately left in place: it is the only copy of the loco.
 		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
@@ -996,13 +1057,78 @@ local function recouple(run, tv, atRear, why)
 	end)
 end
 
+-- Unit vector along the train from its rear carriage to its head carriage
+-- (the direction the train would travel), or nil.
+local function headDirection(vehicleEntity)
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	if cl == nil or #cl.carriages < 2 then return nil end
+	local function pos(i)
+		local mil = api.engine.getComponent(cl.carriages[i], api.type.ComponentType.MODEL_INSTANCE_LIST)
+		local c = mil.fatInstances[1].transf:cols(3)
+		return c.x, c.y
+	end
+	local hx, hy = pos(1)
+	local rx, ry = pos(#cl.carriages)
+	local d = math.sqrt((hx - rx) ^ 2 + (hy - ry) ^ 2)
+	if d < 1e-6 then return nil end
+	return (hx - rx) / d, (hy - ry) / d
+end
+
+-- Whether the loco part must be marked reversed so that it faces the way the
+-- ghost faced at the end of its run (= the way the real loco faced when it
+-- left: a loco that runs round does not turn, so it goes back on facing the
+-- train and pulls it tender-first). reversed = facing against the train's
+-- head direction.
+local function locoIsReversed(run)
+	local dx, dy = headDirection(run.vehicleEntity)
+	if dx == nil or run.gyaw == nil then return nil, "unknown facing" end
+	local dot = math.cos(run.gyaw) * dx + math.sin(run.gyaw) * dy
+	return dot < 0, string.format("facing dot head direction = %.2f", dot)
+end
+
+-- Edits one run in the saved state (a run handed to postUpdate is a copy).
+local function updateRun(state, vehicleEntity, fn)
+	local data = state:get()
+	for _, r in ipairs(data.runs) do
+		if r.vehicleEntity == vehicleEntity then fn(r) end
+	end
+	state:set(data)
+end
+
 -- The game flips a train that has to leave a terminus by the way it came (it
 -- mirrors the consist end for end and keeps the parts list order), and it does
 -- that at departure. A loco coupled on at the exit end was therefore flipped
--- straight back to the buffer end (seen live). So the train is flipped HERE,
--- while only wagons and the invisible stand-in are on it: the head then faces
--- the exit, the stand-in sits at the exit end where the ghost has arrived, and
--- the loco replaces it at the head, so nothing needs flipping at departure.
+-- straight back to the buffer end (seen live). So the train is flipped HERE
+-- (game's own reverse command), while only wagons and the invisible stand-in
+-- are on it: the head then faces the exit and the stand-in sits at the exit
+-- end. The ghost then glides to the stand-in (position read off the live
+-- carriage) and the loco replaces it, so nothing snaps and nothing is flipped
+-- at departure. Live run: parts order is preserved by the flip ("Swwww").
+local function flipRun(state, vehicleEntity)
+	local function fail(reason)
+		logInfo("flip failed (", reason, ") - the loco will be put back without flipping")
+		updateRun(state, vehicleEntity, function(r) r.phase = "done"; r.noFlip = true end)
+	end
+	local okRev, revCmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
+	if not okRev then return fail("reverse command rejected: " .. tostring(revCmd)) end
+	api.cmd.sendCommand(revCmd, function(_, success)
+		if not success then return fail("reverse command failed") end
+		local okT, x, y, z = pcall(function()
+			local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+			local mil = api.engine.getComponent(cl.carriages[1], api.type.ComponentType.MODEL_INSTANCE_LIST)
+			local c = mil.fatInstances[1].transf:cols(3)
+			return c.x, c.y, c.z
+		end)
+		if not okT then return fail("could not read the stand-in's position: " .. tostring(x)) end
+		logInfo(string.format("train flipped; ghost heading for the stand-in at %.0f, %.0f", x, y))
+		updateRun(state, vehicleEntity, function(r)
+			r.target = { x = x, y = y, z = z }
+			r.flipped = true
+			r.phase = "approach"
+		end)
+	end)
+end
+
 local function finishRun(run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
@@ -1010,43 +1136,18 @@ local function finishRun(run)
 		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
 		return
 	end
-
-	local function fallback(reason)
-		local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
-		if not okEnd then
-			logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
-			atRear, why = true, "fallback"
-		end
-		recouple(run, tv, atRear, reason .. "; " .. tostring(why))
-	end
-
-	if not CONFIG.reverseBeforeRecouple then
-		fallback("reverse-before-recouple is off")
+	local reversed, why = locoIsReversed(run)
+	if run.flipped then
+		-- Head faces the exit and the stand-in is the head part: loco goes there.
+		recouple(run, tv, false, reversed, "train was flipped first, loco takes the head; " .. tostring(why))
 		return
 	end
-	local okRev, revCmd = pcall(api.cmd.makeVehicleReverseCmd, run.vehicleEntity)
-	if not okRev then
-		fallback("reverse command rejected: " .. tostring(revCmd))
-		return
+	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
+	if not okEnd then
+		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
+		atRear, endWhy = true, "fallback"
 	end
-	api.cmd.sendCommand(revCmd, function(_, success)
-		if not success then
-			fallback("reverse command failed")
-			return
-		end
-		local tvNow = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
-		if tvNow == nil then
-			logInfo("finishRun: vehicle", run.vehicleEntity, "vanished after the reverse")
-			api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
-			return
-		end
-		local order = {}
-		for i, part in ipairs(tvNow.transportVehicleConfig.vehicles) do
-			order[#order + 1] = (part.part.modelId == run.standInModelId) and "S" or "w"
-		end
-		logInfo("train reversed; parts now (S = stand-in):", table.concat(order))
-		recouple(run, tvNow, false, "train was reversed first so its head faces the exit")
-	end)
+	recouple(run, tv, atRear, reversed, "no flip; " .. tostring(endWhy) .. "; " .. tostring(why))
 end
 
 local function startRunAround(state, vehicleEntity, loop)
@@ -1145,6 +1246,11 @@ local function startRunAround(state, vehicleEntity, loop)
 			end
 
 			local startCursor, startOffset = 1, nil
+			local locoYaw = nil
+			if locoTransf ~= nil then
+				local c0 = locoTransf:cols(0)
+				locoYaw = math.atan2(c0.y, c0.x)
+			end
 			if locoTransf ~= nil then
 				local c = locoTransf:cols(3)
 				local okL, k, off, dist = pcall(locateOnRoute, loop, { x = c.x, y = c.y })
@@ -1164,6 +1270,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				ghost = ghost,
 				edgeCursor = startCursor,
 				startOffset = startOffset,
+				locoYaw = locoYaw,
 				edgeLength = nil,
 				edgeProgress = 0.0,
 				speed = 0.0,
@@ -1479,6 +1586,12 @@ return {
 					result.finishes[#result.finishes + 1] = run
 				else
 					remaining[#remaining + 1] = run
+					if run.phase == "flip" and not run.flipSent then
+						run.flipSent = true
+						result = result or {}
+						result.flips = result.flips or {}
+						result.flips[#result.flips + 1] = run.vehicleEntity
+					end
 				end
 			end
 			data.runs = remaining
@@ -1498,6 +1611,12 @@ return {
 				if loop ~= nil then
 					startRunAround(state, p.vehicleEntity, loop)
 				end
+			end
+		end
+
+		if updateResult.flips ~= nil then
+			for _, vehicleEntity in ipairs(updateResult.flips) do
+				flipRun(state, vehicleEntity)
 			end
 		end
 

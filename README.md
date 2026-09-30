@@ -98,6 +98,21 @@ through earlier versions of this mod is fine.
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
+- **Second live run: the flip works, three things fixed (untested).** The log
+  showed the train flipping with the parts order kept ("Swwww"), so the game's
+  flip is confirmed. Then: (1) the ghost snapped from the last point to where
+  the loco reappeared. The run now waits for the flip, reads the invisible
+  stand-in's real position off its carriage, and the ghost glides there in a
+  straight line before the loco replaces it. (2) The loco turned round. The ghost
+  now starts with the real loco's own facing and keeps it through every reversal
+  (a loco that reverses does not turn), and the loco goes back on the train
+  facing the same way, so it pulls tender first: its `reversed` flag is worked
+  out from that facing against the train's head direction (log: "facing dot head
+  direction"). (3) Reversals no longer run to the end of the clicked piece: the
+  ghost goes 10 m into it (`CLEAR_M`), i.e. just clear of the points, and comes
+  back from there. Pieces shorter than 15 m are still driven to the end. This
+  assumes the points are at the start of that piece, which is the usual case for
+  a stub beyond a junction.
 - **First full live run: it worked, with two glitches, both fixed but untested.**
   (1) The ghost appeared in the middle of the consist. The wagons did not move
   (a first guess, that the 1 m stand-in let them close up, was wrong; the

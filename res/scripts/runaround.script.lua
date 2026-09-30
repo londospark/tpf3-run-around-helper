@@ -882,6 +882,7 @@ end
 -- for the panel. Never throws.
 local function recomputeLoopRoute(loop)
 	loop.waypoints = loop.waypoints or {}
+	loop.routeLength, loop.routePieces, loop.routeReversals = nil, nil, nil
 	if #loop.waypoints < 2 then
 		loop.loopEdges = {}
 		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more (the reversing point, then the loop)"
@@ -906,6 +907,17 @@ local function recomputeLoopRoute(loop)
 		return
 	end
 	loop.loopEdges = route
+	-- The planner's cost includes a penalty per reversal; the real length is the
+	-- sum of the pieces (reversal pieces are driven back over, so they count).
+	local length = 0.0
+	for _, e in ipairs(route) do
+		local okL, len = pcall(function() return estimateEdgeLength(getEdgeGeometry(e)) end)
+		if okL then length = length + len end
+	end
+	info.length = length
+	loop.routeLength = length
+	loop.routePieces = #route
+	loop.routeReversals = info.reversals
 	loop.pathStatus = string.format("%d points, %d track pieces, %d reversal(s), about %d m", #loop.waypoints, #route, info.reversals, math.floor(info.length))
 	logInfo("route for loop", loopLabel(loop), "-", loop.pathStatus)
 end
@@ -1771,6 +1783,13 @@ local function handleGuiCmd(data, name, param)
 			recomputeLoopRoute(loop)
 		elseif loop ~= nil and #loop.loopEdges > 0 then
 			loop.loopEdges[#loop.loopEdges] = nil -- loop saved by an older version
+		end
+
+	elseif name == "ClearLoopPoints" then
+		local loop = findLoopById(data.loops, param.loopId)
+		if loop ~= nil then
+			loop.waypoints = {}
+			recomputeLoopRoute(loop)
 		end
 
 	elseif name == "RemoveLoop" then

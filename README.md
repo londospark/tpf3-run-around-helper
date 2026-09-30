@@ -12,31 +12,33 @@ report problems on the
 [issue tracker](https://github.com/londospark/tpf3-run-around-helper/issues)
 and attach the log lines starting `[RunAroundHelper]` from `stdout.txt`.
 
-## Setting up a loop (in game)
+## Setting up a run-around (in game)
 
-Everything is configured in game.
+1. Open the window of a train standing at the terminus you want. It has a
+   **Run-around** card. Choose **Set up a run-around here**.
+2. Choose **Edit route on map**. The route is drawn on the track while you edit:
+   - the colour runs from blue at the start to orange at the end;
+   - reversing pieces are purple, with a reverse marker;
+   - clicked pieces carry a white line and a marker;
+   - dots flow along the route in the direction of travel.
 
-1. Open a train's window while it stands at the terminus you want. The **Run
-   Around Helper** panel is inside the vehicle window. There is also a
-   **Run-Around** button in the mod-button area, which can rename, tune and
-   delete loops but not add them.
-2. **Add loop from this vehicle** captures the line and the stop. The loco is
-   chosen automatically when a run starts: it is the part of the train nearest
-   your first route point. **Change loco choice** can override that.
-3. Turn on **Pick route points on map** and click a few points along where the
-   loco should go, in order: for example a piece of the loop, then track at the
-   far end of the train. You don't click every piece, the station, or the
-   reversing spot. The mod plans the route with the game's pathfinder, picks the
-   directions of travel, and finds where to reverse: just past the points, not
-   at the end of the track. More clicks steer it (for example through one side
-   of a wye). The **Route:** line shows the result: points, track pieces,
-   reversals and length. It also says which two points could not be joined.
-   **Undo last point** removes the last click. Press **Esc** or right-click to
-   stop picking. The train's window stays open while you pick.
-4. **Speed** sets how fast the loco runs round.
+   Click a few points along where the loco should go, in order: for example a
+   piece of the loop, then track at the far end of the train. You don't click
+   every piece, the station or the reversing spot. The mod plans the route with
+   the game's pathfinder and reverses just past the points. More clicks steer
+   it, for example through one side of a wye. **Undo point** and
+   **Clear points** fix mistakes. Right-click, Esc or **Done** to finish. The
+   train's window stays open.
+3. The card shows the route (length, reversals, points). While a run-around is
+   happening it also shows a progress bar and what the loco is doing: running
+   round, turning the train, coupling on. **Show** draws the route without
+   editing.
+4. The card's collapsible part holds the name, speed and acceleration sliders,
+   the loco choice (automatic by default), and delete, which asks first.
 
-Any number of loops can be set up, on different lines and termini. They are
-saved with the game.
+The **Run-Around** button in the mod-button area lists every run-around, with
+**Show on map**, **Edit route** and the same settings. Any number can be set up,
+on different lines and termini. They are saved with the game.
 
 ## What to expect
 
@@ -124,8 +126,12 @@ Only ghost copies are then used.
   stand-ins (1 m is used; `standInLength`). The loco's length is measured from
   the spacing of the carriages, so that the ghost aims for where the loco will
   sit.
-- `runaround_gui.script.lua` and the `*.res.lua` files are the panels and the
-  click-to-pick tool. They talk to the game script through one event channel.
+- `runaround_gui.script.lua` and the `*.res.lua` files are the UI: the train
+  window card, the mod-button list, and the route tool. The tool draws the route
+  with `builtin.NodeViewer` (coloured strips on given track pieces) and
+  `api.gui.spawnEphemeralHudImage` (markers), and adds clicked points with
+  `builtin.Selector`. Both only work inside a tool's action. The UI talks to
+  the game script through one event channel.
 
 ## Engine findings
 

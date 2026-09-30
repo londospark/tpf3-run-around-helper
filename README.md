@@ -35,6 +35,10 @@ Everything is configured in game - no editing Lua.
    length), or says which pair of points it couldn't join. **Add point at this
    train** does the same using the track piece a train is sitting on. **Undo
    last point** removes the last click and re-plans.
+   **Finishing:** press **Esc** or **right-click** to leave pick mode, or press
+   the toggle button again. While pick mode is on it replaces the normal
+   click-a-train behaviour, so the vehicle window (and this panel) closes; click
+   the train again afterwards to bring the panel back.
 4. **Loco end** and **Flip on recouple** control which end of the consist the
    loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
    speed. If the loco comes back on the wrong end or facing the wrong way,
@@ -64,8 +68,10 @@ through earlier versions of this mod is fine.
   that segment (fine for single track; it logs
   `pick: clicked entity=... kind=...` and the fallback it took). Double track
   or two-direction segments can't yet be told apart.
-- **Route planning is new and untested in a live game.** It has been checked
-  against a mock track layout (platform, stubs either side of the points, a
+- **Route planning has run in a live game, but the route hasn't been driven yet.**
+  With real clicks it planned routes such as "3 points, 23 track pieces,
+  1 reversal, about 647 m"; whether the loco then drives them correctly is still
+  untested. It was first checked against a mock track layout (platform, stubs either side of the points, a
   passing loop) with a pathfinder that refuses hairpin turns at junctions, where
   two loose clicks produced a complete run-around with two reversals. The real
   pathfinder and real switch rules may behave differently, and the search for a

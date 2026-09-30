@@ -245,6 +245,13 @@ function data()
 		name = "RunAroundPickTool",
 		push = function(ctx, param)
 			local colours = makeSelectorColours()
+			-- Way out of pick mode. While this tool is active it replaces the
+			-- normal click-a-train behaviour, which closes the vehicle window
+			-- (and this panel with it), so without an exit the player is stuck.
+			local function finish()
+				print("[RunAroundHelper] pick mode finished")
+				ctx.popSelf()
+			end
 			ctx.setActionFn(function()
 				local selectorParam = {
 					stopOnMenuBack = false,
@@ -256,6 +263,11 @@ function data()
 						return handlePickSelect(param.loopId, entity, apiDetails)
 					end,
 					onSelectNothing = function() return false end,
+					-- Right-click finishes picking.
+					onSelectSecondary = function()
+						finish()
+						return true
+					end,
 				}
 				for k, v in pairs(colours) do
 					selectorParam[k] = v
@@ -264,6 +276,8 @@ function data()
 					horizontalPromptList = true,
 					children = { builtin.Selector(selectorParam) },
 					terrainCirclePolicy = "Never",
+					-- Esc / back finishes picking.
+					onBack = finish,
 				}
 			end)
 		end,
@@ -373,8 +387,13 @@ function data()
 				local key = PICK_KEY_PREFIX .. tostring(loop.id)
 				local ok, err = pcall(function()
 					local toolStack = getToolStackApi()
-					if pickModeState:old() then
-						toolStack.pop(RunAroundPickTool, key)
+					-- Ask the tool stack, not this row's own state: pick mode
+					-- may have been started from another panel, or ended with
+					-- Esc / right-click.
+					local _, activeKey = toolStack.getActiveTool()
+					local armed = type(activeKey) == "string" and string.sub(activeKey, 1, #PICK_KEY_PREFIX) == PICK_KEY_PREFIX
+					if armed then
+						toolStack.pop(RunAroundPickTool, activeKey)
 						pickModeState:set(false)
 					else
 						toolStack.push(RunAroundPickTool, key, { loopId = loop.id }, false)
@@ -392,6 +411,7 @@ function data()
 			children[#children + 1] = builtin.TextView{ text = "for example a piece of the loop, then track at the far end of the train." }
 			children[#children + 1] = builtin.TextView{ text = "Loose clicks are fine: the route between them, and where the loco reverses, is worked out for you." }
 			children[#children + 1] = builtin.TextView{ text = "Click more points to steer it, e.g. through one side of a wye." }
+			children[#children + 1] = builtin.TextView{ text = "Press Esc or right-click to finish picking, then click the train to reopen this panel." }
 		end
 
 		return builtin.BoxLayout{ orientation = builtin.type.Orientation.Vertical, children = children }

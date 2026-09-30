@@ -20,11 +20,12 @@ expect rough edges (see below), and please report what you find on the
 - **You set it up by clicking a few loose points** on the track (see below); the
   mod works out the route, and where to reverse, itself. It only reverses once
   it is 10 m past the points, not at the end of the piece.
-- **The wagons jump once.** To stop the game flipping the loco back to the
-  buffer end when the train sets off, the mod uses the game's own flip on the
-  wagons while the loco is away. They swap end for end (and shift about a loco's
-  length) at that moment, as the game's normal terminus flip does. Trains of
-  identical coaches won't show it; mixed rakes will.
+- **The wagons stay where they are.** To stop the game flipping the loco back
+  to the buffer end when the train sets off, the mod uses the game's own flip
+  on the train while the loco is away, and then puts the wagons back exactly as
+  they were (same places, same order, same facing). The flip itself shows for a
+  frame or two just as the loco couples on. (Versions before 2026-09-30 let the
+  wagons jump one loco length and swap end for end: see below.)
 - **The ghost is a stand-in model.** While the loco runs round, it is drawn
   from a copy of a base-game loco model (the exact one if it's a base-game loco,
   otherwise one of the same engine type - steam, diesel or electric). So a
@@ -128,6 +129,18 @@ through earlier versions of this mod is fine.
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
+- **Wagon jump fixed (untested).** A video of the live run showed the wagons
+  jumping about one loco length and swapping end for end when the train was
+  flipped. The flip mirrors the train around its own extent, so with an
+  invisible stand-in only at the loco's end the wagons are shifted. Now there is
+  a stand-in at each end (the second one, the "tail", where the loco will couple
+  on), so the mirror leaves the wagons' extent unchanged; the ghost drives to the
+  tail stand-in first, then the train is flipped and, in the same step, the loco
+  replaces the head stand-in, the tail goes, and the wagons are re-listed in the
+  opposite order with their reversed flags toggled, which undoes the mirror. Only
+  when the loco is the first part of the train (the usual case); otherwise it
+  falls back to coupling on without the flip. Also confirmed from the video:
+  the loco arriving tender first is correct.
 - **Second live run: the flip works, three things fixed (untested).** The log
   showed the train flipping with the parts order kept ("Swwww"), so the game's
   flip is confirmed. Then: (1) the ghost snapped from the last point to where

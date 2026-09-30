@@ -377,7 +377,12 @@ end
 -- Config with the locomotive swapped for the stand-in, in the same place, and
 -- the wagons untouched. NOT with the loco simply removed: a consist with no
 -- powered part cannot be drawn and crashes the game.
-local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
+--
+-- addTail also puts a second stand-in on the far end of the train, where the
+-- loco will couple on. The game's flip mirrors the whole consist, so with a
+-- stand-in at each end the wagons keep their place through the flip (see
+-- flipRun); the tail is invisible and sits on track the loco is going to use.
+local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	for i, part in ipairs(config.vehicles) do
@@ -387,6 +392,7 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
 			parts[#parts + 1] = part
 		end
 	end
+	if addTail then parts[#parts + 1] = makeStandInPart(standId, locoSnap) end
 	return finishConfig(config, parts)
 end
 
@@ -396,10 +402,29 @@ end
 -- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
 -- wagons, so that it can pull them: a loco at the front of the parts list is
 -- not reversed, one at the rear is.
-local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId, locoReversed)
+--
+-- origRev (the wagons' original reversed flags, in original order) is given
+-- after a flip: the loco goes at the head and the wagons are re-listed in the
+-- opposite order with their flags toggled, which is exactly the flip's mirror
+-- undone, so every wagon ends up where it stood and facing as it did.
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId, locoReversed, origRev)
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
 	if locoReversed == nil then locoReversed = attachAtRear end
 	local loco = partFromSnapshot(locoSnap, locoReversed)
+	if origRev ~= nil then
+		local wagons = {}
+		for _, part in ipairs(config.vehicles) do
+			if part.part.modelId ~= standId then wagons[#wagons + 1] = part end
+		end
+		local parts = { loco }
+		for i = #wagons, 1, -1 do
+			local flag = origRev[i]
+			if flag == nil then flag = wagons[i].part.reversed end
+			wagons[i].part.reversed = not flag
+			parts[#parts + 1] = wagons[i]
+		end
+		return finishConfig(config, parts)
+	end
 	local parts = {}
 	if not attachAtRear then parts[1] = loco end
 	for _, part in ipairs(config.vehicles) do
@@ -875,17 +900,32 @@ end
 local function routeFinished(run)
 	-- With the flip enabled the run is not over when the route is: the train is
 	-- flipped and the ghost glides on to where the loco will appear.
-	if CONFIG.reverseBeforeRecouple and run.phase == nil then
-		run.phase = "flip"
+	if run.hasTail and run.phase == nil then
+		run.phase = "approach"
 		return false
 	end
 	return true
 end
 
--- After the flip: glide in a straight line to run.target (where the stand-in
--- now is, i.e. where the loco will be put back), so nothing snaps. The facing
--- stays as it was.
+-- Glide in a straight line to where the loco will be put back: the tail
+-- stand-in, read off its carriage when the approach starts (so nothing snaps).
+-- The facing stays as it was. On arrival the train is flipped (phase "flip").
 local function advanceApproach(run, dt)
+	if run.target == nil then
+		local ok, x, y, z = pcall(function()
+			local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+			local mil = api.engine.getComponent(cl.carriages[#cl.carriages], api.type.ComponentType.MODEL_INSTANCE_LIST)
+			local c = mil.fatInstances[1].transf:cols(3)
+			return c.x, c.y, c.z
+		end)
+		if not ok then
+			logInfo("approach: could not read the tail stand-in's position:", tostring(x), "- flipping now")
+			run.phase = "flip"
+			return false
+		end
+		run.target = { x = x, y = y, z = z }
+		logInfo(string.format("ghost heading for the tail stand-in at %.0f, %.0f", x, y))
+	end
 	local dx, dy, dz = run.target.x - run.gx, run.target.y - run.gy, run.target.z - run.gz
 	local dist = math.sqrt(dx * dx + dy * dy)
 	local speed = math.min(run.loopSpeed or 8.0, math.max(1.5, dist * 0.5))
@@ -895,14 +935,15 @@ local function advanceApproach(run, dt)
 	run.gx, run.gy, run.gz = run.gx + dx * f, run.gy + dy * f, run.gz + dz * f
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
-	return arrived
+	if arrived then run.phase = "flip" end
+	return false
 end
 
 local function advanceGhost(run, dt)
 	local loop = run.loop
 	if run.phase == "flip" then return false end -- waiting for the train to be flipped
 	if run.phase == "approach" then return advanceApproach(run, dt) end
-	if run.phase == "done" then return true end
+	if run.phase == "done" or run.phase == "finish" then return true end
 	if run.edgeCursor > #loop.loopEdges then
 		return routeFinished(run)
 	end
@@ -1027,10 +1068,10 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 end
 
 -- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
-local function recouple(run, tv, atRear, locoReversed, why)
+local function recouple(run, tv, atRear, locoReversed, why, origRev)
 	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed (tender first)" or "not reversed", "-", why)
 
-	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed)
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed, origRev)
 	if not okBuild then
 		-- The ghost is deliberately left in place: it is the only copy of the loco.
 		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
@@ -1113,18 +1154,10 @@ local function flipRun(state, vehicleEntity)
 	if not okRev then return fail("reverse command rejected: " .. tostring(revCmd)) end
 	api.cmd.sendCommand(revCmd, function(_, success)
 		if not success then return fail("reverse command failed") end
-		local okT, x, y, z = pcall(function()
-			local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-			local mil = api.engine.getComponent(cl.carriages[1], api.type.ComponentType.MODEL_INSTANCE_LIST)
-			local c = mil.fatInstances[1].transf:cols(3)
-			return c.x, c.y, c.z
-		end)
-		if not okT then return fail("could not read the stand-in's position: " .. tostring(x)) end
-		logInfo(string.format("train flipped; ghost heading for the stand-in at %.0f, %.0f", x, y))
+		logInfo("train flipped; putting the loco back")
 		updateRun(state, vehicleEntity, function(r)
-			r.target = { x = x, y = y, z = z }
 			r.flipped = true
-			r.phase = "approach"
+			r.phase = "finish"
 		end)
 	end)
 end
@@ -1139,7 +1172,7 @@ local function finishRun(run)
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
 		-- Head faces the exit and the stand-in is the head part: loco goes there.
-		recouple(run, tv, false, reversed, "train was flipped first, loco takes the head; " .. tostring(why))
+		recouple(run, tv, false, reversed, "train was flipped first, loco takes the head, wagons restored; " .. tostring(why), run.origRev or {})
 		return
 	end
 	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
@@ -1207,7 +1240,12 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
 		return
 	end
-	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
+	local hasTail = CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
+	local origRev = {}
+	for i, part in ipairs(tvc.vehicles) do
+		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
+	end
+	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, hasTail)
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return
@@ -1267,6 +1305,8 @@ local function startRunAround(state, vehicleEntity, loop)
 				loop = loop,
 				locoPart = locoSnap,
 				standInModelId = standId,
+				hasTail = hasTail,
+				origRev = origRev,
 				ghost = ghost,
 				edgeCursor = startCursor,
 				startOffset = startOffset,

@@ -82,6 +82,20 @@ through earlier versions of this mod is fine.
   stood, a short hop along the platform. If the stop's node can't be found, the
   route starts at the first click instead. Direction of travel at each click is
   chosen automatically (shortest total, reversals cost extra).
+- **The detach step has been reached in a live game and failed, now fixed.**
+  The first real run-around crashed the game (`!m_betweenChanges`): commands
+  were being sent from inside the arrival-event handler, which the engine
+  forbids, so starts are now queued there and sent from the next `update()`.
+  That got the run as far as the detach, which failed with a Lua error: the
+  consist passed to `makeVehicleReplaceCmd` was a plain Lua table, and the game
+  needs real `TransportVehicleConfig` / `TransportVehiclePart` objects. They are
+  now copied from the live config, with the loco rebuilt from a saved snapshot
+  so it keeps its age and condition. The failed attempt also left the train held
+  at the station on manual departure; every failure path now releases the train,
+  and it is only held after everything that can fail has been prepared. If the
+  recouple itself fails, the loco ghost is left in place because it is the only
+  copy of the loco. The fixed detach / animate / recouple sequence has not yet
+  been confirmed end to end in a live game.
 - Multiple-unit consists are not handled (assumes one loco plus separate wagons).
 - Edge length is estimated by sampling the geometry; the animation is a free
   model, so it does not use signals and cannot reserve track - use a loop no

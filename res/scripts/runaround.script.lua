@@ -139,68 +139,87 @@ local function findLocoIndex(tvc, loop)
 	return nil
 end
 
--- Shallow-copies a TransportVehiclePart (keeps purchaseTime/maintenanceState
--- so the loco doesn't lose its age/depreciation across replaceVehicle calls,
--- matching the approach used by the community "Train Autosizer" mod).
-local function copyVehiclePart(tvp)
+-- Vehicle configs handed to makeVehicleReplaceCmd must be real game objects
+-- (api.type.TransportVehicleConfig / TransportVehiclePart), not plain tables:
+-- a plain table was rejected with "bad argument ... (const
+-- TransportVehicleConfig expected)". The base game either copies an existing
+-- config with TransportVehicleConfig.new(existing) and re-lists its parts
+-- (manager_window.tl, "duplicateVehicles") or builds parts with
+-- TransportVehiclePart.new() and assigns the list (replace_vehicles.tl).
+
+-- A part as plain data, safe to keep in the script state (which is saved with
+-- the game) while the loco is away as a ghost.
+local function snapshotPart(tvp)
+	local color = nil
+	local c = tvp.part.color
+	if c ~= nil then color = { x = c.x, y = c.y, z = c.z } end
 	return {
-		part = {
-			modelId = tvp.part.modelId,
-			reversed = tvp.part.reversed,
-			compartment2loadConfig = tvp.part.compartment2loadConfig,
-			color = tvp.part.color,
-		},
+		modelId = tvp.part.modelId,
+		reversed = tvp.part.reversed,
+		color = color,
+		compartmentCount = #tvp.part.compartment2loadConfig,
 		purchaseTime = tvp.purchaseTime,
 		maintenanceChange = tvp.maintenanceChange,
 		maintenanceState = tvp.maintenanceState,
-		autoLoadConfig = tvp.autoLoadConfig,
 	}
 end
 
-local function buildConfigFromVehicles(vehicles)
-	local groups = {}
-	for i = 1, #vehicles do
-		groups[i] = 1
+-- Rebuilds a real TransportVehiclePart from a snapshot (built the way
+-- gui/line_vehicle_mgmt/vehicle_util.lua's makePart does it). Keeping
+-- purchaseTime / maintenanceState means the loco keeps its age and condition.
+local function partFromSnapshot(snap, reversed)
+	local part = api.type.TransportVehiclePart.new()
+	part.part.modelId = snap.modelId
+	part.part.reversed = reversed
+	local loads = {}
+	for i = 1, snap.compartmentCount or 0 do
+		local lc = api.type.LoadConfig.new()
+		lc.loadConfigIndex = 0
+		loads[i] = lc
 	end
-	return {
-		vehicles = vehicles,
-		vehicleGroups = groups,
-		muFileNames = {},
-	}
+	part.part.compartment2loadConfig = loads
+	if snap.color ~= nil then
+		part.part.color = api.type.Vec3f.new(snap.color.x, snap.color.y, snap.color.z)
+	end
+	part.purchaseTime = snap.purchaseTime
+	part.maintenanceChange = snap.maintenanceChange
+	part.maintenanceState = snap.maintenanceState
+	return part
+end
+
+-- Puts a parts list into a config: every vehicle its own group (no multiple
+-- units), no multiple-unit files.
+local function finishConfig(config, parts)
+	config.vehicles = parts
+	local groups = {}
+	for i = 1, #parts do groups[i] = 1 end
+	config.vehicleGroups = groups
+	config.muFileNames = {}
+	return config
 end
 
 -- Config with the locomotive removed, wagons kept in their original order.
 local function buildConfigWithoutLoco(tvc, locoIdx)
-	local vehicles = {}
-	for i, tvp in ipairs(tvc.vehicles) do
-		if i ~= locoIdx then
-			vehicles[#vehicles + 1] = copyVehiclePart(tvp)
-		end
+	local config = api.type.TransportVehicleConfig.new(tvc)
+	local parts = {}
+	for i, part in ipairs(config.vehicles) do
+		if i ~= locoIdx then parts[#parts + 1] = part end
 	end
-	return buildConfigFromVehicles(vehicles)
+	return finishConfig(config, parts)
 end
 
--- Config with the locomotive reinserted at whichever end this loop's config
--- says should lead after the run-around.
-local function buildConfigWithLocoReattached(wagonsOnlyTvc, locoTvp, loop)
-	local loco = copyVehiclePart(locoTvp)
-	if loop.flipLocoReversedOnRecouple then
-		loco.part.reversed = not loco.part.reversed
-	end
-
-	local vehicles = {}
-	if loop.locoLeadsWithFirstArrayEntry then
-		vehicles[1] = loco
-		for i, tvp in ipairs(wagonsOnlyTvc.vehicles) do
-			vehicles[i + 1] = tvp
-		end
-	else
-		for i, tvp in ipairs(wagonsOnlyTvc.vehicles) do
-			vehicles[i] = tvp
-		end
-		vehicles[#vehicles + 1] = loco
-	end
-	return buildConfigFromVehicles(vehicles)
+-- Config with the locomotive put back at whichever end this loop's settings
+-- say it should lead from after the run-around.
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, loop)
+	local config = api.type.TransportVehicleConfig.new(currentTvc)
+	local reversed = locoSnap.reversed
+	if loop.flipLocoReversedOnRecouple then reversed = not reversed end
+	local loco = partFromSnapshot(locoSnap, reversed)
+	local parts = {}
+	if loop.locoLeadsWithFirstArrayEntry then parts[1] = loco end
+	for _, part in ipairs(config.vehicles) do parts[#parts + 1] = part end
+	if not loop.locoLeadsWithFirstArrayEntry then parts[#parts + 1] = loco end
+	return finishConfig(config, parts)
 end
 
 -- Reads the loco's current world transform off the live carriage entity,
@@ -687,21 +706,41 @@ local function advanceGhost(run, dt)
 	return run.edgeCursor > #loop.loopEdges
 end
 
-local function finishRun(run)
-	api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+-- Lets a train that was held for a run-around go again. Used on every failure
+-- path so a problem here never leaves a train stuck at the station.
+local function releaseTrain(vehicleEntity)
+	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, false))
+end
 
+local function finishRun(run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
 		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
+		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
 		return
 	end
 
-	local newConfig = buildConfigWithLocoReattached(tv.transportVehicleConfig, run.locoPart, run.loop)
-	api.cmd.sendCommand(api.cmd.makeVehicleReplaceCmd(run.vehicleEntity, newConfig), function(_, success)
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, run.loop)
+	if not okBuild then
+		-- The ghost is deliberately left in place: it is the only copy of the loco.
+		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
+		releaseTrain(run.vehicleEntity)
+		return
+	end
+	local okCmd, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, newConfig)
+	if not okCmd then
+		logInfo("recouple FAILED - replace command rejected:", tostring(cmd), "- loco ghost left in place, train released")
+		releaseTrain(run.vehicleEntity)
+		return
+	end
+
+	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then
-			logInfo("recouple replaceVehicle FAILED for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+			logInfo("recouple replaceVehicle FAILED for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "- loco ghost left in place, train released")
+			releaseTrain(run.vehicleEntity)
 			return
 		end
+		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
 		api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
 		api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
 		logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
@@ -720,35 +759,57 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 	if #loop.loopEdges == 0 then
-		logInfo("startRunAround: loopEdges is empty for loop", loopLabel(loop), "- nothing to animate")
+		logInfo("startRunAround: no route for loop", loopLabel(loop), "- nothing to animate (" .. tostring(loop.pathStatus) .. ")")
+		return
+	end
+
+	-- Everything that can fail is prepared BEFORE the train is held, so a
+	-- problem here can't leave it stuck at the station.
+	local okSnap, locoSnap = pcall(snapshotPart, tvc.vehicles[locoIdx])
+	if not okSnap then
+		logInfo("startRunAround: could not read the locomotive part:", tostring(locoSnap))
+		return
+	end
+	local okT, locoTransf = pcall(captureLocoTransform, vehicleEntity, locoIdx)
+	if not okT then
+		logInfo("startRunAround: could not read the loco's position (", tostring(locoTransf), ") - the ghost will appear on the route instead")
+		locoTransf = nil
+	end
+	local okBuild, strippedConfig = pcall(buildConfigWithoutLoco, tvc, locoIdx)
+	if not okBuild then
+		logInfo("startRunAround: could not build the detached consist:", tostring(strippedConfig))
+		return
+	end
+	local okCmd, replaceCmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, strippedConfig)
+	if not okCmd then
+		logInfo("startRunAround: detach command rejected:", tostring(replaceCmd))
 		return
 	end
 
 	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, true))
 
-	local locoTvp = tvc.vehicles[locoIdx]
-	local locoTransf = captureLocoTransform(vehicleEntity, locoIdx)
-	local strippedConfig = buildConfigWithoutLoco(tvc, locoIdx)
-
-	api.cmd.sendCommand(api.cmd.makeVehicleReplaceCmd(vehicleEntity, strippedConfig), function(_, success)
+	api.cmd.sendCommand(replaceCmd, function(_, success)
 		if not success then
-			logInfo("detach replaceVehicle FAILED for vehicle", vehicleEntity, "loop", loopLabel(loop))
+			logInfo("detach replaceVehicle FAILED for vehicle", vehicleEntity, "loop", loopLabel(loop), "- train released")
+			releaseTrain(vehicleEntity)
 			return
 		end
 
-		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(locoTvp.part.modelId), function(createRes, createSuccess)
+		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(locoSnap.modelId), function(createRes, createSuccess)
 			if not createSuccess then
-				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop))
+				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- the loco is now missing from the train")
 				return
 			end
 			local ghost = createRes.resultEntity
-			api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(ghost, locoTransf))
+			if locoTransf ~= nil then
+				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(ghost, locoTransf))
+			end
 
 			local data = state:get()
 			data.runs[#data.runs + 1] = {
 				vehicleEntity = vehicleEntity,
 				loop = loop,
-				locoPart = locoTvp,
+				locoPart = locoSnap,
 				ghost = ghost,
 				edgeCursor = 1,
 				edgeLength = nil,

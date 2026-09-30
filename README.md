@@ -168,6 +168,12 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Reported working: the loco's own model as the ghost, with its own sound and
+  smoke, and its custom paint kept (the ghost copy could not show the paint).**
+  This is why the own-model ghost is the default (`useRealModel`), with the ghost
+  copy as the fallback. The last log I have (a run with the ghost copy, because
+  the readiness check could not read model metadata) does not show the working
+  run, so the exact log lines for it are still to be confirmed.
 - **Fifth live run: wrong-way coupling for half a second, jerky wheels, and the
   own-model ghost still not used (fixes untested).** The log showed why the loco
   was first put on the wrong way: the flag was worked out from the carriages'

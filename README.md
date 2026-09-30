@@ -17,9 +17,13 @@ Everything is configured in game - no editing Lua.
    **Run Around Helper** panel is inside the vehicle window (there is also a
    **Run-Around** button in the main mod-button area, which can rename, tune and
    delete loops but cannot add new ones - it has no vehicle to read from).
-2. **Add loop from this vehicle** captures the line, the stop and a candidate
-   locomotive. **Cycle loco candidate** steps through the consist's parts until
-   the right locomotive model is selected.
+2. **Add loop from this vehicle** captures the line and the stop. The
+   locomotive is chosen **automatically**: when the run-around starts, it is the
+   part of the train standing nearest your first route point (the front of the
+   train, the end nearest the points). The panel says "Loco: automatic", and the
+   log records which part was picked and how far it was from that point. To
+   override it, **Change loco choice** steps through automatic and each part of
+   the train in turn, showing "part N of M" and the model name.
 3. Give the loop its route by clicking a few points. You do not click every
    track piece, and you do not click the station: the route starts at the stop
    the loop was created from. Turn on **Pick route points on map**, then click
@@ -82,6 +86,13 @@ through earlier versions of this mod is fine.
   stood, a short hop along the platform. If the stop's node can't be found, the
   route starts at the first click instead. Direction of travel at each click is
   chosen automatically (shortest total, reversals cost extra).
+- **Starting a run-around failed with "Callbacks are currently disallowed", now
+  fixed.** The game does not allow a command callback inside `update`, and
+  arrival events are delivered while the engine is mid-change, so the work is
+  split the way the base game's own scripts do it: the arrival handler only
+  queues a request, `update` moves the ghost and returns what needs doing, and
+  `postUpdate` (now registered in `runaround.gs.lua`) sends the detach / spawn /
+  recouple commands with their callbacks. Not yet confirmed in a live game.
 - **The detach step has been reached in a live game and failed, now fixed.**
   The first real run-around crashed the game (`!m_betweenChanges`): commands
   were being sent from inside the arrival-event handler, which the engine

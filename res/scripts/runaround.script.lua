@@ -139,6 +139,25 @@ local function findLocoIndex(tvc, loop)
 	return nil
 end
 
+-- Index (into the train's parts) of the part standing nearest a world
+-- position, or nil. Uses each carriage's model position; assumes the
+-- CARRIAGE_LIST order matches the config's part order (unverified - the
+-- result is logged so it can be checked).
+local function nearestCarriageIndex(vehicleEntity, pos)
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	if cl == nil then return nil end
+	local best, bestD2 = nil, math.huge
+	for i, carriageEntity in ipairs(cl.carriages) do
+		local mil = api.engine.getComponent(carriageEntity, api.type.ComponentType.MODEL_INSTANCE_LIST)
+		if mil ~= nil and mil.fatInstances[1] ~= nil then
+			local c = mil.fatInstances[1].transf:cols(3)
+			local d2 = (c.x - pos.x) ^ 2 + (c.y - pos.y) ^ 2
+			if d2 < bestD2 then best, bestD2 = i, d2 end
+		end
+	end
+	return best, math.sqrt(bestD2)
+end
+
 -- Vehicle configs handed to makeVehicleReplaceCmd must be real game objects
 -- (api.type.TransportVehicleConfig / TransportVehiclePart), not plain tables:
 -- a plain table was rejected with "bad argument ... (const
@@ -753,7 +772,26 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 	local tvc = tv.transportVehicleConfig
-	local locoIdx = findLocoIndex(tvc, loop)
+	local locoIdx = nil
+	if loop.locoManual then
+		locoIdx = findLocoIndex(tvc, loop)
+	else
+		-- Automatic: the part of the train nearest the first route point is
+		-- the one at the front for the run-around.
+		local first = loop.waypoints and loop.waypoints[1]
+		local okPos, pos = pcall(function() return first and piecePos(first, 0.5) end)
+		if okPos and pos ~= nil then
+			local okN, idx, dist = pcall(nearestCarriageIndex, vehicleEntity, pos)
+			if okN and idx ~= nil and tvc.vehicles[idx] ~= nil then
+				locoIdx = idx
+				logInfo("loco chosen automatically: part", idx, "of", #tvc.vehicles, "- model", tvc.vehicles[idx].part.modelId, "- about", math.floor(dist), "m from the first route point")
+			end
+		end
+		if locoIdx == nil then
+			logInfo("automatic loco choice failed; using the first part of the train")
+			locoIdx = 1
+		end
+	end
 	if locoIdx == nil then
 		logInfo("startRunAround: no vehicle part with modelId", loop.locoModelId, "found on", vehicleEntity, "loop", loopLabel(loop))
 		return
@@ -944,7 +982,9 @@ local function handleGuiCmd(data, name, param)
 			lineEntity = snap.lineEntity,
 			stopIndex = snap.stopIndex,
 			locoModelId = snap.vehicles[1] and snap.vehicles[1].part.modelId or nil,
-			locoCandidateIndex = 1,
+			locoManual = false, -- automatic: the part nearest the first route point
+			locoCandidateIndex = 0,
+			locoPartCount = #snap.vehicles,
 			waypoints = {},
 			loopEdges = {},
 			pathStatus = "no points yet",
@@ -957,12 +997,25 @@ local function handleGuiCmd(data, name, param)
 		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
 
 	elseif name == "CycleLocoCandidate" then
+		-- Steps automatic -> part 1 -> part 2 ... -> last part -> automatic.
 		local loop = findLoopById(data.loops, param.loopId)
 		local snap = loop and readVehicleSnapshot(param.vehicleEntity)
 		if loop ~= nil and snap ~= nil and #snap.vehicles > 0 then
-			loop.locoCandidateIndex = (loop.locoCandidateIndex or 0) % #snap.vehicles + 1
-			loop.locoModelId = snap.vehicles[loop.locoCandidateIndex].part.modelId
-			logInfo("GUI: loop", loopLabel(loop), "locoModelId now", loop.locoModelId, "(candidate", loop.locoCandidateIndex .. ")")
+			local n = #snap.vehicles
+			local idx = ((loop.locoCandidateIndex or 0) + 1) % (n + 1)
+			loop.locoCandidateIndex = idx
+			loop.locoPartCount = n
+			if idx == 0 then
+				loop.locoManual = false
+				loop.locoModelName = nil
+				logInfo("GUI: loop", loopLabel(loop), "loco choice is now automatic")
+			else
+				loop.locoManual = true
+				loop.locoModelId = snap.vehicles[idx].part.modelId
+				local okName, name2 = pcall(api.res.modelRep.getName, loop.locoModelId)
+				loop.locoModelName = okName and tostring(name2):gsub("^.*/", ""):gsub("%.mdl$", "") or nil
+				logInfo("GUI: loop", loopLabel(loop), "loco is now part", idx, "of", n, "- model", loop.locoModelId, loop.locoModelName or "")
+			end
 		end
 
 	elseif name == "AddLoopEdgeFromVehicle" then
@@ -1054,41 +1107,60 @@ return {
 
 		local data = ensureData(state)
 
-		-- Start any run-arounds queued by handleEvent. Commands must be sent
-		-- from here, not from handleEvent: OnArriveAtStop is dispatched while
-		-- the engine is mid-modification, and a sendCommand from inside that
-		-- dispatch asserts "!m_betweenChanges" (Engine.cpp:545) and takes the
-		-- whole game down - hit live on the first real run-around.
+		if dt == 0.0 then return nil end -- paused
+
+		-- Work that needs command CALLBACKS (starting a run-around: detach the
+		-- loco then spawn its ghost; finishing one: recouple) cannot be done
+		-- here: sendCommand with a callback in update() fails with "Callbacks
+		-- are currently disallowed" (hit live). The base game's own scripts
+		-- (fun_elements.script.tl) return a result table from update() and do
+		-- that work in postUpdate(), so this does the same. Nor can it be done
+		-- from handleEvent for OnArriveAtStop (mid-modification assert), which
+		-- is why that handler only queues.
+		local result = nil
+
 		if #data.pending > 0 then
-			local queued = data.pending
+			result = result or {}
+			result.starts = data.pending
 			data.pending = {}
-			state:set(data)
-			for _, p in ipairs(queued) do
+		end
+
+		if #data.runs > 0 then
+			local remaining = {}
+			for _, run in ipairs(data.runs) do
+				if advanceGhost(run, dt) then
+					result = result or {}
+					result.finishes = result.finishes or {}
+					result.finishes[#result.finishes + 1] = run
+				else
+					remaining[#remaining + 1] = run
+				end
+			end
+			data.runs = remaining
+		end
+
+		state:set(data)
+		return result
+	end,
+
+	postUpdate = function(_userParams, state, _dt, updateResult)
+		if updateResult == nil then return end
+
+		if updateResult.starts ~= nil then
+			local data = ensureData(state)
+			for _, p in ipairs(updateResult.starts) do
 				local loop = findLoopById(data.loops, p.loopId)
 				if loop ~= nil then
 					startRunAround(state, p.vehicleEntity, loop)
 				end
 			end
-			-- startRunAround's callbacks add to the run list through state,
-			-- so re-read rather than trust the table held above.
-			data = ensureData(state)
 		end
 
-		if #data.runs == 0 then
-			return
-		end
-
-		local remaining = {}
-		for _, run in ipairs(data.runs) do
-			local done = advanceGhost(run, dt)
-			if done then
+		if updateResult.finishes ~= nil then
+			for _, run in ipairs(updateResult.finishes) do
 				finishRun(run)
-			else
-				remaining[#remaining + 1] = run
 			end
 		end
-		data.runs = remaining
-		state:set(data)
 	end,
 
 	handleEvent = function(_userParams, state, _src, id, name, param)
@@ -1100,7 +1172,7 @@ return {
 
 			local loop = findLoopForArrival(data.loops, param.lineEntity, param.stopIndex)
 			if loop ~= nil then
-				if loop.locoModelId == nil then
+				if loop.locoManual and loop.locoModelId == nil then
 					logInfo("startRunAround: loop", loopLabel(loop), "has no locoModelId set yet (configure it from the GUI)")
 					return
 				end

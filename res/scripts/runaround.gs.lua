@@ -9,6 +9,9 @@ function data()
 		updateScript = {
 			fileName = "res/scripts/runaround.script@update",
 		},
+		postUpdateScript = {
+			fileName = "res/scripts/runaround.script@postUpdate",
+		},
 		handleEventScript = {
 			fileName = "res/scripts/runaround.script@handleEvent",
 		},

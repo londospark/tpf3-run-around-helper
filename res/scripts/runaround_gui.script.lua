@@ -303,11 +303,18 @@ function data()
 		shelve = function(_ctx, _param, _shelve) end,
 	})
 
+	local function locoText(loop)
+		if not loop.locoManual then
+			return "Loco: automatic (the part of the train nearest your first route point)"
+		end
+		return "Loco: part " .. tostring(loop.locoCandidateIndex) .. " of " .. tostring(loop.locoPartCount or "?") ..
+			" - " .. tostring(loop.locoModelName or loop.locoModelId)
+	end
+
 	local function loopSummaryText(loop)
 		return (loop.name or "?") ..
 			"  line=" .. tostring(loop.lineEntity) ..
 			" stop=" .. tostring(loop.stopIndex) ..
-			" loco=" .. tostring(loop.locoModelId) ..
 			" points=" .. tostring(loop.waypoints and #loop.waypoints or 0)
 	end
 
@@ -333,6 +340,7 @@ function data()
 							maxLength = 40,
 						}
 						or builtin.TextView{ text = loopSummaryText(loop) },
+					builtin.TextView{ text = locoText(loop) },
 					builtin.TextView{ text = "Route: " .. (loop.pathStatus or "no points yet") },
 					builtin.Button{
 						meta = { tooltip = "Rename" },
@@ -380,7 +388,7 @@ function data()
 				children = {
 					builtin.Button{
 						meta = { tooltip = "Use this vehicle's current model as the loco to detach" },
-						content = builtin.TextView{ text = "Cycle loco candidate" },
+						content = builtin.TextView{ text = "Change loco choice (automatic / pick a part)" },
 						onClick = function() sendGuiCmd("CycleLocoCandidate", { loopId = loop.id, vehicleEntity = vehicleEntity }) end,
 					},
 					builtin.Button{

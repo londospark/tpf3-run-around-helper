@@ -6,11 +6,11 @@ loco is detached from the consist, driven round a loop you define (as a free
 model entity, animated along the real track geometry), then re-attached at the
 other end. The other terminus of the line keeps the normal vanilla behaviour.
 
-**Status: work in progress, not published. The run itself is switched off.**
-Setting up a loop works (panel, click-to-pick route points, automatic route and
-reversal planning, automatic loco choice). Detaching the loco is disabled
-(`detachEnabled = false` in `runaround.script.lua`) because it crashes the game:
-see "Known issues" first.
+**Status: work in progress, not published.** Setting up a loop works (panel,
+click-to-pick route points, automatic route and reversal planning, automatic
+loco choice). The run itself - swap the loco for an invisible stand-in, animate
+the ghost loco round the route, recouple - is built but has not yet been seen to
+complete in a live game.
 
 ## Setting up a loop (in game)
 
@@ -70,21 +70,20 @@ through earlier versions of this mod is fine.
 
 ## Known issues / not yet verified
 
-- **Blocking: a train of only wagons crashes the game.** Once the loco was
-  detached (this got through the detach, spawn and loco choice in a live game),
-  the game exited about 25 seconds later with
-  `Assertion (trainMoveInfo.availPower)>(0.0f) failed` in
-  `calculateFallbackPowerOutput`. Every land vehicle's model scripts (sounds,
-  smoke, animations) are handed a per-render-step `powerOutput`, and a consist
-  with no powered part asserts as soon as its wagons are drawn - not a window or
-  hover problem, and nothing a mod can catch. So the loco cannot simply leave the
-  consist. The way round is to keep a powered part in the consist while the ghost
-  loco is away, ideally an invisible twin of the loco's own model created from
-  its model table (`api.res.modelRep.getAsTable` / `addAsTable` exist). When a
-  loop is created the mod now logs that model's structure (`model probe:` lines,
-  read-only, `DUMP_LOCO_MODEL`) so the twin can be designed from real data.
-  Until then, arrivals log "NOT started: detaching is switched off".
-
+- **A train of only wagons crashes the game, so the loco is swapped for an
+  invisible stand-in.** When the loco was simply removed, the game exited about
+  25 seconds later with `Assertion (trainMoveInfo.availPower)>(0.0f) failed`
+  in `calculateFallbackPowerOutput`: every land vehicle's model scripts (sound,
+  smoke, animation) are handed a per-render-step `powerOutput`, and a consist
+  with no powered part asserts as soon as its wagons are drawn. So the mod ships
+  its own tiny model, `res/models/runaround_standin/standin.mdl` (one metre long,
+  no meshes, 1 kW, no sound or lights, hidden from the purchase lists), puts it
+  in the loco's place while the ghost loco is away, and takes it out again when
+  the real loco is coupled back on. If the model isn't found, the run is
+  refused (logged) rather than risking the crash. Whether the game accepts a
+  model with an empty mesh node, and whether it can be used in a consist swap,
+  is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
+  the kill switch.
 - **Click-to-pick works, with a caveat.** The first version put a
   `builtin.Selector` inside the panel, which the UI cannot render (hard crash).
   It now lives in a registered tool pushed onto the tool stack, as the base game

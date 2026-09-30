@@ -81,18 +81,15 @@ local CONFIG = {
 	-- the single least-certain part of this mod).
 	LOG_ARRIVALS = true,
 
-	-- SAFETY SWITCH, off on purpose. Detaching the loco leaves a consist of
-	-- wagons only, and the game cannot draw one: every land vehicle's model
-	-- scripts are given a per-render-step powerOutput, and with no powered
-	-- part it asserts "trainMoveInfo.availPower > 0" (transformator_util_
-	-- scripting.cpp:91) and the whole game exits (seen live, about 25 s after
-	-- the detach, as soon as the wagons were on screen). Turn this on only once
-	-- the consist keeps a powered part while the ghost loco is away.
-	detachEnabled = false,
+	-- Kill switch for the whole detach. A wagons-only consist crashes the game
+	-- (see standin.mdl), so the loco is never simply removed: it is swapped for
+	-- the invisible stand-in model in res/models/runaround_standin/ while the
+	-- ghost loco is away, and the run is refused if that model isn't found.
+	detachEnabled = true,
 
 	-- Logs the structure of the chosen loco's model table when a loop is
-	-- created (read-only), to design a hidden powered stand-in from real data.
-	DUMP_LOCO_MODEL = true,
+	-- created (read-only). Not needed now the stand-in model is authored.
+	DUMP_LOCO_MODEL = false,
 
 	-- Defaults applied to a newly-added loop; edit per-loop from the GUI afterwards.
 	defaultSpeed = 8.0,
@@ -228,28 +225,68 @@ local function finishConfig(config, parts)
 	return config
 end
 
--- Config with the locomotive removed, wagons kept in their original order.
-local function buildConfigWithoutLoco(tvc, locoIdx)
+-- The invisible stand-in loco (res/models/runaround_standin/standin.mdl).
+-- Found by name because a mod's resource path prefix isn't known in advance.
+local standInId = nil
+local function findStandInModelId()
+	if standInId ~= nil then return standInId end
+	local ok, all = pcall(api.res.modelRep.getAll, true)
+	if ok and all ~= nil then
+		for id, name in pairs(all) do
+			if type(name) == "string" and string.find(name, "runaround_standin/standin.mdl", 1, true) then
+				standInId = id
+				logInfo("stand-in model found:", name, "id", id)
+				return id
+			end
+		end
+	end
+	return nil
+end
+
+-- A real TransportVehiclePart for the stand-in.
+local function makeStandInPart(standId, locoSnap)
+	local part = api.type.TransportVehiclePart.new()
+	part.part.modelId = standId
+	part.part.reversed = false
+	part.part.compartment2loadConfig = {}
+	part.purchaseTime = locoSnap.purchaseTime
+	part.maintenanceChange = locoSnap.maintenanceChange
+	part.maintenanceState = 1
+	return part
+end
+
+-- Config with the locomotive swapped for the stand-in, in the same place, and
+-- the wagons untouched. NOT with the loco simply removed: a consist with no
+-- powered part cannot be drawn and crashes the game.
+local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	for i, part in ipairs(config.vehicles) do
-		if i ~= locoIdx then parts[#parts + 1] = part end
+		if i == locoIdx then
+			parts[#parts + 1] = makeStandInPart(standId, locoSnap)
+		else
+			parts[#parts + 1] = part
+		end
 	end
 	return finishConfig(config, parts)
 end
 
--- Config with the locomotive put back on the train. A loco cannot pass
--- through its consist, so after running round it can only couple onto the end
--- it arrives at; which end that is comes from where the run finished (see
+-- Config with the stand-in taken out and the real locomotive put back on the
+-- train. A loco cannot pass through its consist, so it can only couple onto the
+-- end it arrives at; which end that is comes from where the run finished (see
 -- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
 -- wagons, so that it can pull them: a loco at the front of the parts list is
 -- not reversed, one at the rear is.
-local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear)
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId)
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
 	local loco = partFromSnapshot(locoSnap, attachAtRear)
 	local parts = {}
 	if not attachAtRear then parts[1] = loco end
-	for _, part in ipairs(config.vehicles) do parts[#parts + 1] = part end
+	for _, part in ipairs(config.vehicles) do
+		if part.part.modelId ~= standId then -- the stand-in goes away here
+			parts[#parts + 1] = part
+		end
+	end
 	if attachAtRear then parts[#parts + 1] = loco end
 	return finishConfig(config, parts)
 end
@@ -748,7 +785,7 @@ end
 -- (first part): whichever end is nearer the last route point the user clicked,
 -- since that is where the loco has just arrived. Also returns a description
 -- for the log.
-local function chooseAttachEnd(vehicleEntity, loop)
+local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 	local last = loop.waypoints and loop.waypoints[#loop.waypoints]
 	if last == nil then return true, "no route points recorded, defaulting to the rear" end
 	local pos = piecePos(last, 0.5)
@@ -759,7 +796,19 @@ local function chooseAttachEnd(vehicleEntity, loop)
 		local c = mil.fatInstances[1].transf:cols(3)
 		return math.sqrt((c.x - pos.x) ^ 2 + (c.y - pos.y) ^ 2)
 	end
-	local dFront, dRear = distTo(1), distTo(#cl.carriages)
+	-- The stand-in sits where the loco used to be and is about to be removed,
+	-- so the ends that matter are those of the wagons.
+	local first, last = nil, nil
+	for i, part in ipairs(tvc.vehicles) do
+		if part.part.modelId ~= standId then
+			first = first or i
+			last = i
+		end
+	end
+	if first == nil or cl.carriages[first] == nil or cl.carriages[last] == nil then
+		return true, "could not tell the wagons apart, defaulting to the rear"
+	end
+	local dFront, dRear = distTo(first), distTo(last)
 	local atRear = dRear <= dFront
 	return atRear, string.format("nearest the last route point: front end %d m away, rear end %d m away", math.floor(dFront), math.floor(dRear))
 end
@@ -772,14 +821,14 @@ local function finishRun(run)
 		return
 	end
 
-	local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop)
+	local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
 	if not okEnd then
 		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
 		atRear, why = true, "fallback"
 	end
-	logInfo("recouple: attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist, facing outward -", why)
+	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist, facing outward -", why)
 
-	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear)
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId)
 	if not okBuild then
 		-- The ghost is deliberately left in place: it is the only copy of the loco.
 		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
@@ -853,14 +902,19 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: could not read the loco's position (", tostring(locoTransf), ") - the ghost will appear on the route instead")
 		locoTransf = nil
 	end
-	local okBuild, strippedConfig = pcall(buildConfigWithoutLoco, tvc, locoIdx)
+	local standId = findStandInModelId()
+	if standId == nil then
+		logInfo("startRunAround: the stand-in model was not found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/standin.mdl loaded?")
+		return
+	end
+	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
 	if not okBuild then
-		logInfo("startRunAround: could not build the detached consist:", tostring(strippedConfig))
+		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return
 	end
 	local okCmd, replaceCmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, strippedConfig)
 	if not okCmd then
-		logInfo("startRunAround: detach command rejected:", tostring(replaceCmd))
+		logInfo("startRunAround: stand-in swap command rejected:", tostring(replaceCmd))
 		return
 	end
 
@@ -888,6 +942,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				vehicleEntity = vehicleEntity,
 				loop = loop,
 				locoPart = locoSnap,
+				standInModelId = standId,
 				ghost = ghost,
 				edgeCursor = 1,
 				edgeLength = nil,

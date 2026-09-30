@@ -169,7 +169,8 @@ Useful log lines:
 | `loco setup: N locos; M can be their own ghost, ...` | at start-up, how many locos were prepared |
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
-| `creep: ...` | the coaches moving and the train being turned |
+| `ghost rake: ...` | the coaches shown as copies, the slide and where it ends |
+| `creep: ...` | the fallback: the real coaches creeping and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
 
 ## Advanced settings

@@ -5,7 +5,7 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Makes a tagged locomotive run around its train at a chosen terminus instead of instantly flipping. Configure loops in game from the vehicle window (or the Run-Around button) - see the README for setup and known caveats.",
+    "description": "Makes the locomotive run around its train at a chosen terminus instead of the game's instant flip. Pick a few points on the map in game; the loco runs round with its own sound, smoke, wheels and paint, reversing where needed, and couples on at the other end facing the right way.",
     "name": "Run Around Helper",
     "summary": "Scripted loco run-around at chosen stations, configured in-game",
     "tags": [

@@ -1,118 +1,57 @@
 --[[
-	Run Around Helper - scaffold for TpF3
+	Run Around Helper - game script (TpF3)
 
-	GOAL
-	At each configured terminus, when a tagged train arrives, its locomotive
-	is pulled out, physically driven (as a non-simulated "ghost" model)
-	around a loop/wye, and reinserted at the other end - instead of the
-	train doing the instant vanilla flip. The return trip back through the
-	OTHER terminus of each line is left to vanilla behaviour (auto-flip),
-	which is fine for this project's goal. Supports any number of
-	independently-configured loops (different lines/termini) at once.
+	At a terminus configured in game (a "loop": line + stop + a few clicked route
+	points), an arriving train's locomotive runs round its train instead of the
+	game's instant flip:
 
-	VERIFIED AGAINST THE SHIPPED GAME FILES (api/tealdef/*, base/content/*):
-	  - api.cmd.makeVehicleReplaceCmd(vehicleEntity, config) swaps a live
-	    train's consist in place (not depot-only - confirmed via
-	    VehicleReplaceCommandData / the factory signature in cmd.d.tl).
-	  - api.cmd.makeCustomEntityCreateCmd / UpdateTransformationCmd / DestroyCmd
-	    spawn, move and remove a free-floating model entity outside the
-	    line/depot system (used by the base game for blimps/UFOs/rockets -
-	    see game_mechanics/fun_elements/custom_entity_util.tl).
-	  - "OnArriveAtStop" from src "TransportVehicleSystem" fires with
-	    {vehicleEntity, lineEntity, stopIndex, lastStopIndex} - confirmed
-	    from game_mechanics/achievements/achievements.script.tl.
-	  - Component field names (TRANSPORT_VEHICLE.transportVehicleConfig,
-	    CARRIAGE_LIST.carriages, MODEL_INSTANCE_LIST.fatInstances[1].transf,
-	    TransportVehicleConfig.vehicles[i].part.{modelId,reversed}) are taken
-	    directly from api/tealdef/api/type.d.tl and api/tealdef/api/engine.d.tl.
+	  1. detach: the loco part is swapped for an invisible stand-in of the same
+	     length (a train with no powered part crashes the game), and a "ghost" -
+	     a free entity drawn from the loco's own model where possible - appears
+	     where the loco stood;
+	  2. the ghost drives the planned route (reversing where the planner chose),
+	     keeping its facing, with its own sound, smoke, wheels and paint (see
+	     ghost_real.script.lua and ghost_build.script.lua);
+	  3. the train is flipped with the game's own reverse command, so its head
+	     faces the way out and the stand-in is at that end;
+	  4. the ghost glides to the stand-in and the real loco replaces it, facing
+	     the way the ghost faces; the train leaves.
 
-	NOT VERIFIED / YOU WILL NEED TO TUNE THESE IN-GAME, PER LOOP:
-	  - Whether CARRIAGE_LIST.carriages is index-aligned with
-	    TransportVehicleConfig.vehicles (assumed here; if the captured loco
-	    transform looks wrong, this is the first thing to check).
-	  - Which physical end of the vehicles array should hold the loco after
-	    recoupling, and whether its `reversed` flag needs to flip. Both are
-	    exposed as per-loop booleans - flip them if the loco comes back
-	    facing/positioned wrong.
-	  - Edge length isn't a field on Edge/EdgeGeometry in the declarations,
-	    so it's estimated by sampling calcPosition() - fine for animation
-	    purposes but not exact.
-	  - Multiple-unit (MU) consists are NOT handled - this assumes a simple
-	    loco + separate wagons consist. vehicleGroups is rebuilt as all-1s.
-
-	SETUP STEPS (per loop - repeat for each terminus you want this at)
-	  1. Load this mod, load into a save, and stop a train (with the loco
-	     you want to detach) at your chosen terminus.
-	  2. Open that vehicle's info window in-game and use the "Run Around
-	     Helper" panel added to it (see res/scripts/runaround_gui.lua) to
-	     click "Add loop from this vehicle" - this captures the line, stop
-	     and a starting loco candidate automatically, no ids to hunt for.
-	  3. Drive that same locomotive around your loop/wye track segment by
-	     segment, clicking "Capture edge here" once per edge, to record the
-	     ordered path. There's no automatic loop-finding - you drive the
-	     exact route because pathfinding around a specifically-shaped
-	     run-around loop while avoiding the main line is exactly the kind
-	     of thing that needs a human's track layout knowledge, not a
-	     generic solver.
-	  4. Test, then use the panel's toggle buttons to flip that loop's
-	     "loco end" and/or "flip on recouple" if the loco ends up on the
-	     wrong end or facing the wrong way after recoupling.
-
-	If the GUI doesn't show up for some reason (see runaround_gui.lua's
-	header for why that's the least-certain part of this mod), the log (see
-	LOG_ARRIVALS below) still prints every vehicle/line/stop id it sees as a
-	fallback for hand-driving the same setup via "RunAroundGuiCmd" scripting
-	events sent from the dev console.
-
-	GUI: loops are configured in-game (see res/scripts/runaround_gui.lua)
-	rather than hand-edited here. The GUI adds/edits/removes entries in
-	persistent state (state:get().loops) by sending "RunAroundGuiCmd"
-	scripting events, handled below. This file has no more static loop
-	config - CONFIG below only holds defaults for newly-added loops and the
-	discovery-logging toggle. See runaround_gui.lua's own header comment
-	for what's solidly grounded vs. best-effort in the GUI layer itself -
-	that part of the API is far less charted than this scripting core.
+	Things learned from the engine, which the code relies on:
+	  - no commands from the OnArriveAtStop handler (mid-modification assert) and
+	    no command callbacks inside update(): arrivals are queued, update() moves
+	    the ghosts and returns what needs doing, postUpdate() sends the commands;
+	  - vehicle configs must be real TransportVehicleConfig/Part objects, and parts
+	    must match their model's compartments (see loadConfigsForModel);
+	  - a vehicle replace that keeps the train's length leaves every carriage in
+	    place; the flip mirrors the train about the middle of its length;
+	  - carriage positions are reported late for a tick or two after a flip or a
+	    replace, so nothing is decided from positions read straight after one;
+	  - model metadata cannot be read with getAsTable from a game script (it can
+	    in the load script); modelRep.get works.
 ]]
 
 local CONFIG = {
-	-- Set to true to log every vehicle arrival (vehicle/line/stop ids) -
-	-- useful for debugging even with the GUI, and as a fallback if the GUI
-	-- turns out not to load (see runaround_gui.lua's header for why that's
-	-- the single least-certain part of this mod).
+	-- Log every vehicle arrival (vehicle/line/stop ids).
 	LOG_ARRIVALS = true,
-
-	-- Kill switch for the whole detach. A wagons-only consist crashes the game
-	-- (see standin.mdl), so the loco is never simply removed: it is swapped for
-	-- the invisible stand-in model in res/models/runaround_standin/ while the
-	-- ghost loco is away, and the run is refused if that model isn't found.
+	-- Log carriage positions around each step of a run (for layout problems).
+	LOG_TRACES = true,
+	-- Kill switch for the whole run-around.
 	detachEnabled = true,
-	-- Flip the train (game's own reverse command) before putting the loco back, so the
-	-- game doesn't flip the loco back to the buffer end at departure. See finishRun.
+	-- Flip the train (the game's own reverse command) before putting the loco back,
+	-- so that the game does not flip it back to the buffer end at departure.
 	reverseBeforeRecouple = true,
-	-- Use the smoke-and-sound ghosts built at load time (ghost_build.script.lua). Turn off
-	-- to use the plain silent ghosts if the effects ghosts ever misbehave.
-	-- DEBUG: paint the ghost bright magenta through the colour path, to see whether a
-	-- free entity honours the colour attribute at all. Turn off once it has been tried.
-	debugTintGhost = true,
-	useEffectGhosts = true,
-	-- EXPERIMENT: draw the ghost from the loco's own model, not a ghost copy. It has the
-	-- loco's own sound, smoke and wheel scripts, which expect vehicle data a free entity
-	-- doesn't have: they may error, do nothing, or crash the game. false = ghost copies.
+	-- Draw the ghost from the loco's own model when ghost_build.script.lua has
+	-- wrapped it; otherwise (or when false) from a ghost copy.
 	useRealModel = true,
-	-- After the loco goes back on, read its real facing off the game and compare it with the
-	-- ghost's; if they differ, flip the loco part once. See verifyRun.
+	-- Use the ghost copies built at load time (loco's meshes, smoke, sound) rather
+	-- than the plain silent copies shipped in res/models/runaround_ghost/.
+	useEffectGhosts = true,
+	-- Once the loco is back on, check its real facing against the ghost's and
+	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
-	-- A second stand-in on the far end of the train. OFF: a vehicle replace keeps the
-	-- train's MIDDLE where it was (deduced from a live run: adding the tail shifted the
-	-- wagons about half a loco length at the detach and the whole consist jumped at
-	-- the recouple), so a longer temporary train moves everything. See the README.
-	tailStandIn = false,
 
-	-- Logs the structure of the chosen loco's model table when a loop is
-	-- created (read-only). Not needed now the stand-in model is authored.
-	DUMP_LOCO_MODEL = false,
-
-	-- Defaults applied to a newly-added loop; edit per-loop from the GUI afterwards.
+	-- Defaults for a newly added loop (editable per loop in the panel).
 	defaultSpeed = 8.0,
 	defaultAccel = 2.0,
 }
@@ -302,23 +241,12 @@ local function finishConfig(config, parts)
 	return config
 end
 
--- The invisible stand-in loco (res/models/runaround_standin/standin.mdl).
--- Found by name because a mod's resource path prefix isn't known in advance.
+-- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl,
+-- 4 to 44 m in 2 m steps). The stand-in is as long as the loco it replaces, so
+-- that the replace moves nothing. Found by name because a mod's resource prefix
+-- is not known in advance.
 local standInIds = nil -- length in metres -> model id
-local function standInLengthFor(locoModelId)
-	local ok, model = pcall(api.res.modelRep.getAsTable, locoModelId)
-	local ext = ok and type(model) == "table" and model.metadata and model.metadata.extent
-	if ext and ext.bbMax and ext.bbMin then return ext.bbMax[1] - ext.bbMin[1] end
-	local he = ok and type(model) == "table" and model.collider and model.collider.params and model.collider.params.halfExtents
-	if he and he[1] then return he[1] * 2 end
-	return nil
-end
-
--- The stand-in should be as long as the loco it replaces, so the wagons stay
--- where they are while the loco is away (with a 1 m stand-in they slid forward
--- over the ghost's starting spot). The mod ships stand-ins in 2 m steps; this
--- picks the nearest to the loco's length (its model's extent along the track).
-local function findStandInModelId(locoModelId)
+local function findStandInModelId(wantLength)
 	if standInIds == nil then
 		standInIds = {}
 		local ok, all = pcall(api.res.modelRep.getAll, true)
@@ -331,24 +259,52 @@ local function findStandInModelId(locoModelId)
 			end
 		end
 	end
-	local want = locoModelId and standInLengthFor(locoModelId) or nil
 	local bestLen, bestDiff = nil, nil
 	for len in pairs(standInIds) do
-		local d = math.abs(len - (want or 12))
+		local d = math.abs(len - (wantLength or 12))
 		if bestDiff == nil or d < bestDiff then bestLen, bestDiff = len, d end
 	end
 	if bestLen == nil then return nil end
-	logInfo("stand-in model:", bestLen, "m for a loco of", want and string.format("%.1f", want) or "unknown", "m, id", standInIds[bestLen])
+	logInfo("stand-in model:", bestLen, "m for a loco of", wantLength and string.format("%.1f", wantLength) or "unknown", "m")
 	return standInIds[bestLen]
 end
 
--- The ghost loco is drawn from a "ghost" copy of the loco's model: same meshes,
--- but no vehicle metadata, sound, particles or scripts (generated from the
--- base-game models into res/models/runaround_ghost/). A free entity has no
--- vehicle for the model's sound/transformator scripts to read, and the base
--- game's own free entities (ufo, fireworks) all use models with empty metadata.
--- Modded locos with no ghost of their own get the ghost of a base loco of the
--- same engine type.
+local function carriagePos(carriageEntity)
+	local mil = api.engine.getComponent(carriageEntity, api.type.ComponentType.MODEL_INSTANCE_LIST)
+	return mil.fatInstances[1].transf:cols(3)
+end
+
+-- A carriage's length, from the spacing of the carriages' centres (neighbouring
+-- centres are half of one plus half of the other apart): model metadata is not
+-- readable here. nil when the train is too short to tell.
+local function carriageLength(vehicleEntity, idx)
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	local n = #cl.carriages
+	if n < 3 then return nil end
+	local function gap(i, j)
+		local a, b = carriagePos(cl.carriages[i]), carriagePos(cl.carriages[j])
+		return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
+	end
+	if idx == 1 then return 2 * gap(1, 2) - gap(2, 3) end
+	if idx == n then return 2 * gap(n, n - 1) - gap(n - 1, n - 2) end
+	return nil
+end
+
+-- A value from a model's metadata, or nil (modelRep.get works in a game script).
+local function modelMeta(modelId, ...)
+	local keys = { ... }
+	local ok, v = pcall(function()
+		local cur = api.res.modelRep.get(modelId).metadata
+		for _, k in ipairs(keys) do cur = cur[k] end
+		return cur
+	end)
+	return ok and v or nil
+end
+
+-- Ghost copies, used when the loco's own model cannot be: first the copy built at
+-- load time from the loco itself (runaround_ghost_dyn/, with its smoke and sound),
+-- then the plain silent copy of a base-game loco shipped with the mod
+-- (runaround_ghost/), then a base-game loco of the same engine type.
 local ghostIdsByFile = nil
 local dynGhostIdsByFile = nil
 local GHOST_FALLBACK = { STEAM = "mogul_2_6_0.mdl", ELECTRIC = "br_e94.mdl", DIESEL = "alco_hh600.mdl" }
@@ -382,11 +338,8 @@ local function findGhostModelId(locoModelId)
 		return ghostIdsByFile[file], false
 	end
 	local engineType = "DIESEL"
-	local okM, model = pcall(api.res.modelRep.getAsTable, locoModelId)
-	if okM and type(model) == "table" and model.metadata and model.metadata.landVehicle then
-		local eng = model.metadata.landVehicle.engines and model.metadata.landVehicle.engines[1]
-		if eng and GHOST_FALLBACK[eng.type] then engineType = eng.type end
-	end
+	local engType = modelMeta(locoModelId, "landVehicle", "engines", 1, "type")
+	if engType ~= nil and GHOST_FALLBACK[tostring(engType)] then engineType = tostring(engType) end
 	logInfo("ghost model: no ghost for", tostring(locoName), "- using the generic", engineType, "ghost")
 	return ghostIdsByFile[GHOST_FALLBACK[engineType]], false
 end
@@ -410,35 +363,47 @@ local function realModelReady(locoModelId)
 	return false, "its sound set or transformator was not wrapped at load"
 end
 
--- Feeds an effects ghost's smoke and sound (see ghost.script.lua): its speed
--- and velocity, as custom entity state. Sent when something changed, or now and
--- then, not every step.
 local function gameTimeMs()
 	local ok, gt = pcall(function() return api.engine.getComponent(api.engine.util.getWorld(), api.type.ComponentType.GAME_TIME).gameTime end)
 	return ok and gt or nil
 end
 
-local function pushGhostState(run, speed, vx, vy, dt, force)
+-- Starts a new motion segment for the wheel animation (see segmentDistance in
+-- ghost_real.script.lua): from the distance travelled so far, speed v0,
+-- acceleration acc (negative to brake), up to vmax.
+local function startSegment(run, v0, acc, vmax)
+	run.seg = { d0 = run.gdist or 0.0, v0 = v0, acc = acc, vmax = vmax, t0 = gameTimeMs() }
+	run.segChanged = true
+end
+
+-- Sends the ghost its state (speed for sound and smoke, velocity for the smoke's
+-- drift, the loco's paint, the motion segment for the wheels). Every tick while it
+-- moves, now and then while it stands, and at once when the segment changes.
+local function pushGhostState(run, speed, vx, vy, dt)
 	if not run.effects then return end
 	run.stateAge = (run.stateAge or 0.0) + dt
-	local last = run.lastState
-	-- While the ghost moves the state goes out every tick (the wheel animation needs
-	-- the distance as it grows); when it is standing, only now and then.
-	if not force and last ~= nil and speed == 0.0 and last.speed == 0.0 and run.stateAge < 1.0 then
-		return
-	end
-	local top = run.topSpeed or 27.8
-	local speed01 = math.min(speed / top, 1.0)
+	local last = run.lastSpeed
+	if not run.segChanged and last ~= nil and speed == 0.0 and last == 0.0 and run.stateAge < 1.0 then return end
+	local speed01 = math.min(speed / (run.topSpeed or 27.8), 1.0)
 	local power = math.min(0.25 + speed01, 1.0)
+	-- which way the wheels turn: backwards when the ghost drives against its facing
+	local backwards = (run.headingFlipped and 1 or 0) + (((run.yawOffset or 0) > 1) and 1 or 0)
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
-		state = { color = CONFIG.debugTintGhost and { 1.0, 0.0, 1.0 } or run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = ((run.headingFlipped and 1 or 0) + ((run.yawOffset or 0) > 1 and 1 or 0)) % 2 == 1 and -1 or 1 },
+		state = {
+			speed = speed, power = power, vx = vx, vy = vy,
+			color = run.color,
+			dist = run.gdist or 0.0,
+			seg = run.seg,
+			dir = (backwards % 2 == 1) and -1 or 1,
+		},
 	})
 	if ok then
 		api.cmd.sendCommand(cmd)
-		run.lastState = { speed = speed, vx = vx, vy = vy }
+		run.lastSpeed = speed
 		run.stateAge = 0.0
+		run.segChanged = false
 	end
 end
 
@@ -459,12 +424,7 @@ end
 -- Config with the locomotive swapped for the stand-in, in the same place, and
 -- the wagons untouched. NOT with the loco simply removed: a consist with no
 -- powered part cannot be drawn and crashes the game.
---
--- addTail also puts a second stand-in on the far end of the train, where the
--- loco will couple on. The game's flip mirrors the whole consist, so with a
--- stand-in at each end the wagons keep their place through the flip (see
--- flipRun); the tail is invisible and sits on track the loco is going to use.
-local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
+local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	for i, part in ipairs(config.vehicles) do
@@ -474,7 +434,6 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 			parts[#parts + 1] = part
 		end
 	end
-	if addTail then parts[#parts + 1] = makeStandInPart(standId, locoSnap) end
 	return finishConfig(config, parts)
 end
 
@@ -948,18 +907,21 @@ end
 
 -- Where along the route the real loco is standing, so the ghost can start
 -- there instead of at the route's first piece (which is the stop's track node,
--- about the middle of the platform - the ghost visibly jumped to the middle of
--- the consist). Looks along the first few pieces for the point nearest the
--- loco. Returns the piece number, the metres already covered on it, and the
--- distance from the loco to that point; nil if the route has no pieces.
+-- about the middle of the platform). Looks along the route up to its first
+-- reversal (the loco stands on that first leg) for the point nearest the loco:
+-- limiting it to the first 8 pieces missed a loco standing further along, so
+-- the ghost started a few metres from it, towards the wagons. Returns the piece
+-- number, the metres already covered on it, and the distance from the loco to
+-- that point; nil if the route has no pieces.
 local function locateOnRoute(loop, pos)
 	local edges = loop.loopEdges
 	if edges == nil or #edges == 0 then return nil end
 	local calc = api.engine.util.transport.calcPosition
 	local bestK, bestS, bestD2 = nil, 0, math.huge
-	for k = 1, math.min(#edges, 8) do
+	for k = 1, math.min(#edges, 120) do
 		local edgeDef = edges[k]
-		if not edgeDef.reversal then
+		if edgeDef.reversal then break end
+		do
 			local ok, geometry = pcall(getEdgeGeometry, edgeDef)
 			if ok then
 				local len = estimateEdgeLength(geometry)
@@ -978,72 +940,74 @@ local function locateOnRoute(loop, pos)
 	return bestK, bestS, math.sqrt(bestD2)
 end
 
--- Advances one run's ghost loco by dt seconds. Returns true once it has
--- reached the end of its loop's loopEdges.
+-- The route is done: with the flip enabled the train is flipped next and the
+-- ghost then glides to where the loco goes back on; without it, the run ends.
 local function routeFinished(run)
-	-- With the flip enabled the run is not over when the route is: the train is
-	-- flipped and the ghost glides on to where the loco will appear.
 	if CONFIG.reverseBeforeRecouple and run.phase == nil then
-		run.phase = run.hasTail and "approach" or "flip"
+		run.phase = "flip"
+		run.speed = 0.0
+		startSegment(run, 0.0, 0.0, 0.0)
+		pushGhostState(run, 0.0, 0.0, 0.0, 0.0)
 		return false
 	end
 	return true
 end
 
--- Glide in a straight line to where the loco will be put back: the tail
--- stand-in, read off its carriage when the approach starts (so nothing snaps).
--- The facing stays as it was. On arrival the train is flipped (phase "flip").
+-- Glide in a straight line to run.target (the flipped stand-in: where the loco
+-- goes back on), braking evenly to a stop there. The facing stays as it was.
 local function advanceApproach(run, dt)
-	if run.target == nil then
-		local ok, x, y, z = pcall(function()
-			local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-			local mil = api.engine.getComponent(cl.carriages[#cl.carriages], api.type.ComponentType.MODEL_INSTANCE_LIST)
-			local c = mil.fatInstances[1].transf:cols(3)
-			return c.x, c.y, c.z
-		end)
-		if not ok then
-			logInfo("approach: could not read the tail stand-in's position:", tostring(x), "- flipping now")
-			run.phase = "flip"
-			return false
-		end
-		run.target = { x = x, y = y, z = z }
-		logInfo(string.format("ghost heading for the tail stand-in at %.0f, %.0f", x, y))
-	end
 	local dx, dy, dz = run.target.x - run.gx, run.target.y - run.gy, run.target.z - run.gz
 	local dist = math.sqrt(dx * dx + dy * dy)
-	local speed = math.min(run.loopSpeed or 8.0, math.max(1.5, dist * 0.5))
+	if run.approachDecel == nil then
+		-- Set off at the route speed and brake at a constant rate to stop at the
+		-- stand-in (the wheel animation follows the same motion).
+		local v0 = math.max(run.loopSpeed or CONFIG.defaultSpeed, 1.0)
+		run.approachDecel = (dist > 0.1) and (v0 * v0 / (2.0 * dist)) or 1.0
+		run.speed = v0
+		startSegment(run, v0, -run.approachDecel, 0.0)
+	end
+	local speed = math.max(math.sqrt(2.0 * run.approachDecel * dist), 0.5)
 	local step = speed * dt
 	local arrived = step >= dist
 	local f = arrived and 1.0 or (step / dist)
 	run.gx, run.gy, run.gz = run.gx + dx * f, run.gy + dy * f, run.gz + dz * f
-	run.gdist = (run.gdist or 0.0) + (arrived and 0.0 or speed) * dt
-	pushGhostState(run, arrived and 0.0 or speed, arrived and 0.0 or dx / dist * speed, arrived and 0.0 or dy / dist * speed, dt)
+	run.gdist = (run.gdist or 0.0) + (arrived and dist or step)
+	run.speed = arrived and 0.0 or speed
+	local vx = (dist > 0) and dx / dist * run.speed or 0.0
+	local vy = (dist > 0) and dy / dist * run.speed or 0.0
+	pushGhostState(run, run.speed, vx, vy, dt)
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
-	if arrived then run.phase = run.hasTail and "flip" or "finish" end
+	if arrived then run.phase = "finish" end
 	return false
 end
 
+-- Where the flipped train's head part (the stand-in) is, or nil.
+local function readHeadPosition(vehicleEntity)
+	local ok, c = pcall(function()
+		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+		return carriagePos(cl.carriages[1])
+	end)
+	if ok then return { x = c.x, y = c.y, z = c.z } end
+	return nil
+end
+
+-- Advances one run by dt seconds. Returns true when the run needs its next
+-- step done in postUpdate (recouple, or the facing check after it).
 local function advanceGhost(run, dt)
 	local loop = run.loop
 	if run.phase == "flip" then return false end -- waiting for the train to be flipped
 	if run.phase == "settle" then
-		-- Just after a flip the carriages still report their old positions for a tick
-		-- or two; wait, then read where the stand-in (the head part) is now.
+		-- Just after a flip the carriages still report their old positions for a
+		-- tick or two: wait, then read where the stand-in (now the head) is.
 		run.settleTicks = (run.settleTicks or 0) + 1
 		if run.settleTicks >= 4 then
-			local ok, x, y, z = pcall(function()
-				local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-				local mil = api.engine.getComponent(cl.carriages[1], api.type.ComponentType.MODEL_INSTANCE_LIST)
-				local c = mil.fatInstances[1].transf:cols(3)
-				return c.x, c.y, c.z
-			end)
-			if ok then
-				run.target = { x = x, y = y, z = z }
+			run.target = readHeadPosition(run.vehicleEntity)
+			if run.target ~= nil then
 				run.phase = "approach"
-				logInfo(string.format("ghost heading for the flipped stand-in at %.1f, %.1f", x, y))
+				logInfo(string.format("ghost heading for the flipped stand-in at %.1f, %.1f", run.target.x, run.target.y))
 			else
-				logInfo("could not read the stand-in's position after the flip:", tostring(x))
+				logInfo("could not read the stand-in's position after the flip - the loco goes straight back on")
 				run.phase = "finish"
 			end
 		end
@@ -1059,12 +1023,12 @@ local function advanceGhost(run, dt)
 		return routeFinished(run)
 	end
 
-	-- Waiting at a reversal point (loco changing ends).
+	-- Waiting at a reversal point (the loco changing direction).
 	if run.pause ~= nil and run.pause > 0 then
 		run.pause = run.pause - dt
 		run.speed = 0.0
-		pushGhostState(run, 0.0, 0.0, 0.0, dt, not run.pauseSent)
-		run.pauseSent = true
+		if run.seg == nil or run.seg.acc ~= 0.0 or run.seg.v0 ~= 0.0 then startSegment(run, 0.0, 0.0, 0.0) end
+		pushGhostState(run, 0.0, 0.0, 0.0, dt)
 		return false
 	end
 
@@ -1074,7 +1038,9 @@ local function advanceGhost(run, dt)
 			run.reversalDone = true
 			run.headingFlipped = not run.headingFlipped
 			run.pause = REVERSAL_PAUSE
-			run.pauseSent = false
+			run.speed = 0.0
+			startSegment(run, 0.0, 0.0, 0.0)
+			pushGhostState(run, 0.0, 0.0, 0.0, 0.0)
 			return false
 		end
 		run.edgeLength = estimateEdgeLength(getEdgeGeometry(edgeDef))
@@ -1089,8 +1055,13 @@ local function advanceGhost(run, dt)
 		end
 	end
 
+	-- Setting off (at the start, or after a reversal): a new motion segment.
+	if run.speed == 0.0 and (run.seg == nil or run.seg.acc == 0.0) then
+		startSegment(run, 0.0, loop.accel, loop.speed)
+	end
 	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
 	local endAt = run.edgeLimit or run.edgeLength
+	local before = run.edgeProgress
 	run.edgeProgress = math.min(run.edgeProgress + run.speed * dt, endAt)
 	local t = run.edgeLength > 0 and math.min(run.edgeProgress / run.edgeLength, 1.0) or 1.0
 
@@ -1127,12 +1098,12 @@ local function advanceGhost(run, dt)
 	if run.gx ~= nil and dt > 0 then pvx, pvy = (pos.x - run.gx) / dt, (pos.y - run.gy) / dt end
 	if not run.firstLogged and run.locoPos ~= nil then
 		run.firstLogged = true
-		logInfo(string.format("ghost first step at (%.1f, %.1f), the loco stood at (%.1f, %.1f): %.1f m apart", pos.x, pos.y, run.locoPos.x, run.locoPos.y, math.sqrt((pos.x - run.locoPos.x) ^ 2 + (pos.y - run.locoPos.y) ^ 2)))
+		logInfo(string.format("ghost first step %.1f m from where the loco stood", math.sqrt((pos.x - run.locoPos.x) ^ 2 + (pos.y - run.locoPos.y) ^ 2)))
 	end
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
-	run.gdist = (run.gdist or 0.0) + run.speed * dt
-	pushGhostState(run, run.speed, pvx, pvy, dt)
+	run.gdist = (run.gdist or 0.0) + (run.edgeProgress - before)
 	run.loopSpeed = loop.speed
+	pushGhostState(run, run.speed, pvx, pvy, dt)
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
 
@@ -1193,6 +1164,7 @@ end
 -- Position log of a train's carriages, to find out how the game lays a train out
 -- after each vehicle replace / flip (used to work out why wagons jumped).
 local function traceNow(label, vehicleEntity)
+	if not CONFIG.LOG_TRACES then return end
 	local ok, err = pcall(function()
 		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 		local parts = {}
@@ -1208,6 +1180,7 @@ end
 
 -- Logs the positions after some ticks (the game lays carriages out a tick or two late).
 local function scheduleTrace(state, label, vehicleEntity, ticks)
+	if not CONFIG.LOG_TRACES then return end
 	local data = state:get()
 	data.traces = data.traces or {}
 	data.traces[#data.traces + 1] = { label = label, vehicleEntity = vehicleEntity, ticks = ticks }
@@ -1338,7 +1311,7 @@ local function flipRun(state, vehicleEntity)
 		scheduleTrace(state, "after the flip (+8 ticks)", vehicleEntity, 8)
 		updateRun(state, vehicleEntity, function(r)
 			r.flipped = true
-			r.phase = r.hasTail and "finish" or "settle"
+			r.phase = "settle"
 			r.settleTicks = 0
 		end)
 	end)
@@ -1456,9 +1429,10 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: could not read the loco's position (", tostring(locoTransf), ") - the ghost will appear on the route instead")
 		locoTransf = nil
 	end
-	local standId = findStandInModelId(locoSnap.modelId)
+	local okLen, locoLength = pcall(carriageLength, vehicleEntity, locoIdx)
+	local standId = findStandInModelId(okLen and locoLength or nil)
 	if standId == nil then
-		logInfo("startRunAround: the stand-in model was not found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/standin.mdl loaded?")
+		logInfo("startRunAround: no stand-in model found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/ loaded?")
 		return
 	end
 	local ghostModelId, ghostEffects = findGhostModelId(locoSnap.modelId)
@@ -1475,12 +1449,8 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
 		return
 	end
-	local locoTopSpeed = nil
-	do
-		local okM, model = pcall(api.res.modelRep.getAsTable, locoSnap.modelId)
-		local lv = okM and type(model) == "table" and model.metadata and model.metadata.landVehicle
-		if lv and lv.topSpeed and lv.topSpeed > 1 then locoTopSpeed = lv.topSpeed end
-	end
+	local locoTopSpeed = tonumber(modelMeta(locoSnap.modelId, "landVehicle", "topSpeed"))
+	if locoTopSpeed ~= nil and locoTopSpeed <= 1 then locoTopSpeed = nil end
 	local startHead, startSign = nil, nil
 	do
 		local okH, hx, hy = pcall(headDirection, vehicleEntity)
@@ -1491,12 +1461,11 @@ local function startRunAround(state, vehicleEntity, loop)
 			logInfo(string.format("loco at start: part reversed=%s, facing dot train head direction = %.2f", tostring(locoSnap.reversed), c0.x * hx + c0.y * hy))
 		end
 	end
-	local hasTail = CONFIG.tailStandIn and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	local origRev = {}
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
 	end
-	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, hasTail)
+	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return
@@ -1559,7 +1528,6 @@ local function startRunAround(state, vehicleEntity, loop)
 				loop = loop,
 				locoPart = locoSnap,
 				standInModelId = standId,
-				hasTail = hasTail,
 				startHead = startHead,
 				startSign = startSign,
 				startReversed = locoSnap.reversed and true or false,
@@ -1577,7 +1545,12 @@ local function startRunAround(state, vehicleEntity, loop)
 				speed = 0.0,
 			}
 			state:set(data)
-			if ghostEffects then pushGhostState(data.runs[#data.runs], 0.0, 0.0, 0.0, 0.0, true) end
+			if ghostEffects then
+				local run = data.runs[#data.runs]
+				startSegment(run, 0.0, 0.0, 0.0)
+				pushGhostState(run, 0.0, 0.0, 0.0, 0.0)
+				state:set(data)
+			end
 			logInfo("run-around started for vehicle", vehicleEntity, "loop", loopLabel(loop))
 		end)
 	end)
@@ -1687,44 +1660,7 @@ end
 
 -- Handles one "RunAroundGuiCmd" event from runaround_gui.lua. All mutation
 -- of persistent loop config happens here (not in the GUI file) so there is
--- a single source of truth and the GUI can stay a thin, best-effort layer.
--- Read-only probe: prints the shape of a model table (keys, value types,
--- lengths) to the log, depth- and size-limited.
-local function dumpModelShape(modelId)
-	local ok, t = pcall(api.res.modelRep.getAsTable, modelId)
-	if not ok or type(t) ~= "table" then
-		logInfo("model probe: getAsTable failed for", modelId, tostring(t))
-		return
-	end
-	local budget = 220
-	local function dump(v, indent, depth)
-		if budget <= 0 then return end
-		local keys = {}
-		for k in pairs(v) do keys[#keys + 1] = k end
-		table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
-		for _, k in ipairs(keys) do
-			if budget <= 0 then return end
-			local val = v[k]
-			local tv = type(val)
-			local desc
-			if tv == "table" then
-				local n = 0
-				for _ in pairs(val) do n = n + 1 end
-				desc = "table(" .. n .. ")"
-			elseif tv == "string" then
-				desc = '"' .. string.sub(val, 1, 60) .. '"'
-			else
-				desc = tostring(val)
-			end
-			budget = budget - 1
-			logInfo("model probe: " .. string.rep("  ", indent) .. tostring(k) .. " = " .. desc)
-			if tv == "table" and depth < 4 then dump(val, indent + 1, depth + 1) end
-		end
-	end
-	logInfo("model probe: model", modelId, "structure follows")
-	dump(t, 0, 0)
-end
-
+-- a single source of truth and the GUI can stay a thin layer.
 local function handleGuiCmd(data, name, param)
 	if name == "AddLoopFromVehicle" then
 		local snap = readVehicleSnapshot(param.vehicleEntity)
@@ -1753,9 +1689,6 @@ local function handleGuiCmd(data, name, param)
 		}
 		data.loops[#data.loops + 1] = loop
 		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
-		if CONFIG.DUMP_LOCO_MODEL and loop.locoModelId ~= nil then
-			pcall(dumpModelShape, loop.locoModelId)
-		end
 
 	elseif name == "CycleLocoCandidate" then
 		-- Steps automatic -> part 1 -> part 2 ... -> last part -> automatic.

@@ -84,9 +84,23 @@
         "res/models/runaround_standin/standin_6.mdl",
         "res/models/runaround_standin/standin_8.mdl",
         "ghost_build.script.lua",
-        "res/models/runaround_ghost/ghost.trf.lua",
-        "res/models/runaround_ghost/ghost.script.lua",
         "res/scripts/ghost_real.script.lua",
-        "res/models/runaround_ghost/real.trf.lua"
+        "res/models/runaround_ghost/real.trf.lua",
+        "res/models/runaround_ghost/real_tilting.trf.lua",
+        "res/audio/ghostwrap/cabcar_modern.snd.lua",
+        "res/audio/ghostwrap/handcar.snd.lua",
+        "res/audio/ghostwrap/train_diesel.snd.lua",
+        "res/audio/ghostwrap/train_diesel_electric.snd.lua",
+        "res/audio/ghostwrap/train_diesel_hydraulic.snd.lua",
+        "res/audio/ghostwrap/train_diesel_old.snd.lua",
+        "res/audio/ghostwrap/train_electric_medium.snd.lua",
+        "res/audio/ghostwrap/train_electric_modern.snd.lua",
+        "res/audio/ghostwrap/train_electric_old.snd.lua",
+        "res/audio/ghostwrap/train_steam_modern.snd.lua",
+        "res/audio/ghostwrap/train_steam_old.snd.lua",
+        "res/audio/ghostwrap/waggon_freight_modern.snd.lua",
+        "res/audio/ghostwrap/waggon_freight_old.snd.lua",
+        "res/audio/ghostwrap/waggon_modern.snd.lua",
+        "res/audio/ghostwrap/waggon_old.snd.lua"
     ]
 }

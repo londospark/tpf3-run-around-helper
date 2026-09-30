@@ -168,6 +168,27 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Sixth live run: facing fixed; wheels still jerky, the ghost clipped into the
+  wagons at the detach, and the whole consist jumped at the recouple (changes
+  untested).** From the log (`verify: ... dot = 1.00`, no correction) the facing
+  is right now. The detach and recouple problems both come from the second
+  ("tail") stand-in added last time: a vehicle replace evidently keeps the
+  train's MIDDLE where it was, so making the temporary train longer shifted the
+  wagons about half a loco length at the detach (the loco, drawn where it stood,
+  ended up half inside the first wagon) and taking the tail off jumped the whole
+  consist at the recouple. The tail is switched off (`tailStandIn`). The run is
+  back to: stand-in the same length as the loco (no shift), ghost runs round, the
+  train is flipped, and once the game has laid the flipped train out (a few
+  ticks) the ghost glides to where the head stand-in is and the loco replaces it.
+  The wagons therefore still move one loco length when the train is flipped (the
+  same as the game's own terminus flip): with a replace that keeps the middle
+  fixed there is no way to add the loco on the far end without it. The run now
+  logs `trace` lines with the carriage positions before and after each step to
+  confirm this. Wheels: the frame value was wrapped to one turn (0-5000 ms), and
+  the renderer blends from the last frame value to the new one, so every wrap
+  swept the wheels backwards through a whole turn; it now keeps increasing, as
+  the game's own value does, and the real wheel radius is used again. The log's
+  `patched 0 sound sets` now also reports any error while patching.
 - **Reported working: the loco's own model as the ghost, with its own sound and
   smoke, and its custom paint kept (the ghost copy could not show the paint).**
   This is why the own-model ghost is the default (`useRealModel`), with the ghost

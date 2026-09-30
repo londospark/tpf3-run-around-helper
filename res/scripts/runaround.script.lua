@@ -99,6 +99,11 @@ local CONFIG = {
 	-- After the loco goes back on, read its real facing off the game and compare it with the
 	-- ghost's; if they differ, flip the loco part once. See verifyRun.
 	verifyFacing = true,
+	-- A second stand-in on the far end of the train. OFF: a vehicle replace keeps the
+	-- train's MIDDLE where it was (deduced from a live run: adding the tail shifted the
+	-- wagons about half a loco length at the detach and the whole consist jumped at
+	-- the recouple), so a longer temporary train moves everything. See the README.
+	tailStandIn = false,
 
 	-- Logs the structure of the chosen loco's model table when a loop is
 	-- created (read-only). Not needed now the stand-in model is authored.
@@ -973,8 +978,8 @@ end
 local function routeFinished(run)
 	-- With the flip enabled the run is not over when the route is: the train is
 	-- flipped and the ghost glides on to where the loco will appear.
-	if run.hasTail and run.phase == nil then
-		run.phase = "approach"
+	if CONFIG.reverseBeforeRecouple and run.phase == nil then
+		run.phase = run.hasTail and "approach" or "flip"
 		return false
 	end
 	return true
@@ -1010,13 +1015,35 @@ local function advanceApproach(run, dt)
 	pushGhostState(run, arrived and 0.0 or speed, arrived and 0.0 or dx / dist * speed, arrived and 0.0 or dy / dist * speed, dt)
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
-	if arrived then run.phase = "flip" end
+	if arrived then run.phase = run.hasTail and "flip" or "finish" end
 	return false
 end
 
 local function advanceGhost(run, dt)
 	local loop = run.loop
 	if run.phase == "flip" then return false end -- waiting for the train to be flipped
+	if run.phase == "settle" then
+		-- Just after a flip the carriages still report their old positions for a tick
+		-- or two; wait, then read where the stand-in (the head part) is now.
+		run.settleTicks = (run.settleTicks or 0) + 1
+		if run.settleTicks >= 4 then
+			local ok, x, y, z = pcall(function()
+				local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+				local mil = api.engine.getComponent(cl.carriages[1], api.type.ComponentType.MODEL_INSTANCE_LIST)
+				local c = mil.fatInstances[1].transf:cols(3)
+				return c.x, c.y, c.z
+			end)
+			if ok then
+				run.target = { x = x, y = y, z = z }
+				run.phase = "approach"
+				logInfo(string.format("ghost heading for the flipped stand-in at %.1f, %.1f", x, y))
+			else
+				logInfo("could not read the stand-in's position after the flip:", tostring(x))
+				run.phase = "finish"
+			end
+		end
+		return false
+	end
 	if run.phase == "approach" then return advanceApproach(run, dt) end
 	if run.phase == "verify" then
 		run.verifyWait = (run.verifyWait or 0) + 1
@@ -1154,6 +1181,30 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 end
 
 -- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
+-- Position log of a train's carriages, to find out how the game lays a train out
+-- after each vehicle replace / flip (used to work out why wagons jumped).
+local function traceNow(label, vehicleEntity)
+	local ok, err = pcall(function()
+		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+		local parts = {}
+		for i, c in ipairs(cl.carriages) do
+			local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
+			local t = mil.fatInstances[1].transf:cols(3)
+			parts[#parts + 1] = string.format("%d=(%.1f,%.1f)", i, t.x, t.y)
+		end
+		logInfo("trace", label, table.concat(parts, " "))
+	end)
+	if not ok then logInfo("trace", label, "unreadable:", tostring(err)) end
+end
+
+-- Logs the positions after some ticks (the game lays carriages out a tick or two late).
+local function scheduleTrace(state, label, vehicleEntity, ticks)
+	local data = state:get()
+	data.traces = data.traces or {}
+	data.traces[#data.traces + 1] = { label = label, vehicleEntity = vehicleEntity, ticks = ticks }
+	state:set(data)
+end
+
 -- Ends a run: the ghost goes, the train is released.
 local function finalizeRun(run)
 	if not run.ghostGone then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
@@ -1185,6 +1236,7 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 			releaseTrain(run.vehicleEntity)
 			return
 		end
+		scheduleTrace(state, "after the recouple", run.vehicleEntity, 8)
 		-- The ghost goes at once: the real loco is on the train now, and leaving the
 		-- ghost up while the facing is verified showed two locos for a moment.
 		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
@@ -1272,9 +1324,11 @@ local function flipRun(state, vehicleEntity)
 	api.cmd.sendCommand(revCmd, function(_, success)
 		if not success then return fail("reverse command failed") end
 		logInfo("train flipped; putting the loco back")
+		scheduleTrace(state, "after the flip", vehicleEntity, 8)
 		updateRun(state, vehicleEntity, function(r)
 			r.flipped = true
-			r.phase = "finish"
+			r.phase = r.hasTail and "finish" or "settle"
+			r.settleTicks = 0
 		end)
 	end)
 end
@@ -1283,6 +1337,7 @@ end
 -- (its part's `reversed` flag may not mean what it seems), and the flag is
 -- toggled once if they differ, so the loco is never turned round by the swap.
 local function verifyRun(state, run)
+	scheduleTrace(state, "after the release", run.vehicleEntity, 60)
 	local ok, yaw = pcall(function()
 		local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 		local idx = run.locoAtRear and #cl.carriages or 1
@@ -1425,7 +1480,7 @@ local function startRunAround(state, vehicleEntity, loop)
 			logInfo(string.format("loco at start: part reversed=%s, facing dot train head direction = %.2f", tostring(locoSnap.reversed), c0.x * hx + c0.y * hy))
 		end
 	end
-	local hasTail = CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
+	local hasTail = CONFIG.tailStandIn and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	local origRev = {}
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
@@ -1441,6 +1496,7 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 
+	traceNow("before the detach", vehicleEntity)
 	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, true))
 
 	api.cmd.sendCommand(replaceCmd, function(_, success)
@@ -1450,6 +1506,7 @@ local function startRunAround(state, vehicleEntity, loop)
 			return
 		end
 
+		scheduleTrace(state, "after the detach", vehicleEntity, 8)
 		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(ghostModelId), function(createRes, createSuccess)
 			if not createSuccess then
 				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- putting the loco back on the train")
@@ -1827,6 +1884,15 @@ return {
 				end
 			end
 			data.runs = remaining
+		end
+
+		if data.traces ~= nil and #data.traces > 0 then
+			local keep = {}
+			for _, t in ipairs(data.traces) do
+				t.ticks = t.ticks - 1
+				if t.ticks <= 0 then traceNow(t.label, t.vehicleEntity) else keep[#keep + 1] = t end
+			end
+			data.traces = keep
 		end
 
 		state:set(data)

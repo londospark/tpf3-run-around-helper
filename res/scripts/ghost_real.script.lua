@@ -58,7 +58,7 @@ local function applyColor(st, transfsOutput)
 	end
 end
 
-local WHEEL_RADIUS = 2.5 -- metres. A real driving wheel is about 0.9, but a script only sees the game time in whole simulation ticks, and at the true rate the wheel jumps a large part of a turn each tick (jerky); this turns them at about a third of the true rate
+local WHEEL_RADIUS = 0.9 -- metres, typical driving wheel
 local WHEEL_ANIMATION_MS = 5000 -- one revolution of the wheel animation
 
 local function stateOf(currentInfo)
@@ -127,7 +127,11 @@ local function trainUpdateFn(captureParams, params, transfsOutput)
 	-- rate of the ground speed. (The game's own helper rounds this to whole
 	-- seconds, which for a ghost hides the motion.)
 	local rev = dist / (2.0 * math.pi * WHEEL_RADIUS)
-	local frame = math.floor((rev % 1.0) * WHEEL_ANIMATION_MS + 0.5)
+	-- NOT wrapped to one turn: the frame has to keep increasing (like the game's own
+	-- totalDist-based value, and the animation loops by itself). The renderer blends
+	-- from the last frame value to the new one, so a wrap from 4900 to 100 spun the
+	-- wheels backwards across the whole turn at every revolution: the jerkiness.
+	local frame = math.floor(rev * WHEEL_ANIMATION_MS + 0.5)
 	transfsOutput:addAnimationState("wheels", -1, frame, true, reversed)
 end
 

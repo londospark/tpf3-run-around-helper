@@ -265,7 +265,8 @@ local function patchRealModelSupport(modId, all)
 				local md = src.metadata
 				local prefix = string.match(name, "^(.-)::") or ""
 				local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
-				pcall(patchSoundSet, soundName, prefix, soundWrapper)
+				local okS, errS = pcall(patchSoundSet, soundName, prefix, soundWrapper)
+				if not okS then skipLog("error patching sound set", tostring(soundName), "-", tostring(errS)) end
 				local okT, trfDone = pcall(patchModelTransformator, id, src, realTrf)
 				-- A loco is ready to be the ghost itself only if its transformator and (if it
 				-- has one) its sound set both went through the wrappers.

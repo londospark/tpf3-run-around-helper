@@ -464,13 +464,18 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 	return finishConfig(config, parts)
 end
 
--- The creep layout (see creepLayout): the coaches in their current order, with a
--- stand-in of length a in front (the head) and one of length b behind, either
--- left out when its length is 0.
+-- The creep layout (see creepLayout): the coaches in their current order, with
+-- stand-ins of total length a in front (the head) and one of length b behind
+-- (left out when 0). The front is always a fixed 0.5 m stand-in followed by the
+-- rest of a: the head carriage then never moves while the coaches creep, so the
+-- game's vehicle marker, which sits on it, stays still (it wiggled at every step
+-- when the head stand-in itself was shrinking).
+local CREEP_HEAD = 0.5
 local function buildCreepConfig(tvc, a, b, locoSnap)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
-	if a > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a), locoSnap) end
+	parts[#parts + 1] = makeStandInPart(findStandInModelId(CREEP_HEAD), locoSnap)
+	if a - CREEP_HEAD > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a - CREEP_HEAD), locoSnap) end
 	for _, part in ipairs(config.vehicles) do
 		if not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
 	end
@@ -997,20 +1002,34 @@ end
 -- found by its model (not by list position, which misled the ghost into
 -- driving back through the coaches, live).
 local function readStandInPosition(vehicleEntity, awayFrom)
-	local best, bestD = nil, -1
+	-- Every stand-in carriage with its length; the far end's ones (after the creep
+	-- there are only the front ones, 0.5 m + the rest) give the loco's centre as
+	-- their length-weighted centre.
+	local found = {}
 	pcall(function()
+		local lengthOf = {}
+		for len, id in pairs(standInIds or {}) do lengthOf[id] = len end
 		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 		for _, c in ipairs(cl.carriages) do
 			local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
 			local inst = mil.fatInstances[1]
 			if isStandIn(inst.modelId) then
 				local p = inst.transf:cols(3)
-				local d = awayFrom and ((p.x - awayFrom.x) ^ 2 + (p.y - awayFrom.y) ^ 2) or 0
-				if d > bestD then best, bestD = { x = p.x, y = p.y, z = p.z }, d end
+				local d = awayFrom and math.sqrt((p.x - awayFrom.x) ^ 2 + (p.y - awayFrom.y) ^ 2) or 0
+				found[#found + 1] = { x = p.x, y = p.y, z = p.z, d = d, len = lengthOf[inst.modelId] or 1 }
 			end
 		end
 	end)
-	return best
+	if #found == 0 then return nil end
+	local far = 0
+	for _, f in ipairs(found) do if f.d > far then far = f.d end end
+	local sx, sy, sz, sw = 0, 0, 0, 0
+	for _, f in ipairs(found) do
+		if f.d > far - 30 then -- the far end's stand-ins
+			sx, sy, sz, sw = sx + f.x * f.len, sy + f.y * f.len, sz + f.z * f.len, sw + f.len
+		end
+	end
+	return { x = sx / sw, y = sy / sw, z = sz / sw }
 end
 
 -- The route is done: with the flip enabled the train is flipped next and the
@@ -1670,7 +1689,12 @@ local function startRunAround(state, vehicleEntity, loop)
 		if len > 44 then len = 44 end
 		standId, standLength = findStandInModelId(len)
 	end
-	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
+	local okBuild, strippedConfig
+	if creep then
+		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap)
+	else
+		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
+	end
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return

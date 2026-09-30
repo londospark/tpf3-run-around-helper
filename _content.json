@@ -85,6 +85,8 @@
         "res/models/runaround_standin/standin_8.mdl",
         "ghost_build.script.lua",
         "res/models/runaround_ghost/ghost.trf.lua",
-        "res/models/runaround_ghost/ghost.script.lua"
+        "res/models/runaround_ghost/ghost.script.lua",
+        "res/scripts/ghost_real.script.lua",
+        "res/models/runaround_ghost/real.trf.lua"
     ]
 }

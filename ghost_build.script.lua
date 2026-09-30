@@ -21,6 +21,10 @@ local function log(...)
 end
 
 local MOD_ID = "runaround_helper_1"
+-- Point every loco's sound set and transformator at wrappers so the loco's OWN model
+-- can be the run-around ghost (see patchRealModelSupport). Set false to leave the
+-- game's sound sets and models untouched (then only the ghost copies work).
+local PATCH_FOR_REAL_MODEL = true
 local STATE_KEY = "customState" -- where a free entity's state shows up in currentInfo
 local ALLOWED_PARAMS = { speed01 = true, power01 = true, speed = true, power = true }
 
@@ -129,25 +133,17 @@ local function ghostSoundSetName(soundSetName, prefix)
 			if found ~= nil and found >= 0 then id, resolved = found, c break end
 		end
 		if resolved == nil then error("sound set not found") end
-		local dir = string.match(resolved, "^(.*/)[^/]*$")
+		local dir = string.match(resolved, "^(.*/)[^/]*$") or ""
+		local file = string.match(resolved, "([^/]+)$") or "set.snd"
 		local original = api.res.soundSetRep.getAsTable(id)
-		local name = "runaround_ghost_sound/" .. string.gsub(soundSetName, "[^%w_%.]", "_")
+		-- The new set goes in the SAME folder as the original, because a set's
+		-- track names are relative to the folder its own file is in (adding it
+		-- elsewhere failed with std::exception, the game not finding the sound files).
+		local name = dir .. "runaround_ghost_" .. file
 		if api.res.soundSetRep.find(name) < 0 then
-			-- Track names may need to be absolute (a set added at run time has no
-			-- folder to be relative to) or may already be: try both.
-			local firstName = original.tracks and original.tracks[1] and original.tracks[1].name
-			local errors = {}
-			local added = false
-			for _, useDir in ipairs({ true, false }) do
-				local converted = convertSoundSet(original, useDir and dir or nil)
-				if converted == nil then error("nothing to convert") end
-				local okAdd, e = pcall(api.res.soundSetRep.addAsTable, name, converted)
-				if okAdd then added = true break end
-				errors[#errors + 1] = (useDir and "absolute names: " or "as-is names: ") .. tostring(e)
-			end
-			if not added then
-				error(table.concat(errors, "; ") .. " (first track was '" .. tostring(firstName) .. "', set resolved as " .. tostring(resolved) .. ")")
-			end
+			local converted = convertSoundSet(original, nil)
+			if converted == nil then error("nothing to convert") end
+			api.res.soundSetRep.addAsTable(name, converted)
 		end
 		newName = name
 	end)
@@ -195,6 +191,80 @@ local function build(modelId, modelName, trfName)
 	return true
 end
 
+-- ---------------------------------------------------------------------
+-- Support for drawing the ghost from the loco's OWN model (no ghost copy). The
+-- loco's sound set and transformator are pointed at wrappers (res/scripts/
+-- ghost_real.script.lua) that behave exactly as before for a real vehicle and
+-- work from the ghost's custom entity state for a free entity.
+-- ---------------------------------------------------------------------
+local BASE_SOUND_UPDATE = "::/scripts/soundset_default.script@updateSoundSet"
+local patchedSoundSets = {}
+local patchStats = { sounds = 0, soundFailed = 0, trfs = 0, trfFailed = 0, skipped = 0 }
+
+local function patchSoundSet(soundSetName, prefix, wrapperRef)
+	if soundSetName == nil then return end
+	if patchedSoundSets[soundSetName] ~= nil then return end
+	patchedSoundSets[soundSetName] = false
+	local candidates = { soundSetName }
+	if string.sub(soundSetName, 1, 1) == "/" then candidates[#candidates + 1] = (prefix or "") .. "::" .. soundSetName end
+	local id
+	for _, c in ipairs(candidates) do
+		local found = api.res.soundSetRep.find(c)
+		if found ~= nil and found >= 0 then id = found break end
+	end
+	if id == nil then patchStats.skipped = patchStats.skipped + 1 return end
+	local t = api.res.soundSetRep.getAsTable(id)
+	local us = t.updateScript
+	if type(us) ~= "table" or type(us.fileName) ~= "string" then patchStats.skipped = patchStats.skipped + 1 return end
+	if us.fileName ~= BASE_SOUND_UPDATE then patchStats.skipped = patchStats.skipped + 1 return end -- a custom update script: left alone
+	us.fileName = wrapperRef
+	local ok, res = pcall(api.res.soundSetRep.setAsTable, id, t)
+	if ok and res ~= false then
+		patchedSoundSets[soundSetName] = true
+		patchStats.sounds = patchStats.sounds + 1
+	else
+		patchStats.soundFailed = patchStats.soundFailed + 1
+		if patchStats.soundFailed <= 3 then log("real-model support: could not patch sound set", soundSetName, "-", tostring(ok and res or res)) end
+	end
+end
+
+local function patchModelTransformator(modelId, src, realTrf)
+	local md = src.metadata
+	local name = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
+	if type(name) ~= "string" or not string.find(name, "default_train.trf", 1, true) then
+		patchStats.skipped = patchStats.skipped + 1
+		return
+	end
+	md.transformatorConfig.transformator.name = realTrf
+	local ok, res = pcall(api.res.modelRep.setAsTable, modelId, src)
+	if ok and res ~= false then
+		patchStats.trfs = patchStats.trfs + 1
+	else
+		patchStats.trfFailed = patchStats.trfFailed + 1
+		if patchStats.trfFailed <= 3 then log("real-model support: could not patch the transformator of", modelId, "-", tostring(res)) end
+	end
+end
+
+local function patchRealModelSupport(modId, all)
+	local soundWrapper = modId .. "::/res/scripts/ghost_real.script@sound.updateSoundSet"
+	local realTrf = modId .. "::/res/models/runaround_ghost/real.trf"
+	for id, name in pairs(all) do
+		if type(name) == "string" and not string.find(name, "runaround_", 1, true) then
+			local ok, src = pcall(api.res.modelRep.getAsTable, id)
+			if ok and type(src) == "table" and isRailEngine(src.metadata) then
+				local md = src.metadata
+				local prefix = string.match(name, "^(.-)::") or ""
+				pcall(function()
+					patchSoundSet(md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name, prefix, soundWrapper)
+				end)
+				pcall(patchModelTransformator, id, src, realTrf)
+			end
+		end
+	end
+	log(string.format("real-model support: patched %d sound sets and %d loco transformators (%d failed, %d left alone)",
+		patchStats.sounds, patchStats.trfs, patchStats.soundFailed + patchStats.trfFailed, patchStats.skipped))
+end
+
 mod.postRunFn = function(_configDict, _allModParams)
 	local modId = MOD_ID
 	if getCurrentModId ~= nil then
@@ -207,6 +277,10 @@ mod.postRunFn = function(_configDict, _allModParams)
 	if not okAll or all == nil then
 		log("ghost models: could not list models -", tostring(all))
 		return
+	end
+	if PATCH_FOR_REAL_MODEL then
+		local okP, errP = pcall(patchRealModelSupport, modId, all)
+		if not okP then log("real-model support failed:", tostring(errP)) end
 	end
 	for id, name in pairs(all) do
 		if type(name) == "string" then

@@ -383,9 +383,46 @@ local function findGhostModelId(locoModelId)
 	return ghostIdsByFile[GHOST_FALLBACK[engineType]], false
 end
 
+-- Whether the loco's own model can be used as the ghost: its sound set and
+-- transformator must already point at the wrappers (ghost_build.script.lua does
+-- that at load). If not, using it would raise Lua errors every frame ("attempt to
+-- index local 'vehicleInfo'").
+local function realModelReady(locoModelId)
+	local ok, model = pcall(api.res.modelRep.getAsTable, locoModelId)
+	if not ok or type(model) ~= "table" or not model.metadata then return false, "model not readable" end
+	local md = model.metadata
+	local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
+	if trf ~= nil and not string.find(trf, "real.trf", 1, true) then return false, "its transformator was not patched (" .. tostring(trf) .. ")" end
+	local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
+	if soundName ~= nil then
+		local okS, patched = pcall(function()
+			local all = api.res.modelRep.getAll(true)
+			local modelName = all[locoModelId] or ""
+			local prefix = string.match(modelName, "^(.-)::") or ""
+			local candidates = { soundName }
+			if string.sub(soundName, 1, 1) == "/" then candidates[#candidates + 1] = prefix .. "::" .. soundName end
+			for _, c in ipairs(candidates) do
+				local id = api.res.soundSetRep.find(c)
+				if id ~= nil and id >= 0 then
+					local us = api.res.soundSetRep.getAsTable(id).updateScript
+					return us ~= nil and type(us.fileName) == "string" and string.find(us.fileName, "ghost_real.script", 1, true) ~= nil
+				end
+			end
+			return false
+		end)
+		if not okS or not patched then return false, "its sound set was not patched" end
+	end
+	return true
+end
+
 -- Feeds an effects ghost's smoke and sound (see ghost.script.lua): its speed
 -- and velocity, as custom entity state. Sent when something changed, or now and
 -- then, not every step.
+local function gameTimeMs()
+	local ok, gt = pcall(function() return api.engine.getComponent(api.engine.util.getWorld(), api.type.ComponentType.GAME_TIME).gameTime end)
+	return ok and gt or nil
+end
+
 local function pushGhostState(run, speed, vx, vy, dt, force)
 	if not run.effects then return end
 	run.stateAge = (run.stateAge or 0.0) + dt
@@ -400,7 +437,7 @@ local function pushGhostState(run, speed, vx, vy, dt, force)
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
-		state = { speed = speed, power = power, vx = vx, vy = vy },
+		state = { speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = run.headingFlipped and -1 or 1, t0 = gameTimeMs() },
 	})
 	if ok then
 		api.cmd.sendCommand(cmd)
@@ -982,6 +1019,7 @@ local function advanceApproach(run, dt)
 	local arrived = step >= dist
 	local f = arrived and 1.0 or (step / dist)
 	run.gx, run.gy, run.gz = run.gx + dx * f, run.gy + dy * f, run.gz + dz * f
+	run.gdist = (run.gdist or 0.0) + (arrived and 0.0 or speed) * dt
 	pushGhostState(run, arrived and 0.0 or speed, arrived and 0.0 or dx / dist * speed, arrived and 0.0 or dy / dist * speed, dt)
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
@@ -1006,7 +1044,8 @@ local function advanceGhost(run, dt)
 	if run.pause ~= nil and run.pause > 0 then
 		run.pause = run.pause - dt
 		run.speed = 0.0
-		pushGhostState(run, 0.0, 0.0, 0.0, dt)
+		pushGhostState(run, 0.0, 0.0, 0.0, dt, not run.pauseSent)
+		run.pauseSent = true
 		return false
 	end
 
@@ -1016,6 +1055,7 @@ local function advanceGhost(run, dt)
 			run.reversalDone = true
 			run.headingFlipped = not run.headingFlipped
 			run.pause = REVERSAL_PAUSE
+			run.pauseSent = false
 			return false
 		end
 		run.edgeLength = estimateEdgeLength(getEdgeGeometry(edgeDef))
@@ -1067,6 +1107,7 @@ local function advanceGhost(run, dt)
 	local pvx, pvy = 0.0, 0.0
 	if run.gx ~= nil and dt > 0 then pvx, pvy = (pos.x - run.gx) / dt, (pos.y - run.gy) / dt end
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
+	run.gdist = (run.gdist or 0.0) + run.speed * dt
 	pushGhostState(run, run.speed, pvx, pvy, dt)
 	run.loopSpeed = loop.speed
 
@@ -1354,8 +1395,13 @@ local function startRunAround(state, vehicleEntity, loop)
 	end
 	local ghostModelId, ghostEffects = findGhostModelId(locoSnap.modelId)
 	if CONFIG.useRealModel then
-		ghostModelId, ghostEffects = locoSnap.modelId, false
-		logInfo("ghost model: EXPERIMENT - using the loco's own model", locoSnap.modelId)
+		local ready, why = realModelReady(locoSnap.modelId)
+		if ready then
+			ghostModelId, ghostEffects = locoSnap.modelId, true
+			logInfo("ghost model: using the loco's OWN model", locoSnap.modelId, "(sound and transformator wrapped)")
+		else
+			logInfo("ghost model: the loco's own model cannot be used -", why, "- using a ghost copy")
+		end
 	end
 	if ghostModelId == nil then
 		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")

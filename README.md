@@ -145,12 +145,29 @@ through earlier versions of this mod is fine.
   ghost, or the game refuses one, it falls back to the plain silent ghost.
   `useEffectGhosts` in `runaround.script.lua` turns the effects off. Wheels do
   not turn yet.
-- **Experiment: the ghost drawn from the loco's own model.** `useRealModel` in
-  `runaround.script.lua` (currently `true`) spawns the loco's own model as the
-  ghost instead of a ghost copy, to see whether its own smoke, sound and wheels
-  work on a free entity (the game's scripts for them expect vehicle data, so
-  they may error, do nothing or crash the game). Set it to `false` to go back to
-  the ghost copies.
+- **The ghost drawn from the loco's OWN model (untested).** The first try,
+  spawning the loco model as a free entity, raised a Lua error from the game's
+  sound script every frame (`attempt to index local 'vehicleInfo'`): it reads
+  vehicle data a free entity does not have. So, at load, `ghost_build.script.lua`
+  now points every rail loco's sound set (when it uses the stock update script)
+  and its transformator (when it uses the stock `default_train.trf`) at wrappers
+  in `res/scripts/ghost_real.script.lua`. For a real vehicle a wrapper calls the
+  game's own function unchanged. For a free entity it builds the vehicle data
+  (speed, distance, direction) from the ghost's custom entity state and runs the
+  game's own function on that, so the loco's real sound, chimney smoke and wheel
+  animation play as if it were a train moving that way. Wheel radius and
+  animation duration are not available to scripts, so the wheels use typical
+  values. The run-around script checks that the loco's own model has been wrapped
+  before using it and otherwise uses a ghost copy, logging why. Log lines:
+  `real-model support: patched N sound sets and M loco transformators`, then
+  `ghost model: using the loco's OWN model`. **This changes the game's sound sets
+  and loco models for every train** (for real vehicles the behaviour is the
+  same); set `PATCH_FOR_REAL_MODEL` to `false` in `ghost_build.script.lua` to leave
+  them alone, and `useRealModel` to `false` in `runaround.script.lua` for ghost
+  copies. Locos with their own sound or transformator scripts are left alone and
+  use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
+  folder as the original (the earlier `std::exception` was the game not finding
+  the sound files relative to my folder).
 - **Third live run: smoke works, sound does not yet, loco facing now checked
   (untested).** The log showed `built effects ghosts for 58 of 4586 models` and
   smoke on the ghost. Every sound set failed to add (`std::exception` from

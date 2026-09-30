@@ -101,6 +101,8 @@
         "res/audio/ghostwrap/waggon_freight_modern.snd.lua",
         "res/audio/ghostwrap/waggon_freight_old.snd.lua",
         "res/audio/ghostwrap/waggon_modern.snd.lua",
-        "res/audio/ghostwrap/waggon_old.snd.lua"
+        "res/audio/ghostwrap/waggon_old.snd.lua",
+        "res/models/runaround_standin/standin_1.mdl",
+        "res/models/runaround_standin/standin_2.mdl"
     ]
 }

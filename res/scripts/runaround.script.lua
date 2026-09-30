@@ -47,6 +47,13 @@ local CONFIG = {
 	-- Use the ghost copies built at load time (loco's meshes, smoke, sound) rather
 	-- than the plain silent copies shipped in res/models/runaround_ghost/.
 	useEffectGhosts = true,
+	-- Length of the invisible stand-in that holds the train while the loco is away.
+	-- Short on purpose: a vehicle replace keeps the REAR of the train where it was
+	-- (a 1 m stand-in for a 12.7 m loco left the wagons in place, live), and after
+	-- the flip the rear is the buffer end. So with a short stand-in the flip moves
+	-- the wagons only by its length, and putting the loco back grows the train at
+	-- the exit end, where a real loco couples on: the wagons end up where they were.
+	standInLength = 1,
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
@@ -241,10 +248,9 @@ local function finishConfig(config, parts)
 	return config
 end
 
--- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl,
--- 4 to 44 m in 2 m steps). The stand-in is as long as the loco it replaces, so
--- that the replace moves nothing. Found by name because a mod's resource prefix
--- is not known in advance.
+-- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl:
+-- 1, 2, then 4 to 44 m in 2 m steps); the one nearest wantLength. Found by name
+-- because a mod's resource prefix is not known in advance.
 local standInIds = nil -- length in metres -> model id
 local function findStandInModelId(wantLength)
 	if standInIds == nil then
@@ -265,8 +271,7 @@ local function findStandInModelId(wantLength)
 		if bestDiff == nil or d < bestDiff then bestLen, bestDiff = len, d end
 	end
 	if bestLen == nil then return nil end
-	logInfo("stand-in model:", bestLen, "m for a loco of", wantLength and string.format("%.1f", wantLength) or "unknown", "m")
-	return standInIds[bestLen]
+	return standInIds[bestLen], bestLen
 end
 
 local function carriagePos(carriageEntity)
@@ -1003,6 +1008,15 @@ local function advanceGhost(run, dt)
 		run.settleTicks = (run.settleTicks or 0) + 1
 		if run.settleTicks >= 4 then
 			run.target = readHeadPosition(run.vehicleEntity)
+			if run.target ~= nil and run.startHead ~= nil then
+				-- The loco is longer than the stand-in and the train keeps its rear end
+				-- where it is, so the loco's centre will be further out along the new
+				-- head direction (the opposite of the one at the start) than the
+				-- stand-in's centre.
+				local out = ((run.locoLength or 12.0) - (run.standInLength or 1.0)) / 2.0
+				run.target.x = run.target.x - run.startHead.x * out
+				run.target.y = run.target.y - run.startHead.y * out
+			end
 			if run.target ~= nil then
 				run.phase = "approach"
 				logInfo(string.format("ghost heading for the flipped stand-in at %.1f, %.1f", run.target.x, run.target.y))
@@ -1430,7 +1444,9 @@ local function startRunAround(state, vehicleEntity, loop)
 		locoTransf = nil
 	end
 	local okLen, locoLength = pcall(carriageLength, vehicleEntity, locoIdx)
-	local standId = findStandInModelId(okLen and locoLength or nil)
+	if not okLen or locoLength == nil or locoLength < 2 or locoLength > 60 then locoLength = nil end
+	local standId, standLength = findStandInModelId(CONFIG.standInLength)
+	logInfo("stand-in:", tostring(standLength), "m; loco", locoLength and string.format("%.1f m long", locoLength) or "of unknown length")
 	if standId == nil then
 		logInfo("startRunAround: no stand-in model found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/ loaded?")
 		return
@@ -1528,6 +1544,8 @@ local function startRunAround(state, vehicleEntity, loop)
 				loop = loop,
 				locoPart = locoSnap,
 				standInModelId = standId,
+				standInLength = standLength,
+				locoLength = locoLength,
 				startHead = startHead,
 				startSign = startSign,
 				startReversed = locoSnap.reversed and true or false,

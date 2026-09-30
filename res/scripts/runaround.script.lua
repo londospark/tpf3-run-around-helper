@@ -92,6 +92,9 @@ local CONFIG = {
 	-- Use the smoke-and-sound ghosts built at load time (ghost_build.script.lua). Turn off
 	-- to use the plain silent ghosts if the effects ghosts ever misbehave.
 	useEffectGhosts = true,
+	-- After the loco goes back on, read its real facing off the game and compare it with the
+	-- ghost's; if they differ, flip the loco part once. See verifyRun.
+	verifyFacing = true,
 
 	-- Logs the structure of the chosen loco's model table when a loop is
 	-- created (read-only). Not needed now the stand-in model is authored.
@@ -986,6 +989,10 @@ local function advanceGhost(run, dt)
 	local loop = run.loop
 	if run.phase == "flip" then return false end -- waiting for the train to be flipped
 	if run.phase == "approach" then return advanceApproach(run, dt) end
+	if run.phase == "verify" then
+		run.verifyWait = (run.verifyWait or 0) + 1
+		return run.verifyWait >= 4
+	end
 	if run.phase == "done" or run.phase == "finish" then return true end
 	if run.edgeCursor > #loop.loopEdges then
 		return routeFinished(run)
@@ -1115,8 +1122,16 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 end
 
 -- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
-local function recouple(run, tv, atRear, locoReversed, why, origRev)
-	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed (tender first)" or "not reversed", "-", why)
+-- Ends a run: the ghost goes, the train is released.
+local function finalizeRun(run)
+	api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
+	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
+	logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+end
+
+local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
+	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed" or "not reversed", "-", why)
 
 	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed, origRev)
 	if not okBuild then
@@ -1138,10 +1153,18 @@ local function recouple(run, tv, atRear, locoReversed, why, origRev)
 			releaseTrain(run.vehicleEntity)
 			return
 		end
-		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
-		api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
-		api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
-		logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+		if CONFIG.verifyFacing and run.gyaw ~= nil then
+			-- Keep the run (and the ghost) for a few ticks so the new carriages exist,
+			-- then compare the loco's real facing with the ghost's (verifyRun).
+			run.phase = "verify"
+			run.verifyWait = 0
+			run.locoAtRear = atRear
+			local data = state:get()
+			data.runs[#data.runs + 1] = run
+			state:set(data)
+		else
+			finalizeRun(run)
+		end
 	end)
 end
 
@@ -1209,7 +1232,50 @@ local function flipRun(state, vehicleEntity)
 	end)
 end
 
-local function finishRun(run)
+-- The real loco's facing is compared with the ghost's once it is back on the train
+-- (its part's `reversed` flag may not mean what it seems), and the flag is
+-- toggled once if they differ, so the loco is never turned round by the swap.
+local function verifyRun(state, run)
+	local ok, yaw = pcall(function()
+		local cl = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+		local idx = run.locoAtRear and #cl.carriages or 1
+		local mil = api.engine.getComponent(cl.carriages[idx], api.type.ComponentType.MODEL_INSTANCE_LIST)
+		local c0 = mil.fatInstances[1].transf:cols(0)
+		return math.atan2(c0.y, c0.x)
+	end)
+	if not ok then
+		logInfo("verify: could not read the loco's facing (", tostring(yaw), ") - leaving it as it is")
+		finalizeRun(run)
+		return
+	end
+	local dot = math.cos(run.gyaw) * math.cos(yaw) + math.sin(run.gyaw) * math.sin(yaw)
+	logInfo(string.format("verify: loco facing against ghost facing, dot = %.2f", dot))
+	if dot >= 0 or run.corrected then
+		finalizeRun(run)
+		return
+	end
+	local okFix, cmd = pcall(function()
+		local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+		local config = api.type.TransportVehicleConfig.new(tv.transportVehicleConfig)
+		local parts = {}
+		for i, part in ipairs(config.vehicles) do parts[i] = part end
+		local idx = run.locoAtRear and #parts or 1
+		parts[idx].part.reversed = not parts[idx].part.reversed
+		return api.cmd.makeVehicleReplaceCmd(run.vehicleEntity, finishConfig(config, parts))
+	end)
+	if not okFix then
+		logInfo("verify: could not turn the loco round:", tostring(cmd))
+		finalizeRun(run)
+		return
+	end
+	logInfo("verify: the loco faces the wrong way, flipping its reversed flag")
+	api.cmd.sendCommand(cmd, function(_, success)
+		if not success then logInfo("verify: the correction was refused") end
+		finalizeRun(run)
+	end)
+end
+
+local function finishRun(state, run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
 		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
@@ -1219,7 +1285,7 @@ local function finishRun(run)
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
 		-- Head faces the exit and the stand-in is the head part: loco goes there.
-		recouple(run, tv, false, reversed, "train was flipped first, loco takes the head, wagons restored; " .. tostring(why), run.origRev or {})
+		recouple(state, run, tv, false, reversed, "train was flipped first, loco takes the head, wagons restored; " .. tostring(why), run.origRev or {})
 		return
 	end
 	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
@@ -1227,7 +1293,7 @@ local function finishRun(run)
 		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
 		atRear, endWhy = true, "fallback"
 	end
-	recouple(run, tv, atRear, reversed, "no flip; " .. tostring(endWhy) .. "; " .. tostring(why))
+	recouple(state, run, tv, atRear, reversed, "no flip; " .. tostring(endWhy) .. "; " .. tostring(why))
 end
 
 local function startRunAround(state, vehicleEntity, loop)
@@ -1292,6 +1358,13 @@ local function startRunAround(state, vehicleEntity, loop)
 		local okM, model = pcall(api.res.modelRep.getAsTable, locoSnap.modelId)
 		local lv = okM and type(model) == "table" and model.metadata and model.metadata.landVehicle
 		if lv and lv.topSpeed and lv.topSpeed > 1 then locoTopSpeed = lv.topSpeed end
+	end
+	do
+		local okH, hx, hy = pcall(headDirection, vehicleEntity)
+		if okH and hx ~= nil and locoTransf ~= nil then
+			local c0 = locoTransf:cols(0)
+			logInfo(string.format("loco at start: part reversed=%s, facing dot train head direction = %.2f", tostring(locoSnap.reversed), c0.x * hx + c0.y * hy))
+		end
 	end
 	local hasTail = CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	local origRev = {}
@@ -1718,7 +1791,7 @@ return {
 
 		if updateResult.finishes ~= nil then
 			for _, run in ipairs(updateResult.finishes) do
-				finishRun(run)
+				if run.phase == "verify" then verifyRun(state, run) else finishRun(state, run) end
 			end
 		end
 	end,

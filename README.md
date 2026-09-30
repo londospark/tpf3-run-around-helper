@@ -145,6 +145,18 @@ through earlier versions of this mod is fine.
   ghost, or the game refuses one, it falls back to the plain silent ghost.
   `useEffectGhosts` in `runaround.script.lua` turns the effects off. Wheels do
   not turn yet.
+- **Third live run: smoke works, sound does not yet, loco facing now checked
+  (untested).** The log showed `built effects ghosts for 58 of 4586 models` and
+  smoke on the ghost. Every sound set failed to add (`std::exception` from
+  `soundSetRep.addAsTable`, no detail), so the ghosts run silent. The builder now
+  tries the track names both as absolute paths and as the game gave them, and
+  logs both errors and the first track's name, so the next log will say why. The
+  loco appeared to flip round at coupling even though the log's facing check
+  passed, so the mod no longer trusts the part's `reversed` flag: once the loco
+  is back on the train it reads the loco's real facing off its carriage, compares
+  it with the ghost's, and flips the flag once if they differ
+  (`verifyFacing`; log lines `verify: loco facing against ghost facing, dot =`
+  and `loco at start: part reversed=..., facing dot train head direction =`).
 - **Load error "function data() not defined", fixed.** The first effects build
   crashed the game at load: a `.script.lua` file must define `data()` and return
   its functions from it, unlike the base game's `.tl` scripts, which can return a

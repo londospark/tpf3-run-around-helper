@@ -130,11 +130,24 @@ local function ghostSoundSetName(soundSetName, prefix)
 		end
 		if resolved == nil then error("sound set not found") end
 		local dir = string.match(resolved, "^(.*/)[^/]*$")
-		local converted = convertSoundSet(api.res.soundSetRep.getAsTable(id), dir)
-		if converted == nil then error("nothing to convert") end
+		local original = api.res.soundSetRep.getAsTable(id)
 		local name = "runaround_ghost_sound/" .. string.gsub(soundSetName, "[^%w_%.]", "_")
 		if api.res.soundSetRep.find(name) < 0 then
-			api.res.soundSetRep.addAsTable(name, converted)
+			-- Track names may need to be absolute (a set added at run time has no
+			-- folder to be relative to) or may already be: try both.
+			local firstName = original.tracks and original.tracks[1] and original.tracks[1].name
+			local errors = {}
+			local added = false
+			for _, useDir in ipairs({ true, false }) do
+				local converted = convertSoundSet(original, useDir and dir or nil)
+				if converted == nil then error("nothing to convert") end
+				local okAdd, e = pcall(api.res.soundSetRep.addAsTable, name, converted)
+				if okAdd then added = true break end
+				errors[#errors + 1] = (useDir and "absolute names: " or "as-is names: ") .. tostring(e)
+			end
+			if not added then
+				error(table.concat(errors, "; ") .. " (first track was '" .. tostring(firstName) .. "', set resolved as " .. tostring(resolved) .. ")")
+			end
 		end
 		newName = name
 	end)

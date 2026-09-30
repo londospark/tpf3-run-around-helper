@@ -419,8 +419,9 @@ local function pushGhostState(run, speed, vx, vy, dt, force)
 	if not run.effects then return end
 	run.stateAge = (run.stateAge or 0.0) + dt
 	local last = run.lastState
-	if not force and last ~= nil and run.stateAge < 1.0
-		and math.abs(speed - last.speed) < 0.5 and math.abs(vx - last.vx) < 2.0 and math.abs(vy - last.vy) < 2.0 then
+	-- While the ghost moves the state goes out every tick (the wheel animation needs
+	-- the distance as it grows); when it is standing, only now and then.
+	if not force and last ~= nil and speed == 0.0 and last.speed == 0.0 and run.stateAge < 1.0 then
 		return
 	end
 	local top = run.topSpeed or 27.8
@@ -429,7 +430,7 @@ local function pushGhostState(run, speed, vx, vy, dt, force)
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
-		state = { color = run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = run.headingFlipped and -1 or 1, t0 = gameTimeMs() },
+		state = { color = run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = ((run.headingFlipped and 1 or 0) + ((run.yawOffset or 0) > 1 and 1 or 0)) % 2 == 1 and -1 or 1 },
 	})
 	if ok then
 		api.cmd.sendCommand(cmd)
@@ -959,8 +960,9 @@ local function locateOnRoute(loop, pos)
 			local ok, geometry = pcall(getEdgeGeometry, edgeDef)
 			if ok then
 				local len = estimateEdgeLength(geometry)
-				for i = 0, 20 do
-					local along = i / 20 -- fraction of the way travelled
+				local steps = math.max(20, math.min(400, math.floor(len))) -- about one sample a metre
+				for i = 0, steps do
+					local along = i / steps -- fraction of the way travelled
 					local u = edgeDef.forward and along or (1.0 - along)
 					local p = calc(geometry, u)
 					local d2 = (p.x - pos.x) ^ 2 + (p.y - pos.y) ^ 2
@@ -1120,6 +1122,10 @@ local function advanceGhost(run, dt)
 	local transf = api.type.Mat4f.rotZTransl(yaw, pos)
 	local pvx, pvy = 0.0, 0.0
 	if run.gx ~= nil and dt > 0 then pvx, pvy = (pos.x - run.gx) / dt, (pos.y - run.gy) / dt end
+	if not run.firstLogged and run.locoPos ~= nil then
+		run.firstLogged = true
+		logInfo(string.format("ghost first step at (%.1f, %.1f), the loco stood at (%.1f, %.1f): %.1f m apart", pos.x, pos.y, run.locoPos.x, run.locoPos.y, math.sqrt((pos.x - run.locoPos.x) ^ 2 + (pos.y - run.locoPos.y) ^ 2)))
+	end
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
 	run.gdist = (run.gdist or 0.0) + run.speed * dt
 	pushGhostState(run, run.speed, pvx, pvy, dt)
@@ -1236,7 +1242,8 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 			releaseTrain(run.vehicleEntity)
 			return
 		end
-		scheduleTrace(state, "after the recouple", run.vehicleEntity, 8)
+		scheduleTrace(state, "after the recouple (+1 tick)", run.vehicleEntity, 1)
+		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
 		-- The ghost goes at once: the real loco is on the train now, and leaving the
 		-- ghost up while the facing is verified showed two locos for a moment.
 		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
@@ -1324,7 +1331,8 @@ local function flipRun(state, vehicleEntity)
 	api.cmd.sendCommand(revCmd, function(_, success)
 		if not success then return fail("reverse command failed") end
 		logInfo("train flipped; putting the loco back")
-		scheduleTrace(state, "after the flip", vehicleEntity, 8)
+		scheduleTrace(state, "after the flip (+2 ticks)", vehicleEntity, 2)
+		scheduleTrace(state, "after the flip (+8 ticks)", vehicleEntity, 8)
 		updateRun(state, vehicleEntity, function(r)
 			r.flipped = true
 			r.phase = r.hasTail and "finish" or "settle"
@@ -1506,7 +1514,8 @@ local function startRunAround(state, vehicleEntity, loop)
 			return
 		end
 
-		scheduleTrace(state, "after the detach", vehicleEntity, 8)
+		scheduleTrace(state, "after the detach (+2 ticks)", vehicleEntity, 2)
+		scheduleTrace(state, "after the detach (+30 ticks)", vehicleEntity, 30)
 		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(ghostModelId), function(createRes, createSuccess)
 			if not createSuccess then
 				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- putting the loco back on the train")
@@ -1559,6 +1568,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				edgeCursor = startCursor,
 				startOffset = startOffset,
 				locoYaw = locoYaw,
+				locoPos = locoTransf ~= nil and { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y } or nil,
 				edgeLength = nil,
 				edgeProgress = 0.0,
 				speed = 0.0,

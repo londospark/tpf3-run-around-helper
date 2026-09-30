@@ -110,14 +110,12 @@ local function trainUpdateFn(captureParams, params, transfsOutput)
 	end
 	local st = stateOf(ci)
 	if st == nil then return end
-	-- The state is only sent now and then, so carry the distance forward from
-	-- when it was sent, at the speed it was sent with.
-	local dist = st.dist or 0.0
-	local now = ci.world and ci.world.gameTime
-	if st.t0 ~= nil and now ~= nil then
-		dist = dist + (st.speed or 0.0) * math.max(now - st.t0, 0.0) / 1000.0
-	end
+	-- The distance is sent with every simulation tick while the ghost moves and used
+	-- as it comes (no extrapolation from the game clock: the clock seen here and the
+	-- clock used when sending do not line up, which made the wheels stutter). Like
+	-- the game's own totalDist it only ever increases, and the renderer blends.
 	applyColor(st, transfsOutput)
+	local dist = st.dist or 0.0
 	local reversed = (st.dir or 1) < 0
 	transformator_util.addDriveAnimationState(dist, reversed, transfsOutput)
 	-- The wheels' animation ("wheels", steam locos) is one revolution in 5000 ms of

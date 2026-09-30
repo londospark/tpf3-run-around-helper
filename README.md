@@ -168,6 +168,22 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Seventh live run: traces read, wheel funk, consist jump, loco half a length
+  back at the detach (changes untested).** The trace lines showed: the flip
+  mirrors the train about the middle of its extent (the jump before the recouple
+  is that mirror, as expected); the detach leaves every carriage where it was
+  (so the tail stand-in was not the cause of the loco looking half a length back;
+  that stays unexplained, and the log now records where the ghost first appears
+  against where the loco stood, plus the carriage positions a few ticks after
+  each step, so the next run should say); the movement after the recouple in the
+  last trace is the train setting off. Wheels: the distance was being
+  extrapolated from the game clock between state updates, and the clock seen by
+  the animation and the clock used when sending do not line up, so the wheels
+  stuttered at each update; the state is now sent every tick while the ghost
+  moves and used as it comes, like the game's own `totalDist`. The wheel
+  direction also now accounts for which way the ghost faces. Also: the
+  loco-colour line had dropped out of the wrapper in an earlier edit (the test
+  caught it) and is back.
 - **Sixth live run: facing fixed; wheels still jerky, the ghost clipped into the
   wagons at the detach, and the whole consist jumped at the recouple (changes
   untested).** From the log (`verify: ... dot = 1.00`, no correction) the facing

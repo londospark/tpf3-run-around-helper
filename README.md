@@ -6,11 +6,41 @@ loco is detached from the consist, driven round a loop you define (as a free
 model entity, animated along the real track geometry), then re-attached at the
 other end. The other terminus of the line keeps the normal vanilla behaviour.
 
-**Status: work in progress, not published.** The run-around has now been seen to work end to end in a live game (ghost loco drives the route, re-couples), with two visual problems found and fixed below (untested). Setting up a loop works (panel,
-click-to-pick route points, automatic route and reversal planning, automatic
-loco choice). The run itself - swap the loco for an invisible stand-in, animate
-the ghost loco round the route, recouple - is built but has not yet been seen to
-complete in a live game.
+**Status: early release.** The whole thing works in a live game, at both ends
+of a line: click a few points, and the loco detaches at the station, runs round
+your loop as a ghost, and couples on at the other end of the train, tender
+first, which then leaves. It has only been tested on a few layouts so far, so
+expect rough edges (see below), and please report what you find on the
+[issue tracker](https://github.com/londospark/tpf3-run-around-helper/issues).
+
+## What to expect
+
+- **One loco plus wagons.** Multiple units and double-headed trains are not
+  handled. The loco is picked automatically (the part nearest your first click).
+- **You set it up by clicking a few loose points** on the track (see below); the
+  mod works out the route, and where to reverse, itself. It only reverses once
+  it is 10 m past the points, not at the end of the piece.
+- **The wagons jump once.** To stop the game flipping the loco back to the
+  buffer end when the train sets off, the mod uses the game's own flip on the
+  wagons while the loco is away. They swap end for end (and shift about a loco's
+  length) at that moment, as the game's normal terminus flip does. Trains of
+  identical coaches won't show it; mixed rakes will.
+- **The ghost is a stand-in model.** While the loco runs round, it is drawn
+  from a copy of a base-game loco model (the exact one if it's a base-game loco,
+  otherwise one of the same engine type - steam, diesel or electric). So a
+  modded loco will look like a base-game one for those few seconds, and paint
+  colours are not shown on the ghost. The real loco, with its own model and
+  colours, is what goes back on the train.
+- **The ghost does not use signals**, so it can't reserve track. Use a loop no
+  other train uses, or watch for collisions.
+- **An invisible, tiny stand-in loco** holds the wagons together while the real
+  loco is away (a train with no power crashes the game). It shows up in the
+  vehicle window during a run-around and is removed afterwards.
+- **Install, then fully restart the game.** Script mods are not reloaded by
+  loading a save.
+- Made by one person, by reverse-engineering the game's Lua API. If it does
+  something odd, the log (`stdout.txt`) has lines starting `[RunAroundHelper]`
+  that say exactly what it did: please attach them to a bug report.
 
 ## Setting up a loop (in game)
 

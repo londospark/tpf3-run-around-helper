@@ -84,8 +84,6 @@ local CONFIG = {
 	-- Defaults applied to a newly-added loop; edit per-loop from the GUI afterwards.
 	defaultSpeed = 8.0,
 	defaultAccel = 2.0,
-	defaultLocoLeadsWithFirstArrayEntry = false,
-	defaultFlipLocoReversedOnRecouple = true,
 }
 
 local function logInfo(...)
@@ -227,17 +225,19 @@ local function buildConfigWithoutLoco(tvc, locoIdx)
 	return finishConfig(config, parts)
 end
 
--- Config with the locomotive put back at whichever end this loop's settings
--- say it should lead from after the run-around.
-local function buildConfigWithLocoReattached(currentTvc, locoSnap, loop)
+-- Config with the locomotive put back on the train. A loco cannot pass
+-- through its consist, so after running round it can only couple onto the end
+-- it arrives at; which end that is comes from where the run finished (see
+-- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
+-- wagons, so that it can pull them: a loco at the front of the parts list is
+-- not reversed, one at the rear is.
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear)
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
-	local reversed = locoSnap.reversed
-	if loop.flipLocoReversedOnRecouple then reversed = not reversed end
-	local loco = partFromSnapshot(locoSnap, reversed)
+	local loco = partFromSnapshot(locoSnap, attachAtRear)
 	local parts = {}
-	if loop.locoLeadsWithFirstArrayEntry then parts[1] = loco end
+	if not attachAtRear then parts[1] = loco end
 	for _, part in ipairs(config.vehicles) do parts[#parts + 1] = part end
-	if not loop.locoLeadsWithFirstArrayEntry then parts[#parts + 1] = loco end
+	if attachAtRear then parts[#parts + 1] = loco end
 	return finishConfig(config, parts)
 end
 
@@ -731,6 +731,26 @@ local function releaseTrain(vehicleEntity)
 	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, false))
 end
 
+-- True to attach at the rear (last part) of the consist, false for the front
+-- (first part): whichever end is nearer the last route point the user clicked,
+-- since that is where the loco has just arrived. Also returns a description
+-- for the log.
+local function chooseAttachEnd(vehicleEntity, loop)
+	local last = loop.waypoints and loop.waypoints[#loop.waypoints]
+	if last == nil then return true, "no route points recorded, defaulting to the rear" end
+	local pos = piecePos(last, 0.5)
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	if cl == nil or #cl.carriages == 0 then return true, "no carriages found, defaulting to the rear" end
+	local function distTo(i)
+		local mil = api.engine.getComponent(cl.carriages[i], api.type.ComponentType.MODEL_INSTANCE_LIST)
+		local c = mil.fatInstances[1].transf:cols(3)
+		return math.sqrt((c.x - pos.x) ^ 2 + (c.y - pos.y) ^ 2)
+	end
+	local dFront, dRear = distTo(1), distTo(#cl.carriages)
+	local atRear = dRear <= dFront
+	return atRear, string.format("nearest the last route point: front end %d m away, rear end %d m away", math.floor(dFront), math.floor(dRear))
+end
+
 local function finishRun(run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
@@ -739,7 +759,14 @@ local function finishRun(run)
 		return
 	end
 
-	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, run.loop)
+	local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop)
+	if not okEnd then
+		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
+		atRear, why = true, "fallback"
+	end
+	logInfo("recouple: attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist, facing outward -", why)
+
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear)
 	if not okBuild then
 		-- The ghost is deliberately left in place: it is the only copy of the loco.
 		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
@@ -990,8 +1017,6 @@ local function handleGuiCmd(data, name, param)
 			pathStatus = "no points yet",
 			speed = CONFIG.defaultSpeed,
 			accel = CONFIG.defaultAccel,
-			locoLeadsWithFirstArrayEntry = CONFIG.defaultLocoLeadsWithFirstArrayEntry,
-			flipLocoReversedOnRecouple = CONFIG.defaultFlipLocoReversedOnRecouple,
 		}
 		data.loops[#data.loops + 1] = loop
 		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
@@ -1081,13 +1106,6 @@ local function handleGuiCmd(data, name, param)
 		local loop = findLoopById(data.loops, param.loopId)
 		if loop ~= nil and (param.field == "speed" or param.field == "accel") then
 			loop[param.field] = param.value
-		end
-
-	elseif name == "ToggleLoopBoolField" then
-		-- param.field is one of "locoLeadsWithFirstArrayEntry" / "flipLocoReversedOnRecouple".
-		local loop = findLoopById(data.loops, param.loopId)
-		if loop ~= nil and (param.field == "locoLeadsWithFirstArrayEntry" or param.field == "flipLocoReversedOnRecouple") then
-			loop[param.field] = not loop[param.field]
 		end
 	end
 end

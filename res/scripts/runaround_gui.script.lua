@@ -355,20 +355,6 @@ function data()
 						end,
 					},
 					builtin.Button{
-						meta = { tooltip = "Toggle which end of the consist the loco reattaches to" },
-						content = builtin.TextView{ text = "Loco end: " .. (loop.locoLeadsWithFirstArrayEntry and "front" or "back") },
-						onClick = function()
-							sendGuiCmd("ToggleLoopBoolField", { loopId = loop.id, field = "locoLeadsWithFirstArrayEntry" })
-						end,
-					},
-					builtin.Button{
-						meta = { tooltip = "Toggle whether the loco's reversed flag flips on recouple" },
-						content = builtin.TextView{ text = "Flip on recouple: " .. (loop.flipLocoReversedOnRecouple and "yes" or "no") },
-						onClick = function()
-							sendGuiCmd("ToggleLoopBoolField", { loopId = loop.id, field = "flipLocoReversedOnRecouple" })
-						end,
-					},
-					builtin.Button{
 						meta = { tooltip = "Remove the last route point (the route is re-planned)" },
 						content = builtin.TextView{ text = "Undo last point" },
 						onClick = function() sendGuiCmd("RemoveLastLoopEdge", { loopId = loop.id }) end,

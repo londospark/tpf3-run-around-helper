@@ -44,10 +44,12 @@ Everything is configured in game - no editing Lua.
    pick (the pick tool is stacked on top of the game's own tool, and the window
    is re-shown if the game hides it), so the panel's **Route:** line updates as
    you click. If the window ever does close, click the train to bring it back.
-4. **Loco end** and **Flip on recouple** control which end of the consist the
-   loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
-   speed. If the loco comes back on the wrong end or facing the wrong way,
-   toggle these.
+4. **Speed** bumps the ghost loco's speed. Nothing needs setting for the
+   re-coupling: a loco can't pass through its consist, so it goes back on at the
+   end of the train nearest your **last** route point (the end it has just
+   arrived at), facing outward so it can pull. In the parts list that is the
+   first part (not reversed) or the last part (reversed). The log says which end
+   was chosen and how far each end was from that point.
 
 Any number of independent loops (different lines/termini) can be configured;
 they are saved in the savegame.
@@ -107,6 +109,11 @@ through earlier versions of this mod is fine.
   recouple itself fails, the loco ghost is left in place because it is the only
   copy of the loco. The fixed detach / animate / recouple sequence has not yet
   been confirmed end to end in a live game.
+- **Which end the loco couples to, and which way it faces, are now worked out
+  from geometry, but how the game then drives the rebuilt train is unconfirmed.**
+  The loco goes on the end nearest the last route point, reversed only if that is
+  the rear of the parts list. Whether the game then sets off with the loco
+  leading (it normally flips the whole train at a terminus) has not been seen yet.
 - Multiple-unit consists are not handled (assumes one loco plus separate wagons).
 - Edge length is estimated by sampling the geometry; the animation is a free
   model, so it does not use signals and cannot reserve track - use a loop no

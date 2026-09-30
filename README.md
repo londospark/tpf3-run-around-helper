@@ -85,7 +85,10 @@ through earlier versions of this mod is fine.
   (the game asserts that a part's load configs match its model's compartments,
   and every base-game loco has exactly one, so the model now copies the standard
   loco compartment and the part's load configs are built from the model's own
-  metadata), and its transformator reference `/vehicle/...` resolved inside the
+  metadata: the count always comes from the model, so a modded loco that declares
+  a different number of compartments works, and the settings each compartment of
+  the real loco had are saved and restored when it is put back), and its
+  transformator reference `/vehicle/...` resolved inside the
   mod (it needs `::/vehicle/...` to reach the base game). Whether the game accepts a
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is

@@ -177,6 +177,10 @@ end
 -- A part as plain data, safe to keep in the script state (which is saved with
 -- the game) while the loco is away as a ghost.
 local function snapshotPart(tvp)
+	local loads = {}
+	for i, lc in ipairs(tvp.part.compartment2loadConfig) do
+		loads[i] = { loadConfigIndex = lc.loadConfigIndex, cargoTypeId = lc.cargoTypeId }
+	end
 	local color = nil
 	local c = tvp.part.color
 	if c ~= nil then color = { x = c.x, y = c.y, z = c.z } end
@@ -184,7 +188,7 @@ local function snapshotPart(tvp)
 		modelId = tvp.part.modelId,
 		reversed = tvp.part.reversed,
 		color = color,
-		compartmentCount = #tvp.part.compartment2loadConfig,
+		loads = loads,
 		purchaseTime = tvp.purchaseTime,
 		maintenanceChange = tvp.maintenanceChange,
 		maintenanceState = tvp.maintenanceState,
@@ -193,22 +197,33 @@ end
 
 -- One LoadConfig per compartment the MODEL declares, as the base game's
 -- vehicle_util.makePart builds them. The game asserts that a part's load
--- configs match its model's compartments, so the count comes from the model,
--- not from a saved number.
-local function loadConfigsForModel(modelId, fallbackCount)
-	local count = fallbackCount or 0
+-- configs match its model's compartments, so the COUNT always comes from the
+-- model's metadata (a modded loco may declare more or fewer than the usual
+-- one), never from a fixed number. Where the loco being put back had settings
+-- for a compartment (which load config is selected, and its cargo type), they
+-- are restored; anything the model has extra starts at load config 0.
+local function loadConfigsForModel(modelId, savedLoads)
+	local declared = nil
 	local ok, model = pcall(api.res.modelRep.get, modelId)
 	if ok and model ~= nil then
 		local okMeta, tvMeta = pcall(function() return model.metadata["transportVehicle"] end)
 		if okMeta and tvMeta ~= nil then
-			count = 0
-			for _ in ipairs(tvMeta.compartments) do count = count + 1 end
+			declared = 0
+			for _ in ipairs(tvMeta.compartments) do declared = declared + 1 end
 		end
+	end
+	local count = declared or (savedLoads and #savedLoads) or 1
+	if savedLoads ~= nil and declared ~= nil and #savedLoads ~= declared then
+		logInfo("model", modelId, "declares", declared, "compartment(s) but the loco part had", #savedLoads, "- using the model's count")
 	end
 	local loads = {}
 	for i = 1, count do
 		local lc = api.type.LoadConfig.new()
-		lc.loadConfigIndex = 0
+		local saved = savedLoads and savedLoads[i]
+		lc.loadConfigIndex = saved and saved.loadConfigIndex or 0
+		if saved and saved.cargoTypeId ~= nil then
+			pcall(function() lc.cargoTypeId = saved.cargoTypeId end)
+		end
 		loads[i] = lc
 	end
 	return loads
@@ -221,7 +236,7 @@ local function partFromSnapshot(snap, reversed)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = snap.modelId
 	part.part.reversed = reversed
-	part.part.compartment2loadConfig = loadConfigsForModel(snap.modelId, snap.compartmentCount)
+	part.part.compartment2loadConfig = loadConfigsForModel(snap.modelId, snap.loads)
 	if snap.color ~= nil then
 		part.part.color = api.type.Vec3f.new(snap.color.x, snap.color.y, snap.color.z)
 	end
@@ -265,7 +280,7 @@ local function makeStandInPart(standId, locoSnap)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = standId
 	part.part.reversed = false
-	part.part.compartment2loadConfig = loadConfigsForModel(standId, 1)
+	part.part.compartment2loadConfig = loadConfigsForModel(standId, nil)
 	part.purchaseTime = locoSnap.purchaseTime
 	part.maintenanceChange = locoSnap.maintenanceChange
 	part.maintenanceState = 1

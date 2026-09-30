@@ -310,19 +310,32 @@ local function dedupeEdges(raw)
 	return out
 end
 
+local function exitNodeOf(eb, dB)
+	return dB and eb.conns[2] or eb.conns[1]
+end
+
+-- The pathfinder is asked for a route to the far end of the target piece, so
+-- it is the pathfinder that checks the junction turn onto that piece is
+-- possible; the route must then actually finish along the piece in the
+-- wanted direction.
+local function endsAlong(edges, b, dB)
+	local last = edges[#edges]
+	return last ~= nil and sameEdge(last, b) and last.forward == dB
+end
+
 -- Edges to drive from waypoint a (leaving in direction dA) to waypoint b
--- (entering in direction dB), both endpoints included. nil + message if no route.
+-- (travelling along it in direction dB), both included. nil + message if no route.
 local function legPath(a, dA, b, dB)
 	local ea, eb = getTnEdge(a.entity, a.index), getTnEdge(b.entity, b.index)
 	if ea == nil or eb == nil then return nil, "a clicked track piece no longer exists" end
 	local startNode = dA and ea.conns[2] or ea.conns[1]
-	local destNode = dB and eb.conns[1] or eb.conns[2]
-	local mid, err = pathBetweenNodes(startNode, destNode)
+	local mid, err = pathBetweenNodes(startNode, exitNodeOf(eb, dB))
 	if mid == nil then return nil, err end
 	local raw = { { entity = a.entity, index = a.index, forward = dA } }
 	for _, e in ipairs(mid) do raw[#raw + 1] = e end
-	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
-	return dedupeEdges(raw)
+	local out = dedupeEdges(raw)
+	if not endsAlong(out, b, dB) then return nil, "no route along the clicked piece that way" end
+	return out
 end
 
 -- Same, but starting from a track NODE (the station stop) rather than from a
@@ -330,13 +343,11 @@ end
 local function legFromNode(startNode, b, dB)
 	local eb = getTnEdge(b.entity, b.index)
 	if eb == nil then return nil, "a clicked track piece no longer exists" end
-	local destNode = dB and eb.conns[1] or eb.conns[2]
-	local mid, err = pathBetweenNodes(startNode, destNode)
+	local mid, err = pathBetweenNodes(startNode, exitNodeOf(eb, dB))
 	if mid == nil then return nil, err end
-	local raw = {}
-	for _, e in ipairs(mid) do raw[#raw + 1] = e end
-	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
-	return dedupeEdges(raw)
+	local out = dedupeEdges(mid)
+	if not endsAlong(out, b, dB) then return nil, "no route along the clicked piece that way" end
+	return out
 end
 
 local function edgesCost(edges)
@@ -347,11 +358,105 @@ local function edgesCost(edges)
 	return cost
 end
 
+-- ---------------------------------------------------------------------
+-- Finding a place to reverse when the clicks alone don't give one.
+--
+-- If two points can't be joined going forward, the loco has to stop and set
+-- back somewhere on the way. A reversal happens ON a piece of track: the loco
+-- drives to the end of piece C, stops, and drives back along C. So candidate
+-- reversing pieces are found by asking the pathfinder for routes to nearby
+-- track nodes (the last piece of each route is a candidate C), then routing
+-- back from C to the target. The cheapest total wins. Nearby nodes come from
+-- the same octree search the base game's missions use.
+-- ---------------------------------------------------------------------
+local CUSP_RADIUS = 300.0        -- metres around the source exit / target / stop
+local CUSP_MAX_CANDIDATES = 100  -- pathfinder calls stay bounded
+
+local function nodesNear(positions)
+	local seen, out = {}, {}
+	for _, pos in ipairs(positions) do
+		if pos ~= nil then
+			local ok, nodes = pcall(api.engine.util.octree.findTransportNetworkNodesInCircle, api.type.Vec2f.new(pos.x, pos.y), CUSP_RADIUS)
+			if ok and nodes ~= nil then
+				for i = 1, #nodes do
+					local nd = nodes[i]
+					local key = tostring(nd.entity) .. ":" .. tostring(nd.index)
+					if not seen[key] then
+						seen[key] = true
+						out[#out + 1] = nd
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
+local function piecePos(edgeDef, t)
+	return api.engine.util.transport.calcPosition(getEdgeGeometry(edgeDef), t)
+end
+
+-- firstEdges: pieces already driven to reach uNode. Returns the full list of
+-- edges up to (not including) the target piece, or nil.
+local function findCuspLeg(firstEdges, uNode, targetExitNode, b, dB, centres)
+	local best, bestCost = nil, math.huge
+	local tried = 0
+	for _, v in ipairs(nodesNear(centres)) do
+		if not sameNode(v, uNode) then
+			tried = tried + 1
+			if tried > CUSP_MAX_CANDIDATES then break end
+			local p1 = pathBetweenNodes(uNode, v)
+			if p1 ~= nil and #p1 > 0 then
+				local c = p1[#p1]
+				local ec = getTnEdge(c.entity, c.index)
+				if ec ~= nil then
+					local backNode = c.forward and ec.conns[1] or ec.conns[2]
+					local p2 = pathBetweenNodes(backNode, targetExitNode)
+					if p2 ~= nil and endsAlong(p2, b, dB) then
+						local raw = {}
+						for _, e in ipairs(firstEdges) do raw[#raw + 1] = e end
+						for _, e in ipairs(p1) do raw[#raw + 1] = e end
+						raw[#raw + 1] = { entity = c.entity, index = c.index, forward = not c.forward }
+						for _, e in ipairs(p2) do raw[#raw + 1] = e end
+						local cost = edgesCost(raw) + REVERSAL_PENALTY
+						if cost < bestCost then best, bestCost = raw, cost end
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
 -- Best route through all waypoints, or nil + message. If startNode is given
 -- the route begins there (the stop the train is standing at), so the first
 -- waypoint can be the reversing point itself.
 -- Returns route (list of {entity,index,forward[,reversal]}), info {length, reversals}.
-local function planRoute(waypoints, startNode)
+-- Direct route from piece a to piece b, or, if there is none, one with an
+-- automatically chosen reversing place.
+local function legPathAuto(a, dA, b, dB)
+	local edges, err = legPath(a, dA, b, dB)
+	if edges ~= nil then return edges end
+	local ea, eb = getTnEdge(a.entity, a.index), getTnEdge(b.entity, b.index)
+	if ea == nil or eb == nil then return nil, err end
+	local uNode = dA and ea.conns[2] or ea.conns[1]
+	local first = { { entity = a.entity, index = a.index, forward = dA } }
+	local raw = findCuspLeg(first, uNode, exitNodeOf(eb, dB), b, dB, { piecePos(first[1], dA and 1.0 or 0.0), piecePos(b, 0.5) })
+	if raw == nil then return nil, err end
+	return dedupeEdges(raw)
+end
+
+local function legFromNodeAuto(startNode, startPos, b, dB)
+	local edges, err = legFromNode(startNode, b, dB)
+	if edges ~= nil then return edges end
+	local eb = getTnEdge(b.entity, b.index)
+	if eb == nil then return nil, err end
+	local raw = findCuspLeg({}, startNode, exitNodeOf(eb, dB), b, dB, { startPos, piecePos(b, 0.5) })
+	if raw == nil then return nil, err end
+	return dedupeEdges(raw)
+end
+
+local function planRoute(waypoints, startNode, startPos)
 	local n = #waypoints
 	if n < 2 then return nil, "need at least 2 points" end
 
@@ -360,7 +465,7 @@ local function planRoute(waypoints, startNode)
 		local key = i .. ":" .. tostring(d) .. ":" .. tostring(a)
 		local m = memo[key]
 		if m == nil then
-			local edges, err = legPath(waypoints[i], d, waypoints[i + 1], a)
+			local edges, err = legPathAuto(waypoints[i], d, waypoints[i + 1], a)
 			m = { edges = edges, cost = edges and edgesCost(edges) or math.huge, err = err }
 			memo[key] = m
 		end
@@ -370,7 +475,7 @@ local function planRoute(waypoints, startNode)
 		local key = "0:" .. tostring(a)
 		local m = memo[key]
 		if m == nil then
-			local edges, err = legFromNode(startNode, waypoints[1], a)
+			local edges, err = legFromNodeAuto(startNode, startPos, waypoints[1], a)
 			m = { edges = edges, cost = edges and edgesCost(edges) or math.huge, err = err }
 			memo[key] = m
 		end
@@ -479,7 +584,15 @@ local function getStopNode(lineEntity, stopIndex)
 	if stationEntity == nil then return nil end
 	local station = api.engine.getComponent(stationEntity, api.type.ComponentType.STATION)
 	local terminal = station and station.terminals[stop.terminal + 1]
-	return terminal and terminal.vehicleNodeId or nil
+	if terminal == nil then return nil end
+	-- A position on the platform, for centring the reversal search.
+	local pos = nil
+	local ok, res = pcall(function()
+		local ep = terminal.vehicleEdges[1]
+		return piecePos({ entity = ep.edgeId.entity, index = ep.edgeId.index }, ep.param)
+	end)
+	if ok then pos = res end
+	return terminal.vehicleNodeId, pos
 end
 
 -- Rebuilds loop.loopEdges from loop.waypoints and records a one-line status
@@ -491,12 +604,12 @@ local function recomputeLoopRoute(loop)
 		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more (the reversing point, then the loop)"
 		return
 	end
-	local okNode, startNode = pcall(getStopNode, loop.lineEntity, loop.stopIndex)
+	local okNode, startNode, startPos = pcall(getStopNode, loop.lineEntity, loop.stopIndex)
 	if not okNode or startNode == nil then
 		logInfo("could not find the stop's track node for loop", loopLabel(loop), "- planning from the first point instead:", tostring(startNode))
 		startNode = nil
 	end
-	local ok, route, info = pcall(planRoute, loop.waypoints, startNode)
+	local ok, route, info = pcall(planRoute, loop.waypoints, startNode, startPos)
 	if not ok then
 		loop.loopEdges = {}
 		loop.pathStatus = "route error: " .. tostring(route)

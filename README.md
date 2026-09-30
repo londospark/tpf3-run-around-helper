@@ -20,23 +20,21 @@ Everything is configured in game - no editing Lua.
 2. **Add loop from this vehicle** captures the line, the stop and a candidate
    locomotive. **Cycle loco candidate** steps through the consist's parts until
    the right locomotive model is selected.
-3. Give the loop its route by clicking a few points - you do not click every
+3. Give the loop its route by clicking a few points. You do not click every
    track piece, and you do not click the station: the route starts at the stop
    the loop was created from. Turn on **Pick route points on map**, then click
-   track in the order the loco travels:
-   1. the track beyond the points, where the loco stops and reverses,
-   2. a piece of the loop,
-   3. the track at the far end of the train.
-
-   Add extra clicks if the layout needs them (a wye, for example). The mod uses
-   the game's pathfinder to work out the track from the stop to your first click
-   and between the following clicks, chooses the direction of travel itself,
-   and treats a click where the route doubles back as a reversal (the loco
-   pauses and sets back). The panel shows the result on the **Route:** line
-   (points, track pieces, reversals, length), or says which pair of points it
-   couldn't join. **Add point at this train** does the same using the track
-   piece a train is sitting on. **Undo last point** removes the last click and
-   re-plans.
+   a few points along where the loco should go, in order - for example a piece
+   of the loop, then track at the far end of the train. Clicks are loose
+   waypoints. The mod works out the track between them with the game's
+   pathfinder, chooses the direction of travel, and finds where the loco should
+   stop and reverse: if two points can't be joined going forward, it searches
+   the nearby track for the cheapest place to set back (a stub beyond the points,
+   a headshunt, and so on), so you don't have to click the reversing spot. Add
+   more clicks to steer it (for example through one side of a wye). The panel
+   shows the result on the **Route:** line (points, track pieces, reversals,
+   length), or says which pair of points it couldn't join. **Add point at this
+   train** does the same using the track piece a train is sitting on. **Undo
+   last point** removes the last click and re-plans.
 4. **Loco end** and **Flip on recouple** control which end of the consist the
    loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
    speed. If the loco comes back on the wrong end or facing the wrong way,
@@ -66,22 +64,17 @@ through earlier versions of this mod is fine.
   that segment (fine for single track; it logs
   `pick: clicked entity=... kind=...` and the fallback it took). Double track
   or two-direction segments can't yet be told apart.
-- **Route planning is new and untested in a live game.** It was checked against
-  a mock track layout (platform, stub beyond the points, loop rejoining at the
-  far end) but not yet on real track. Direction of travel at each click is chosen
-  automatically (shortest total, reversals cost extra), since a click carries no
-  direction. Reversals can only happen at a click, so click the track where the
-  loco should stop and set back. The route starts at the stop's track node (found
-  via line, stop, station group, station and terminal) and the ghost loco jumps
-  there from where the real loco stood, a short hop along the platform. If the
-  stop's node can't be found, the route starts at the first click instead.
-- **The first real run-around crashed the game** (`!m_betweenChanges`): commands
-  were being sent from inside the arrival-event handler, which the engine
-  forbids. Starts are now queued by the handler and sent from the next
-  `update()`. This fix has not been run in game yet, so the detach / animate /
-  recouple sequence is still untested end to end;
-  the loco-end and flip-on-recouple toggles exist because the correct values
-  are not known ahead of time.
+- **Route planning is new and untested in a live game.** It has been checked
+  against a mock track layout (platform, stubs either side of the points, a
+  passing loop) with a pathfinder that refuses hairpin turns at junctions, where
+  two loose clicks produced a complete run-around with two reversals. The real
+  pathfinder and real switch rules may behave differently, and the search for a
+  reversing spot looks within 300 m and tries at most 100 nearby track nodes. The
+  route starts at the stop's track node (found via line, stop, station group,
+  station and terminal), and the ghost loco jumps there from where the real loco
+  stood, a short hop along the platform. If the stop's node can't be found, the
+  route starts at the first click instead. Direction of travel at each click is
+  chosen automatically (shortest total, reversals cost extra).
 - Multiple-unit consists are not handled (assumes one loco plus separate wagons).
 - Edge length is estimated by sampling the geometry; the animation is a free
   model, so it does not use signals and cannot reserve track - use a loop no

@@ -388,11 +388,10 @@ function data()
 		}
 
 		if pickModeState:old() then
-			children[#children + 1] = builtin.TextView{ text = "The route starts at this station stop. Click track in the order the loco travels:" }
-			children[#children + 1] = builtin.TextView{ text = " 1) the track beyond the points, where the loco stops and reverses" }
-			children[#children + 1] = builtin.TextView{ text = " 2) a piece of the loop" }
-			children[#children + 1] = builtin.TextView{ text = " 3) the track at the far end of the train" }
-			children[#children + 1] = builtin.TextView{ text = "Add extra clicks for a wye. The route between clicks is found for you." }
+			children[#children + 1] = builtin.TextView{ text = "The route starts at this station stop. Click a few points along where the loco should go, in order," }
+			children[#children + 1] = builtin.TextView{ text = "for example a piece of the loop, then track at the far end of the train." }
+			children[#children + 1] = builtin.TextView{ text = "Loose clicks are fine: the route between them, and where the loco reverses, is worked out for you." }
+			children[#children + 1] = builtin.TextView{ text = "Click more points to steer it, e.g. through one side of a wye." }
 		end
 
 		return builtin.BoxLayout{ orientation = builtin.type.Orientation.Vertical, children = children }

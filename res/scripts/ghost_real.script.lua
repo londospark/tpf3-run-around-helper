@@ -12,16 +12,39 @@
 -- script) and run the game's own function on that, so what plays is exactly what
 -- the game would play for a loco moving that way.
 
-local util = ug_require "::/scripts/util.tl"
 local transformator_util = ug_require "::/scripts/transformator_util.tl"
 
-local BASE_SOUND = "::/scripts/soundset_default.script@updateSoundSet"
-local BASE_TRAIN_UPDATE = "::/vehicle/train/shared/transformator_train.script@train.updateFn"
+-- The game's own sound update script, called directly (a module that returns its
+-- functions). NOT through util.useFn: in the transformator scope that fails with
+-- "attempt to index global 'loaderHelper' (a boolean value)" (seen live, on every
+-- real train).
+local okSound, soundModule = pcall(ug_require, "::/scripts/soundset_default.script.tl")
+local baseUpdateSoundSet = okSound and type(soundModule) == "table" and soundModule.updateSoundSet or nil
+local okUtil, util = pcall(ug_require, "::/scripts/util.tl")
+if baseUpdateSoundSet == nil and okUtil and type(util) == "table" then
+	-- the sound scope does have a working util.useFn (the game's own script uses it)
+	baseUpdateSoundSet = function(...)
+		return util.useFn("::/scripts/soundset_default.script@updateSoundSet")(...)
+	end
+end
 
-local baseCache = {}
-local function base(ref)
-	if baseCache[ref] == nil then baseCache[ref] = util.useFn(ref) end
-	return baseCache[ref]
+-- The stock train transformator's update, copied from
+-- vehicle/train/shared/transformator_train.script.tl so that real trains don't
+-- depend on calling another script.
+local function stockTrainUpdate(_captureParams, params, transfsOutput)
+	local ci = params.currentInfo
+	local time = transformator_util.getEntityTime(ci.world.gameTime, params.entityId)
+	transformator_util.addAnimationStatesRailVehicles(ci.landVehicle.side, ci.landVehicle.reversed, transfsOutput)
+	transformator_util.addDriveAnimationState(ci.landVehicle.wheelAnimationInfo.totalDist, ci.landVehicle.reversed, transfsOutput)
+	transformator_util.addDrivingWheelAnimationState(
+		ci.landVehicle.wheelAnimationInfo.drivingWheelRadius,
+		ci.landVehicle.wheelAnimationInfo.totalDist,
+		ci.landVehicle.wheelAnimationInfo.wheelDuration,
+		ci.landVehicle.reversed,
+		transfsOutput)
+	transformator_util.addDoorAnimationState(ci.vehicle.doorAnimationInfo, transfsOutput)
+	transformator_util.addBrakeLightsAnimationState(ci.landVehicle.brakingTimer, time, transfsOutput)
+	transformator_util.scaleUserTransfIndicesLoadConfig(ci.vehicle.indicesLoadConfig, transfsOutput)
 end
 
 -- The loco's paint: the ghost's state carries the colour the real loco had, and it
@@ -34,6 +57,9 @@ local function applyColor(st, transfsOutput)
 		transfsOutput:setModelInstanceAttributeVec3f(transformator_util.colorAttributePostition, api.type.Vec3f.new(c[1] or 0.0, c[2] or 0.0, c[3] or 0.0))
 	end
 end
+
+local WHEEL_RADIUS = 0.9 -- metres, typical driving wheel
+local WHEEL_ANIMATION_MS = 5000 -- one revolution of the wheel animation
 
 local function stateOf(currentInfo)
 	local cs = currentInfo.customState
@@ -52,7 +78,7 @@ end
 local function updateSoundSet(captureParams, params, soundTransfOutput)
 	local ci = params.currentInfo
 	if ci.vehicle ~= nil then
-		return base(BASE_SOUND)(captureParams, params, soundTransfOutput)
+		return baseUpdateSoundSet(captureParams, params, soundTransfOutput)
 	end
 	local st = stateOf(ci) or {}
 	local speed = st.speed or 0.0
@@ -73,14 +99,14 @@ local function updateSoundSet(captureParams, params, soundTransfOutput)
 			gameSpeedUp = 1.0,
 		},
 	}
-	return base(BASE_SOUND)(captureParams, withInfo(params, extra), soundTransfOutput)
+	return baseUpdateSoundSet(captureParams, withInfo(params, extra), soundTransfOutput)
 end
 
 -- Rail vehicle transformator: the stock one, plus wheels for a free entity.
 local function trainUpdateFn(captureParams, params, transfsOutput)
 	local ci = params.currentInfo
 	if ci.landVehicle ~= nil then
-		return base(BASE_TRAIN_UPDATE)(captureParams, params, transfsOutput)
+		return stockTrainUpdate(captureParams, params, transfsOutput)
 	end
 	local st = stateOf(ci)
 	if st == nil then return end
@@ -94,9 +120,15 @@ local function trainUpdateFn(captureParams, params, transfsOutput)
 	applyColor(st, transfsOutput)
 	local reversed = (st.dir or 1) < 0
 	transformator_util.addDriveAnimationState(dist, reversed, transfsOutput)
-	-- radius and duration of the loco's driving wheels are not available to a
-	-- script, so these are typical values; the wheels turn at about the right rate.
-	transformator_util.addDrivingWheelAnimationState(0.9, dist, 1000.0, reversed, transfsOutput)
+	-- The wheels' animation ("wheels", steam locos) is one revolution in 5000 ms of
+	-- animation time for every base-game steam loco (ani/wheels/*.ani), and the
+	-- frame is given directly in milliseconds. The driving wheel radius is not
+	-- available to a script, so a typical one is used: the wheels turn at about the
+	-- rate of the ground speed. (The game's own helper rounds this to whole
+	-- seconds, which for a ghost hides the motion.)
+	local rev = dist / (2.0 * math.pi * WHEEL_RADIUS)
+	local frame = math.floor((rev % 1.0) * WHEEL_ANIMATION_MS + 0.5)
+	transfsOutput:addAnimationState("wheels", -1, frame, true, reversed)
 end
 
 local function clamp(x, lo, hi)

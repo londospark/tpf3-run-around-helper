@@ -1169,7 +1169,7 @@ end
 -- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
 -- Ends a run: the ghost goes, the train is released.
 local function finalizeRun(run)
-	api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+	if not run.ghostGone then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
 	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
 	logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
@@ -1198,6 +1198,10 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 			releaseTrain(run.vehicleEntity)
 			return
 		end
+		-- The ghost goes at once: the real loco is on the train now, and leaving the
+		-- ghost up while the facing is verified showed two locos for a moment.
+		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+		run.ghostGone = true
 		if CONFIG.verifyFacing and run.gyaw ~= nil then
 			-- Keep the run (and the ghost) for a few ticks so the new carriages exist,
 			-- then compare the loco's real facing with the ghost's (verifyRun).

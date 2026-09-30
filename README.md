@@ -168,6 +168,20 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Fourth live run: real-model wrapper broke the train transformator, and two
+  locos showed at coupling; both fixed, wheels reworked (untested).** The wrapper
+  called the stock train transformator through `util.useFn`, which does not work
+  in the transformator scope (`attempt to index global 'loaderHelper' (a boolean
+  value)`), so it raised an error every frame for real trains. It now contains a
+  copy of the stock update (`transformator_train.script`) and calls the sound
+  update by requiring its module, not through `useFn`. The ghost was also kept up
+  for a few ticks while the loco's facing was verified, so two locos showed at
+  coupling; it is now removed the moment the loco is put back. Wheels still did
+  not turn: the game's helper rounds the wheel animation time to whole seconds,
+  and a steam loco's wheel animation is one revolution in 5000 ms, so the ghost's
+  wheels always landed on the same pose. The wrapper (and the ghost copy) now set
+  the "wheels" animation frame directly in milliseconds from the distance
+  travelled (radius 0.9 m assumed). Only steam locos have a wheel animation.
 - **Paint on the ghost (untested).** The real loco's colour is saved and put
   back exactly as before. The ghost now wears it too: the colour is sent in the
   ghost's state and set as the model instance's colour attribute (position 0) by

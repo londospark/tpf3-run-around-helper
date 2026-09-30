@@ -17,6 +17,14 @@ local updateFn = function(_captureParams, params, transfsOutput)
 		-- the loco's paint, as the colour attribute (position 0) of the instance
 		transfsOutput:setModelInstanceAttributeVec3f(0, api.type.Vec3f.new(st.color[1] or 0.0, st.color[2] or 0.0, st.color[3] or 0.0))
 	end
+	if st ~= nil then
+		-- wheels: one revolution = 5000 ms of the "wheels" animation (steam locos)
+		local dist = st.dist or 0.0
+		local now = params.currentInfo.world and params.currentInfo.world.gameTime
+		if st.t0 ~= nil and now ~= nil then dist = dist + (st.speed or 0.0) * math.max(now - st.t0, 0.0) / 1000.0 end
+		local rev = dist / (2.0 * math.pi * 0.9)
+		transfsOutput:addAnimationState("wheels", -1, math.floor((rev % 1.0) * 5000 + 0.5), true, (st.dir or 1) < 0)
+	end
 end
 
 local updateParticleSystemFn = function(_captureParams, params, particleSystem)

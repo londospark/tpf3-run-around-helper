@@ -1,0 +1,15 @@
+{
+    "authors": [
+        {
+            "name": "ridecar2",
+            "role": "CREATOR"
+        }
+    ],
+    "description": "Makes a tagged locomotive run around its train at a chosen terminus instead of instantly flipping. Configure loops in game from the vehicle window (or the Run-Around button) - see the README for setup and known caveats.",
+    "name": "Run Around Helper",
+    "summary": "Scripted loco run-around at chosen stations, configured in-game",
+    "tags": [
+        "Script Mod"
+    ],
+    "url": ""
+}

@@ -65,11 +65,13 @@ local CONFIG = {
 	-- and goods - passengers and cargo belong to the train, and taking coaches out
 	-- lowers its capacity). They are hidden by a flag colour that the wrapped
 	-- transformator (ghost_real.script.lua) turns into "draw nothing". Out of sight
-	-- the train is rearranged and flipped, the ghost coaches glide to where the
-	-- coaches end up, and the coaches get their own paint back under them. The
-	-- game's vehicle marker only re-attaches three times.
+	-- the train is turned; the loco (still coupled, as ghosts) draws the whole
+	-- train forward a loco length to where the coaches now are, stops, uncouples
+	-- and runs around; at the end the coaches get their own paint back under their
+	-- ghosts. The game's vehicle marker only re-attaches three times.
 	ghostRake = true,
-	rakeSlideSpeed = 1.2, -- m/s at which the ghost coaches slide
+	rakePullSpeed = 2.0,  -- m/s: top speed of the train drawing forward before the uncouple
+	uncouplePause = 2.5,  -- seconds the train stands before the loco uncouples and sets off
 	-- metres per creep step (a multiple of the stand-ins' 0.25 m), seconds between
 	-- steps (0 = as fast as the game confirms them), and how far the loco drives
 	-- before they start. Each step is a replace, so the game's vehicle marker above
@@ -610,6 +612,7 @@ end
 -- ---------------------------------------------------------------------
 local REVERSAL_PENALTY = 250.0 -- metres-equivalent cost of stopping to reverse at a click point
 local REVERSAL_PAUSE = 1.5     -- seconds the ghost loco waits when it reverses
+local PULL_BRAKE = 0.5         -- m/s^2: braking as the train draws up before the uncouple
 local CLEAR_M = 10.0          -- a reversal happens this far into the track piece, i.e. just clear of the points, not at the piece's end
 local STATES = { { true, true }, { true, false }, { false, true }, { false, false } } -- {arrive dir, depart dir}
 
@@ -1185,6 +1188,23 @@ local function advanceGhost(run, dt)
 		return run.verifyWait >= 4
 	end
 	if run.phase == "done" or run.phase == "finish" then return true end
+
+	-- Ghost rake: first the train draws forward a loco length with the loco still
+	-- coupled (the coach ghosts follow the loco ghost, see advanceRake), stops and
+	-- the loco uncouples; only then does it set off round the route. Until then it
+	-- stands: while the hidden train is turned, after the pull, while uncoupling.
+	local R = run.rake
+	local pullLeft = nil
+	if R ~= nil and run.phase == nil and R.stage ~= "done" and R.stage ~= "failed" then
+		if R.stage == "pull" then pullLeft = math.max(R.pullTo - (run.gdist or 0.0), 0.0) end
+		if pullLeft == nil or pullLeft <= 1e-4 then
+			run.speed = 0.0
+			if run.seg == nil or run.seg.acc ~= 0.0 or run.seg.v0 ~= 0.0 then startSegment(run, 0.0, 0.0, 0.0) end
+			pushGhostState(run, 0.0, 0.0, 0.0, dt)
+			return false
+		end
+	end
+
 	if run.edgeCursor > #loop.loopEdges then
 		return routeFinished(run)
 	end
@@ -1222,13 +1242,28 @@ local function advanceGhost(run, dt)
 	end
 
 	-- Setting off (at the start, or after a reversal): a new motion segment.
+	local vmax = loop.speed
+	if pullLeft ~= nil then vmax = math.min(loop.speed, CONFIG.rakePullSpeed) end
 	if run.speed == 0.0 and (run.seg == nil or run.seg.acc == 0.0) then
-		startSegment(run, 0.0, loop.accel, loop.speed)
+		startSegment(run, 0.0, loop.accel, vmax)
 	end
-	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
+	run.speed = math.min(vmax, run.speed + loop.accel * dt)
+	local advance = run.speed * dt
+	if pullLeft ~= nil then
+		-- drawing forward: brake evenly to stop exactly a loco length on
+		local brakeSpeed = math.sqrt(2.0 * PULL_BRAKE * pullLeft)
+		if brakeSpeed < run.speed then
+			if not run.pullBraking then
+				run.pullBraking = true
+				startSegment(run, run.speed, -PULL_BRAKE, 0.0)
+			end
+			run.speed = math.max(brakeSpeed, 0.2)
+		end
+		advance = math.min(run.speed * dt, pullLeft)
+	end
 	local endAt = run.edgeLimit or run.edgeLength
 	local before = run.edgeProgress
-	run.edgeProgress = math.min(run.edgeProgress + run.speed * dt, endAt)
+	run.edgeProgress = math.min(run.edgeProgress + advance, endAt)
 	local t = run.edgeLength > 0 and math.min(run.edgeProgress / run.edgeLength, 1.0) or 1.0
 
 	-- Position along the piece's geometry (u runs start -> end); travel is
@@ -1761,12 +1796,6 @@ local function pushCoachState(coach, speed, seg)
 	end)
 end
 
-local function smoothstep(t)
-	if t <= 0 then return 0 end
-	if t >= 1 then return 1 end
-	return t * t * (3 - 2 * t)
-end
-
 -- Moves the ghost rake on. Returns true when the invisible train needs flipping.
 local function advanceRake(run, dt)
 	local R = run.rake
@@ -1798,29 +1827,29 @@ local function advanceRake(run, dt)
 			pushCoachState(c, 0.0, nil)
 		end
 		run.target = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z }
-		R.stage = "waiting"
-		logInfo(string.format("ghost rake: the coaches will slide %.1f m", math.sqrt((R.coaches[1].target.x - R.coaches[1].start.x) ^ 2 + (R.coaches[1].target.y - R.coaches[1].start.y) ^ 2)))
-		return false
-	end
-	if R.stage == "waiting" then
-		if (run.gdist or 0) < CONFIG.creepStartDistance then return false end
+		-- The pull: the loco ghost draws forward along its route by as far as the
+		-- coaches have to go (a loco length), and the coach ghosts go with it.
 		local far = 0
 		for _, c in ipairs(R.coaches) do
 			c.slide = math.sqrt((c.target.x - c.start.x) ^ 2 + (c.target.y - c.start.y) ^ 2)
+			c.dist0 = c.dist or 0.0
 			if c.slide > far then far = c.slide end
 		end
-		R.duration = math.max(far / CONFIG.rakeSlideSpeed, 3.0)
-		R.t = 0
-		R.stage = "slide"
-		for _, c in ipairs(R.coaches) do
-			c.dist0 = c.dist or 0.0
-			pushCoachState(c, c.slide / R.duration, { d0 = c.dist0, v0 = c.slide / R.duration, acc = 0.0, vmax = 0.0, t0 = gameTimeMs() })
-		end
+		R.pullLen = math.max(far, 0.01)
+		R.gdist0 = run.gdist or 0.0
+		R.pullTo = R.gdist0 + R.pullLen
+		R.stage = "pull"
+		logInfo(string.format("ghost rake: the train draws forward %.1f m, then the loco uncouples", R.pullLen))
 		return false
 	end
-	if R.stage == "slide" then
-		R.t = R.t + dt
-		local f = smoothstep(R.t / R.duration)
+	if R.stage == "pull" then
+		local f = ((run.gdist or 0.0) - R.gdist0) / R.pullLen
+		if f < 0 then f = 0 elseif f > 1 then f = 1 end
+		-- the coaches' wheels follow the loco's motion segment, scaled to each coach's slide
+		local seg = run.seg
+		local segKey = seg and (tostring(seg.t0) .. ":" .. tostring(seg.d0)) or nil
+		local newSeg = segKey ~= R.segKey
+		R.segKey = segKey
 		for _, c in ipairs(R.coaches) do
 			local x = c.start.x + (c.target.x - c.start.x) * f
 			local y = c.start.y + (c.target.y - c.start.y) * f
@@ -1829,14 +1858,31 @@ local function advanceRake(run, dt)
 				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(c.ghost,
 					api.type.Mat4f.rotZTransl(c.start.yaw, api.type.Vec3f.new(x, y, z))))
 			end)
+			if newSeg and seg ~= nil then
+				local k = c.slide / R.pullLen
+				c.dist = c.dist0 + ((seg.d0 or 0.0) - R.gdist0) * k
+				pushCoachState(c, (run.speed or 0.0) * k, { d0 = c.dist, v0 = (seg.v0 or 0.0) * k, acc = (seg.acc or 0.0) * k, vmax = (seg.vmax or 0.0) * k, t0 = seg.t0 })
+			end
 		end
-		if R.t >= R.duration then
-			R.stage = "done"
+		if f >= 1 then
+			R.stage = "uncouple"
+			R.t = 0
 			for _, c in ipairs(R.coaches) do
-				c.dist = (c.dist0 or 0.0) + (c.slide or 0.0)
+				c.dist = c.dist0 + c.slide
 				pushCoachState(c, 0.0, { d0 = c.dist, v0 = 0.0, acc = 0.0, vmax = 0.0, t0 = gameTimeMs() })
 			end
-			logInfo("ghost rake: coaches in place")
+			-- the loco should be where it would be coupled: moved as far as the coaches
+			local lx, ly = (run.locoPos and run.locoPos.x or 0) + (R.coaches[1].target.x - R.coaches[1].start.x), (run.locoPos and run.locoPos.y or 0) + (R.coaches[1].target.y - R.coaches[1].start.y)
+			logInfo(string.format("ghost rake: train drawn up %.1f m; loco ghost %.2f m from where it would be coupled",
+				R.pullLen, math.sqrt(((run.gx or lx) - lx) ^ 2 + ((run.gy or ly) - ly) ^ 2)))
+		end
+		return false
+	end
+	if R.stage == "uncouple" then
+		R.t = R.t + dt
+		if R.t >= CONFIG.uncouplePause then
+			R.stage = "done"
+			logInfo("ghost rake: loco uncoupled")
 		end
 	end
 	return false

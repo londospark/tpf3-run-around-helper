@@ -53,12 +53,38 @@ end
 -- copy of a loaded wagon shows the same load (its state names the carriage).
 local hiddenLoads = {}
 
+-- The carriage entity a transformator call is for (what the run-around names as a
+-- ghost's "mirror"): vehicleStaticInfo.carriageEntity, else the entity id.
+local function carriageOf(params)
+	local si = params.vehicleStaticInfo
+	return (si ~= nil and si.carriageEntity) or params.entityId
+end
+
+-- How many nodes the model has, or nil if the output will not say.
+local function userTransfCount(transfsOutput)
+	local ok, n = pcall(function() return #transfsOutput:getUserTransfs() end)
+	if ok and type(n) == "number" and n > 0 then return n end
+	return nil
+end
+
 local function hide(params, transfsOutput)
 	local ci = params.currentInfo
 	local indices = {}
 	for i, v in ipairs(ci.vehicle.indicesLoadConfig or {}) do indices[i] = v end
-	hiddenLoads[params.entityId] = indices
-	transfsOutput:setUserTransf(0, api.type.Mat4f.scale(api.type.Vec3f.new(0.0, 0.0, 0.0)))
+	hiddenLoads[carriageOf(params)] = indices
+	-- EVERY node, not just the root: the bogies (and their wheels) are placed on
+	-- the track by the engine, not through the root, so scaling only the root
+	-- left them showing (seen live).
+	local zero = api.type.Mat4f.scale(api.type.Vec3f.new(0.0, 0.0, 0.0))
+	local n = userTransfCount(transfsOutput)
+	if n ~= nil then
+		for i = 0, n - 1 do transfsOutput:setUserTransf(i, zero) end
+	else
+		-- count unknown: every index until the output refuses one
+		for i = 0, 255 do
+			if not pcall(transfsOutput.setUserTransf, transfsOutput, i, zero) then break end
+		end
+	end
 end
 
 local function stateOf(currentInfo)

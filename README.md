@@ -97,15 +97,17 @@ While editing or showing:
    on the spot, with their own paint and, for wagons, their own load. The real
    loco is swapped for an invisible stand-in of the same length, because a train
    without a powered vehicle crashes the game. The real coaches and wagons stay
-   in the train, just hidden, so **passengers and goods stay aboard**.
-3. The loco drives the route, reversing where planned. It keeps facing the way
+   in the train, just hidden, so **passengers and goods stay aboard**. Out of
+   sight, the hidden train is turned round.
+3. The train draws forward one loco length, gently, with the loco still coupled,
+   and stops. See [The coaches move forward](#the-coaches-move-forward).
+4. A short pause while the loco uncouples.
+5. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-4. Out of sight, the hidden train is turned round. The copied coaches glide
-   forward by one loco length, see [The coaches move forward](#the-coaches-move-forward).
-5. The loco comes back and brakes to a stop against the far coach. The real
-   loco takes the stand-in's place, the real coaches reappear exactly where the
-   copies are, and the copies go.
-6. The train loads as normal and leaves, with the loco leading.
+6. It comes back and brakes to a stop against the far coach. The real loco takes
+   the stand-in's place, the real coaches reappear exactly where their copies
+   are, and the copies go.
+7. The train loads as normal and leaves, with the loco leading.
 
 ## Tips and limitations
 
@@ -125,10 +127,10 @@ While editing or showing:
 When the loco couples on at the far end, the train is a loco length further
 along the track than it was. In this game that can only happen by the coaches
 moving: a vehicle swap keeps the middle of the train fixed, and the flip mirrors
-the train about its middle. So while the loco is away, the coaches glide forward
-smoothly by one loco length, as copies, while the hidden real train is turned
-out of sight. The game's vehicle marker only re-attaches three times: at the detach, the
-turn and the recouple.
+the train about its middle. So before the loco uncouples, the whole train draws
+forward a loco length, as if pulling up to the buffers, and the coaches don't
+move again after that. The game's vehicle marker only re-attaches three times:
+at the detach, the turn and the recouple.
 
 This works for passenger coaches and goods wagons alike. Nothing is taken out of
 the train: the coaches and wagons are the same vehicles throughout, so their
@@ -174,7 +176,7 @@ Useful log lines:
 | `stand-in: ... m; loco ... m long (from its model)` | the loco's length, from its model or, failing that, from the carriage spacing |
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
-| `ghost rake: ...` | the coaches shown as copies, the slide and where it ends |
+| `ghost rake: ...` | the coaches shown as copies, the pull forward (the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
 | `creep: ...` | the fallback: the real coaches creeping and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
 
@@ -188,8 +190,9 @@ These are in the files, for tinkering. Most people won't need them.
 |---|---|---|
 | `detachEnabled` | `true` | turns the run-around off entirely |
 | `reverseBeforeRecouple` | `true` | turn the train before the loco couples on, so the game doesn't flip it back |
-| `ghostRake` | `true` | show the loco and coaches as copies, hide the real train and turn it out of sight (the smooth way) |
-| `rakeSlideSpeed` | `1.2` | m/s at which the copied coaches glide |
+| `ghostRake` | `true` | show the loco and coaches as copies, hide the real train, turn it out of sight and draw it forward before the uncouple (the smooth way) |
+| `rakePullSpeed` | `2.0` | top speed, in m/s, of the train drawing forward before the uncouple |
+| `uncouplePause` | `2.5` | seconds the train stands before the loco uncouples and sets off |
 | `creepLayout` | `true` | fallback when a coach can't be copied: the real coaches creep forward; `false` = they jump once at the flip |
 | `creepStep` | `0.25` | metres per creep step: bigger = fewer, larger steps |
 | `creepStartDistance` | `30` | how far the loco drives before the coaches start moving |
@@ -207,7 +210,7 @@ untouched. Only the copies are then used.
 
 | File | Role |
 |---|---|
-| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts, swaps the loco for an invisible stand-in and hides the real coaches, drives the loco ghost along the planned route, turns the hidden train, glides the coach ghosts, puts the loco back and shows the coaches again |
+| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts, swaps the loco for an invisible stand-in and hides the real coaches, turns the hidden train, draws the train forward a loco length (coach ghosts following the loco ghost), uncouples, drives the loco ghost along the planned route, puts the loco back and shows the coaches again |
 | `ghost_build.script.lua` | the load-time script (`postRunScript`): prepares every rail vehicle, locos and coaches |
 | `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions; they also draw a real carriage painted the flag colour as nothing, and give its ghost the same load |
 | `res/audio/ghostwrap/*.snd.lua` | the game's own rail sound sets, generated with absolute sound paths and the update script wrapped |
@@ -225,8 +228,10 @@ More detail:
   `{ speed01, power01, state = { speed, power, vx, vy, color, dir, seg, mirror } }`,
   where `mirror` is the hidden carriage a coach ghost copies its load from.
 - **Hidden coaches.** A real coach is hidden by painting its part a flag colour
-  that nobody uses. The wrapped transformator sees that colour and scales the
-  model's root to zero, as the base game does to make fireworks vanish. The
+  that nobody uses. The wrapped transformator sees that colour and scales every
+  node of the model to zero. Scaling only the root, as the base game does to make
+  fireworks vanish, leaves a vehicle's bogies showing, because the engine places
+  bogies on the track itself. The
   coach's real paint is put back from a snapshot matched by model and purchase
   time.
 - **Smooth wheels.** The wheel animation follows a motion segment computed from

@@ -62,7 +62,7 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <ul>
 <li><strong>One loco plus coaches or wagons.</strong> Multiple units and double-heading are not handled yet.</li>
 <li><strong>The running loco ignores signals.</strong> Use a loop that other trains won't be on at the same time.</li>
-<li><strong>The coaches glide forward by one loco length</strong> while the loco is away. A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so copies of them glide smoothly while the real train is hidden and turned.</li>
+<li><strong>The train draws forward one loco length before the loco uncouples.</strong> A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so the train pulls up first, with the loco still coupled, and then stays put.</li>
 <li><strong>Passengers and goods stay aboard.</strong> The coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>
 <li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets.</li>
 <li>Run-arounds belong to a line and a stop. If you insert or remove stops earlier in the line, check the run-around still points at the right station.</li>

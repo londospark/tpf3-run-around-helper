@@ -14,5 +14,6 @@
 - While the loco is away, the loco and coaches are shown as copies of
   themselves. The real coaches and wagons stay in the train, hidden, so
   passengers and goods stay aboard. The hidden train is turned out of sight, and
-  the copied coaches glide forward a loco length, smoothly, instead of jumping.
+  the train draws forward a loco length with the loco still coupled, stops, and
+  the loco uncouples, instead of the coaches jumping.
   Copies of goods wagons show the wagon's load.

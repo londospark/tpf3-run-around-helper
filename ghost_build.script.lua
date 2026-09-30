@@ -1,5 +1,5 @@
--- Load-time script (mod.json postRunScript). Prepares every rail locomotive the game
--- knows about, INCLUDING modded ones, so that the run-around ghost can be drawn
+-- Load-time script (mod.json postRunScript). Prepares every rail vehicle (locos,
+-- coaches and wagons) the game knows about, INCLUDING modded ones, so that the run-around ghost can be drawn
 -- from the loco's OWN model with its own sound, smoke, wheels and paint.
 --
 -- A free entity has no vehicle data, and the game's sound and transformator scripts
@@ -66,10 +66,10 @@ local function clone(v)
 	return o
 end
 
-local function isRailEngine(meta)
+-- Any rail vehicle: locos, and (for the ghost rake) coaches and wagons.
+local function isRailVehicle(meta)
 	local tv = meta and meta.transportVehicle
-	local lv = meta and meta.landVehicle
-	return tv ~= nil and tv.carrier == "RAIL" and lv ~= nil and lv.engines ~= nil and #lv.engines > 0
+	return tv ~= nil and tv.carrier == "RAIL" and meta.landVehicle ~= nil
 end
 
 -- The wrapped copy of a sound set, as a resource name, or nil if there is none.
@@ -168,7 +168,7 @@ mod.postRunFn = function(_configDict, _allModParams)
 		if type(name) == "string" and not string.find(name, "runaround_", 1, true) then
 			local ok, src = pcall(api.res.modelRep.getAsTable, id)
 			local file = string.match(name, "([^/]+)%.mdl$")
-			if ok and type(src) == "table" and file ~= nil and isRailEngine(src.metadata) then
+			if ok and type(src) == "table" and file ~= nil and isRailVehicle(src.metadata) then
 				stats.locos = stats.locos + 1
 				-- the copy is built from the unchanged metadata, before patching
 				if addGhostModel(modId, "runaround_ghost_dyn/" .. file .. ".mdl", src, name, true) then
@@ -184,7 +184,7 @@ mod.postRunFn = function(_configDict, _allModParams)
 			end
 		end
 	end
-	log(string.format("loco setup: %d locos; %d can be their own ghost, %d partly wrapped, %d could not be changed; %d ghost copies built",
+	log(string.format("loco setup: %d rail vehicles; %d can be their own ghost, %d partly wrapped, %d could not be changed; %d ghost copies built",
 		stats.locos, stats.patched, stats.partly, stats.failed, stats.copies))
 end
 

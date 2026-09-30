@@ -93,14 +93,16 @@ While editing or showing:
 ## What happens during a run-around
 
 1. The train arrives and is held.
-2. The loco uncouples. An invisible stand-in takes its place, because a train
-   without a powered vehicle crashes the game.
+2. The loco and every coach are shown as exact copies of themselves, on the
+   spot. The real train underneath is swapped for invisible stand-ins of the same
+   lengths, because a train without a powered vehicle crashes the game.
 3. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-4. Meanwhile the coaches creep forward by one loco length, and the train is
-   turned round. See [The coaches creep forward](#the-coaches-creep-forward).
-5. The loco comes back, brakes to a stop against the far coach, and couples on.
-6. The train leaves, with the loco leading.
+4. Out of sight, the invisible train is turned round. The coaches glide forward
+   by one loco length, see [The coaches move forward](#the-coaches-move-forward).
+5. The loco comes back, brakes to a stop against the far coach, and the real
+   train is swapped back in exactly where the copies are.
+6. The train loads as normal and leaves, with the loco leading.
 
 ## Tips and limitations
 
@@ -115,17 +117,22 @@ While editing or showing:
   If you insert or remove stops earlier in the line, check it still points at
   the right station.
 
-### The coaches creep forward
+### The coaches move forward
 
 When the loco couples on at the far end, the train is a loco length further
 along the track than it was. In this game that can only happen by the coaches
-moving. A vehicle swap keeps the middle of the train fixed, and the flip mirrors
-the train about its middle.
+moving: a vehicle swap keeps the middle of the train fixed, and the flip mirrors
+the train about its middle. So while the loco is away, the coaches glide forward
+smoothly by one loco length, as copies, while the real train is rearranged out of
+sight. The game's vehicle marker only re-attaches three times: at the detach, the
+turn and the recouple.
 
-So instead of the coaches jumping, they creep forward a quarter of a metre at a
-time while the loco is away. The flip happens at the halfway point, when the
-train is exactly symmetrical, so it moves nothing. A small invisible part stays
-at the front throughout, so the game's vehicle marker keeps still.
+Coaches that can't be shown as copies fall back to an older method: the real
+coaches creep in small steps, and the marker flickers.
+
+Passengers who boarded before the loco uncoupled may be lost, because the coaches
+are taken out of the train and put back. The train then loads again as normal
+before it leaves.
 
 ### Modded locos
 
@@ -175,9 +182,11 @@ These are in the files, for tinkering. Most people won't need them.
 |---|---|---|
 | `detachEnabled` | `true` | turns the run-around off entirely |
 | `reverseBeforeRecouple` | `true` | turn the train before the loco couples on, so the game doesn't flip it back |
-| `creepLayout` | `true` | creep the coaches forward; `false` = they jump once at the flip |
+| `ghostRake` | `true` | show the loco and coaches as copies and rearrange the invisible train (the smooth way) |
+| `rakeSlideSpeed` | `1.2` | m/s at which the copied coaches glide |
+| `creepLayout` | `true` | fallback when a coach can't be copied: the real coaches creep forward; `false` = they jump once at the flip |
 | `creepStep` | `0.25` | metres per creep step: bigger = fewer, larger steps |
-| `creepStartDistance` | `30` | how far the loco drives before the creep starts |
+| `creepStartDistance` | `30` | how far the loco drives before the coaches start moving |
 | `useRealModel` | `true` | run around as the loco's own model when possible |
 | `useEffectGhosts` | `true` | otherwise use the copy with smoke and sound |
 | `verifyFacing` | `true` | check the loco's facing after coupling, and correct it |
@@ -192,8 +201,8 @@ untouched. Only the copies are then used.
 
 | File | Role |
 |---|---|
-| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, swaps the loco for a stand-in, drives the "ghost" along the planned route, creeps and flips the train, recouples |
-| `ghost_build.script.lua` | the load-time script (`postRunScript`): prepares every rail loco |
+| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts over an invisible stand-in train, drives the loco ghost along the planned route, turns and rearranges the invisible train, glides the coach ghosts, swaps the real train back |
+| `ghost_build.script.lua` | the load-time script (`postRunScript`): prepares every rail vehicle, locos and coaches |
 | `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions |
 | `res/audio/ghostwrap/*.snd.lua` | the game's own rail sound sets, generated with absolute sound paths and the update script wrapped |
 | `res/models/runaround_ghost/` | `real*.trf.lua` (the stock train and tilting-train transformators, wrapped), plus plain silent copies of the base locos as a last fallback |

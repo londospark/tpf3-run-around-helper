@@ -11,5 +11,6 @@
   paint. That covers every base-game and DLC loco, and modded locos that use the
   game's sound sets and train scripts.
 - The loco keeps its facing: it couples on at the far end, the right way round.
-- The coaches creep forward a loco length while the loco is away, instead of
-  jumping. The game's own vehicle marker stays still.
+- While the loco is away, the loco and coaches are shown as copies of
+  themselves. The real train is rearranged invisibly underneath, and the copied
+  coaches glide forward a loco length, smoothly, instead of jumping.

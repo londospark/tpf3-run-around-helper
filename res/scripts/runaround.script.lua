@@ -59,6 +59,14 @@ local CONFIG = {
 	-- nothing), and the creep finishes on the other side. Only when the loco is
 	-- the first part of the train.
 	creepLayout = true,
+	-- Better than the creep (and used instead when every coach can be shown): the
+	-- whole train is swapped for invisible stand-ins while ghost copies of the loco
+	-- AND the coaches are shown in their places. The invisible train is then flipped
+	-- and rearranged out of sight, the ghost coaches slide smoothly to where the
+	-- coaches have to end up, and the real train is swapped back in under them.
+	-- The game's vehicle marker only re-attaches three times.
+	ghostRake = true,
+	rakeSlideSpeed = 1.2, -- m/s at which the ghost coaches slide
 	-- metres per creep step (a multiple of the stand-ins' 0.25 m), seconds between
 	-- steps (0 = as fast as the game confirms them), and how far the loco drives
 	-- before they start. Each step is a replace, so the game's vehicle marker above
@@ -1037,7 +1045,7 @@ end
 -- The route is done: with the flip enabled the train is flipped next and the
 -- ghost then glides to where the loco goes back on; without it, the run ends.
 local function routeFinished(run)
-	if run.layout ~= nil and run.phase == nil then
+	if (run.layout ~= nil or run.rake ~= nil) and run.phase == nil then
 		run.phase = "waitLayout"
 		run.speed = 0.0
 		startSegment(run, 0.0, 0.0, 0.0)
@@ -1113,6 +1121,16 @@ local function advanceGhost(run, dt)
 				logInfo("could not read the stand-in's position after the flip - the loco goes straight back on")
 				run.phase = "finish"
 			end
+		end
+		return false
+	end
+	if run.phase == "waitLayout" and run.rake ~= nil then
+		if run.rake.stage == "done" and run.target ~= nil then
+			logInfo(string.format("ghost heading for the loco's place at %.1f, %.1f", run.target.x, run.target.y))
+			run.phase = "approach"
+		elseif run.rake.stage == "failed" then
+			logInfo("ghost rake failed - putting the real train back where it is")
+			run.phase = "finish"
 		end
 		return false
 	end
@@ -1320,7 +1338,7 @@ end
 local function finalizeRun(run)
 	if not run.ghostGone then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 	releaseTrain(run.vehicleEntity)
-	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
+	if not run.noDepartNow then api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end
 	logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
 end
 
@@ -1574,12 +1592,17 @@ local function verifyRun(state, run)
 	end)
 end
 
+local recoupleRake -- defined with the ghost rake, below
+
 local function finishRun(state, run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
 		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
 		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
 		return
+	end
+	if run.rake ~= nil then
+		return recoupleRake(state, run) -- also when it failed: the real train goes back
 	end
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
@@ -1594,6 +1617,238 @@ local function finishRun(state, run)
 		atRear, endWhy = true, "fallback"
 	end
 	recouple(state, run, tv, atRear, reversed, "no flip; " .. tostring(endWhy) .. "; " .. tostring(why))
+end
+
+-- ---------------------------------------------------------------------
+-- Ghost rake (see CONFIG.ghostRake)
+-- ---------------------------------------------------------------------
+
+-- Every carriage's centre and yaw, in list order.
+local function carriageFrames(vehicleEntity)
+	local frames = {}
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	for i, c in ipairs(cl.carriages) do
+		local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
+		local t = mil.fatInstances[1].transf
+		local p, x = t:cols(3), t:cols(0)
+		frames[i] = { x = p.x, y = p.y, z = p.z, yaw = math.atan2(x.y, x.x), modelId = mil.fatInstances[1].modelId }
+	end
+	return frames
+end
+
+-- Every part's length, from the spacing of the carriage centres (neighbours are
+-- half of one plus half of the other apart). Parts of the same model are taken to
+-- be the same length, which fixes the one unknown; nil if it cannot be worked out.
+local function partLengths(frames, tvc)
+	local n = #frames
+	if n < 2 then return nil end
+	local gaps = {}
+	for i = 1, n - 1 do
+		gaps[i] = math.sqrt((frames[i].x - frames[i + 1].x) ^ 2 + (frames[i].y - frames[i + 1].y) ^ 2)
+	end
+	local len = {}
+	for i = 1, n - 1 do
+		if tvc.vehicles[i].part.modelId == tvc.vehicles[i + 1].part.modelId then len[i], len[i + 1] = gaps[i], gaps[i] end
+	end
+	if next(len) == nil then return nil end
+	for _ = 1, n do -- spread from the known ones: len[i] + len[i+1] = 2 * gap
+		for i = 1, n - 1 do
+			if len[i] ~= nil and len[i + 1] == nil then len[i + 1] = 2 * gaps[i] - len[i] end
+			if len[i + 1] ~= nil and len[i] == nil then len[i] = 2 * gaps[i] - len[i + 1] end
+		end
+	end
+	for i = 1, n do
+		if len[i] == nil or len[i] < 0.5 or len[i] > 44 then return nil end
+	end
+	return len
+end
+
+-- The consist the real train becomes while its ghosts are shown: a stand-in for
+-- the loco, then stand-ins for the coaches in REVERSE order. After the flip that
+-- is, from the new head, loco then last coach ... first coach - the same lengths in
+-- the same places as the train the loco couples back onto.
+local function buildInvisibleConfig(tvc, lengths, locoSnap)
+	local config = api.type.TransportVehicleConfig.new(tvc)
+	local parts = { makeStandInPart(findStandInModelId(lengths[1]), locoSnap) }
+	for i = #lengths, 2, -1 do
+		parts[#parts + 1] = makeStandInPart(findStandInModelId(lengths[i]), locoSnap)
+	end
+	return finishConfig(config, parts)
+end
+
+-- The real train again, from the new head: the loco, then the coaches last to
+-- first, each turned (the head is now at the other end).
+local function buildRealRakeConfig(currentTvc, locoSnap, locoReversed, coaches, flipped)
+	local config = api.type.TransportVehicleConfig.new(currentTvc)
+	local parts = { partFromSnapshot(locoSnap, locoReversed) }
+	if flipped then
+		for i = #coaches, 1, -1 do
+			local snap = coaches[i].snap
+			parts[#parts + 1] = partFromSnapshot(snap, not snap.reversed)
+		end
+	else -- the flip never happened: the train as it was
+		for i = 1, #coaches do
+			parts[#parts + 1] = partFromSnapshot(coaches[i].snap, coaches[i].snap.reversed)
+		end
+	end
+	return finishConfig(config, parts)
+end
+
+-- The model to show a coach with: its own when ghost_build wrapped it, else its
+-- ghost copy; nil when neither exists (then the ghost rake is not used).
+local function coachGhostModel(modelId)
+	if CONFIG.useRealModel and realModelReady(modelId) then return modelId end
+	local ok, all = pcall(api.res.modelRep.getAll, true)
+	local name = ok and all and all[modelId]
+	local base = type(name) == "string" and string.match(name, "([^/]+)%.mdl$") or nil
+	if base == nil then return nil end
+	for id, n in pairs(all) do
+		if type(n) == "string" and string.find(n, "runaround_ghost_dyn/" .. base .. ".mdl", 1, true) then return id end
+	end
+	return nil
+end
+
+local function pushCoachState(coach, speed, seg)
+	pcall(function()
+		api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateStateCmd(coach.ghost, {
+			speed01 = 0.0, power01 = 0.0,
+			state = { speed = speed, power = 0.0, vx = 0.0, vy = 0.0, color = coach.color, dist = coach.dist or 0.0, seg = seg, dir = 1 },
+		}))
+	end)
+end
+
+local function smoothstep(t)
+	if t <= 0 then return 0 end
+	if t >= 1 then return 1 end
+	return t * t * (3 - 2 * t)
+end
+
+-- Moves the ghost rake on. Returns true when the invisible train needs flipping.
+local function advanceRake(run, dt)
+	local R = run.rake
+	if R == nil or R.busy then return false end
+	if R.stage == "flip" then
+		R.busy = true
+		return true
+	end
+	if R.stage == "settle" then
+		R.ticks = (R.ticks or 0) + 1
+		if R.ticks < 4 then return false end
+		-- Where everything will be: the invisible stand-ins, ordered from the buffer
+		-- end (where the loco stood) outwards. The last is the loco's place; the
+		-- others are the coaches', first to last.
+		local ok, frames = pcall(carriageFrames, run.vehicleEntity)
+		if not ok then R.stage = "failed" return false end
+		local from = run.locoPos
+		table.sort(frames, function(a, b)
+			return (a.x - from.x) ^ 2 + (a.y - from.y) ^ 2 < (b.x - from.x) ^ 2 + (b.y - from.y) ^ 2
+		end)
+		if #frames ~= #R.coaches + 1 then R.stage = "failed" return false end
+		for i, c in ipairs(R.coaches) do c.target = frames[i] end
+		local lf = frames[#frames]
+		run.target = { x = lf.x, y = lf.y, z = lf.z }
+		R.stage = "waiting"
+		logInfo(string.format("ghost rake: the coaches will slide %.1f m", math.sqrt((R.coaches[1].target.x - R.coaches[1].start.x) ^ 2 + (R.coaches[1].target.y - R.coaches[1].start.y) ^ 2)))
+		return false
+	end
+	if R.stage == "waiting" then
+		if (run.gdist or 0) < CONFIG.creepStartDistance then return false end
+		local far = 0
+		for _, c in ipairs(R.coaches) do
+			c.slide = math.sqrt((c.target.x - c.start.x) ^ 2 + (c.target.y - c.start.y) ^ 2)
+			if c.slide > far then far = c.slide end
+		end
+		R.duration = math.max(far / CONFIG.rakeSlideSpeed, 3.0)
+		R.t = 0
+		R.stage = "slide"
+		for _, c in ipairs(R.coaches) do
+			c.dist0 = c.dist or 0.0
+			pushCoachState(c, c.slide / R.duration, { d0 = c.dist0, v0 = c.slide / R.duration, acc = 0.0, vmax = 0.0, t0 = gameTimeMs() })
+		end
+		return false
+	end
+	if R.stage == "slide" then
+		R.t = R.t + dt
+		local f = smoothstep(R.t / R.duration)
+		for _, c in ipairs(R.coaches) do
+			local x = c.start.x + (c.target.x - c.start.x) * f
+			local y = c.start.y + (c.target.y - c.start.y) * f
+			local z = c.start.z + (c.target.z - c.start.z) * f
+			pcall(function()
+				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(c.ghost,
+					api.type.Mat4f.rotZTransl(c.start.yaw, api.type.Vec3f.new(x, y, z))))
+			end)
+		end
+		if R.t >= R.duration then
+			R.stage = "done"
+			for _, c in ipairs(R.coaches) do
+				c.dist = (c.dist0 or 0.0) + (c.slide or 0.0)
+				pushCoachState(c, 0.0, { d0 = c.dist, v0 = 0.0, acc = 0.0, vmax = 0.0, t0 = gameTimeMs() })
+			end
+			logInfo("ghost rake: coaches in place")
+		end
+	end
+	return false
+end
+
+local function rakeFlipStep(state, vehicleEntity)
+	local function done(fn)
+		holdTrain(vehicleEntity)
+		updateRun(state, vehicleEntity, function(r) if r.rake then r.rake.busy = false; fn(r) end end)
+	end
+	local ok, cmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
+	if not ok then
+		logInfo("ghost rake: reverse rejected:", tostring(cmd))
+		return done(function(r) r.rake.stage = "failed" end)
+	end
+	api.cmd.sendCommand(cmd, function(_, success)
+		if not success then
+			logInfo("ghost rake: reverse failed")
+			return done(function(r) r.rake.stage = "failed" end)
+		end
+		scheduleTrace(state, "invisible train after the flip (+4 ticks)", vehicleEntity, 4)
+		done(function(r)
+			r.rake.stage = "settle"
+			r.rake.ticks = 0
+			r.flipped = true
+		end)
+	end)
+end
+
+-- The ghost rake's end: the real train swapped back in under the ghosts.
+recoupleRake = function(state, run)
+	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+	local reversed, why = locoIsReversed(run)
+	logInfo("recouple (ghost rake): the real train back in place of the invisible one; loco", reversed and "reversed" or "not reversed", "-", tostring(why))
+	if not run.flipped then reversed = run.startReversed end
+	local okB, cfg = pcall(buildRealRakeConfig, tv.transportVehicleConfig, run.locoPart, reversed, run.rake.coaches, run.flipped)
+	local okC, cmd = false, nil
+	if okB then okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, cfg) end
+	if not okC then
+		logInfo("recouple (ghost rake) FAILED:", tostring(okB and cmd or cfg), "- ghosts left in place, train released")
+		releaseTrain(run.vehicleEntity)
+		return
+	end
+	api.cmd.sendCommand(cmd, function(_, success)
+		if not success then
+			logInfo("recouple (ghost rake) replace FAILED - ghosts left in place, train released")
+			releaseTrain(run.vehicleEntity)
+			return
+		end
+		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
+		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+		for _, c in ipairs(run.rake.coaches) do
+			if c.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(c.ghost)) end
+		end
+		run.ghostGone = true
+		run.noDepartNow = true -- let it load as normal: the coaches came back empty
+		run.phase = "verify"
+		run.verifyWait = 0
+		run.locoAtRear = false
+		local data = state:get()
+		data.runs[#data.runs + 1] = run
+		state:set(data)
+	end)
 end
 
 local function startRunAround(state, vehicleEntity, loop)
@@ -1691,8 +1946,35 @@ local function startRunAround(state, vehicleEntity, loop)
 		if len > 44 then len = 44 end
 		standId, standLength = findStandInModelId(len)
 	end
+	-- The ghost rake, when every coach can be shown (see CONFIG.ghostRake).
+	local rakeInfo = nil
+	if CONFIG.ghostRake and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1 then
+		local okF, frames = pcall(carriageFrames, vehicleEntity)
+		local lengths = okF and partLengths(frames, tvc) or nil
+		if lengths ~= nil then
+			local coaches = {}
+			for i = 2, #tvc.vehicles do
+				local okS, snap = pcall(snapshotPart, tvc.vehicles[i])
+				local gid = coachGhostModel(tvc.vehicles[i].part.modelId)
+				if not okS or gid == nil then coaches = nil break end
+				local f = frames[i]
+				coaches[#coaches + 1] = {
+					snap = snap, ghostModel = gid,
+					start = { x = f.x, y = f.y, z = f.z, yaw = f.yaw },
+					color = snap.color and { snap.color.x, snap.color.y, snap.color.z } or nil,
+					dist = 0.0,
+				}
+			end
+			if coaches ~= nil then rakeInfo = { coaches = coaches, lengths = lengths } end
+		end
+		if rakeInfo == nil then logInfo("ghost rake: not every coach can be shown - using the creep instead") end
+	end
+	if rakeInfo ~= nil then creep = false end
+
 	local okBuild, strippedConfig
-	if creep then
+	if rakeInfo ~= nil then
+		okBuild, strippedConfig = pcall(buildInvisibleConfig, tvc, rakeInfo.lengths, locoSnap)
+	elseif creep then
 		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap, locoIdx)
 	else
 		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
@@ -1710,7 +1992,29 @@ local function startRunAround(state, vehicleEntity, loop)
 	traceNow("before the detach", vehicleEntity)
 	holdTrain(vehicleEntity)
 
-	api.cmd.sendCommand(replaceCmd, function(_, success)
+	local sendReplace -- defined below; with a ghost rake it is sent once the coach ghosts are up
+
+	-- Spawns the coach ghosts one after another, each exactly where its coach is,
+	-- then sends the replace (so no coach is ever missing from view).
+	local function spawnCoachGhosts(i)
+		if rakeInfo == nil or i > #rakeInfo.coaches then return sendReplace() end
+		local c = rakeInfo.coaches[i]
+		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(c.ghostModel), function(res, ok)
+			if not ok then
+				logInfo("ghost rake: could not show coach", i, "- run-around not started")
+				for j = 1, i - 1 do api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(rakeInfo.coaches[j].ghost)) end
+				releaseTrain(vehicleEntity)
+				return
+			end
+			c.ghost = res.resultEntity
+			api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(c.ghost,
+				api.type.Mat4f.rotZTransl(c.start.yaw, api.type.Vec3f.new(c.start.x, c.start.y, c.start.z))))
+			pushCoachState(c, 0.0, nil)
+			spawnCoachGhosts(i + 1)
+		end)
+	end
+
+	sendReplace = function() api.cmd.sendCommand(replaceCmd, function(_, success)
 		if not success then
 			logInfo("detach replaceVehicle FAILED for vehicle", vehicleEntity, "loop", loopLabel(loop), "- train released")
 			releaseTrain(vehicleEntity)
@@ -1762,6 +2066,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				standInLength = standLength,
 				hasTail = addTail,
 				layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
+				rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
 				locoLength = locoLength,
 				startHead = startHead,
 				startSign = startSign,
@@ -1788,7 +2093,8 @@ local function startRunAround(state, vehicleEntity, loop)
 			end
 			logInfo("run-around started for vehicle", vehicleEntity, "loop", loopLabel(loop))
 		end)
-	end)
+	end) end
+	spawnCoachGhosts(1)
 end
 
 -- Ensures state:get() always returns the {runs, loops} shape, even on a
@@ -2089,6 +2395,11 @@ return {
 					result.finishes[#result.finishes + 1] = run
 				else
 					remaining[#remaining + 1] = run
+					if advanceRake(run, dt) then
+						result = result or {}
+						result.rakeFlips = result.rakeFlips or {}
+						result.rakeFlips[#result.rakeFlips + 1] = run.vehicleEntity
+					end
 					if advanceLayout(run, dt) then
 						result = result or {}
 						result.layout = result.layout or {}
@@ -2128,6 +2439,12 @@ return {
 				if loop ~= nil then
 					startRunAround(state, p.vehicleEntity, loop)
 				end
+			end
+		end
+
+		if updateResult.rakeFlips ~= nil then
+			for _, vehicleEntity in ipairs(updateResult.rakeFlips) do
+				rakeFlipStep(state, vehicleEntity)
 			end
 		end
 

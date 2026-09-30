@@ -223,6 +223,9 @@ function data()
 	-- The route tool: draws the route; in edit mode, clicking track adds points.
 	-- ------------------------------------------------------------------
 	local TOOL_KEY_PREFIX = "RunAroundRoute:"
+	-- Which loop / mode the route tool is showing (declared before the tool, whose
+	-- pop clears it when it is left with Esc or right-click).
+	local routeTool = nil -- { loopId, mode, key }
 
 	local function getToolStackApi()
 		local globals = ug_require "::/gui/main/game_react_globals.tl"
@@ -327,7 +330,6 @@ function data()
 
 	-- Which loop / mode the route tool is showing: tracked here (asking the tool
 	-- stack did not report it back, so the Show button never turned into Hide).
-	local routeTool = nil -- { loopId, mode, key }
 	local function activeRouteTool()
 		if routeTool == nil then return nil end
 		return routeTool.loopId, routeTool.mode, routeTool.key

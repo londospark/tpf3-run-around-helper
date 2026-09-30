@@ -191,6 +191,29 @@ local function snapshotPart(tvp)
 	}
 end
 
+-- One LoadConfig per compartment the MODEL declares, as the base game's
+-- vehicle_util.makePart builds them. The game asserts that a part's load
+-- configs match its model's compartments, so the count comes from the model,
+-- not from a saved number.
+local function loadConfigsForModel(modelId, fallbackCount)
+	local count = fallbackCount or 0
+	local ok, model = pcall(api.res.modelRep.get, modelId)
+	if ok and model ~= nil then
+		local okMeta, tvMeta = pcall(function() return model.metadata["transportVehicle"] end)
+		if okMeta and tvMeta ~= nil then
+			count = 0
+			for _ in ipairs(tvMeta.compartments) do count = count + 1 end
+		end
+	end
+	local loads = {}
+	for i = 1, count do
+		local lc = api.type.LoadConfig.new()
+		lc.loadConfigIndex = 0
+		loads[i] = lc
+	end
+	return loads
+end
+
 -- Rebuilds a real TransportVehiclePart from a snapshot (built the way
 -- gui/line_vehicle_mgmt/vehicle_util.lua's makePart does it). Keeping
 -- purchaseTime / maintenanceState means the loco keeps its age and condition.
@@ -198,13 +221,7 @@ local function partFromSnapshot(snap, reversed)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = snap.modelId
 	part.part.reversed = reversed
-	local loads = {}
-	for i = 1, snap.compartmentCount or 0 do
-		local lc = api.type.LoadConfig.new()
-		lc.loadConfigIndex = 0
-		loads[i] = lc
-	end
-	part.part.compartment2loadConfig = loads
+	part.part.compartment2loadConfig = loadConfigsForModel(snap.modelId, snap.compartmentCount)
 	if snap.color ~= nil then
 		part.part.color = api.type.Vec3f.new(snap.color.x, snap.color.y, snap.color.z)
 	end
@@ -248,7 +265,7 @@ local function makeStandInPart(standId, locoSnap)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = standId
 	part.part.reversed = false
-	part.part.compartment2loadConfig = {}
+	part.part.compartment2loadConfig = loadConfigsForModel(standId, 1)
 	part.purchaseTime = locoSnap.purchaseTime
 	part.maintenanceChange = locoSnap.maintenanceChange
 	part.maintenanceState = 1

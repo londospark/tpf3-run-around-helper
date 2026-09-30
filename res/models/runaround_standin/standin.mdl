@@ -108,13 +108,35 @@ return {
 		transformatorConfig = {
 			skipFromLod = 2,
 			transformator = {
-				name = "/vehicle/train/shared/default_train.trf",
+				name = "::/vehicle/train/shared/default_train.trf", -- "::/" = base game; a bare "/" means this mod's own root
 			},
 		},
 		transportVehicle = {
 			carrier = "RAIL",
 			comfortFactor = 0,
-			compartments = { },
+			-- The standard locomotive compartment, copied from the base game's rail
+			-- models: every one of them has exactly this single compartment, and the
+			-- game asserts that a part's load configs match its model's compartments.
+			compartments = {
+				{
+					loadConfigs = {
+						{
+							cargoEntry = {
+								capacity = 4,
+								cargoTypeSet = {
+									cargoClassesExcluded = { },
+									cargoClassesIncluded = { },
+									cargoTypesExcluded = { },
+									cargoTypesIncluded = { },
+								},
+								loadIndicator = "",
+								seats = { },
+							},
+							toHide = { },
+						},
+					},
+				},
+			},
 			engineTransportModes = { "TRAIN", "ELECTRIC_TRAIN", },
 			filterTags = { "runaround_standin", },
 			reversible = true,

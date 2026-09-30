@@ -3,7 +3,7 @@
 -- While the real loco is away as a ghost, the wagons need a powered part in
 -- their consist: a train with no power cannot be drawn (the game asserts
 -- "trainMoveInfo.availPower > 0" in calculateFallbackPowerOutput and exits).
--- This is that part: 1 metre long, no meshes, 1 kW, no sound, no smoke, no
+-- This is that part: 10.25 metres long, no meshes, 1 kW, no sound, no smoke, no
 -- lights, hidden from the purchase lists (available from a year that never
 -- comes, its own filter tag). The mod puts it in when the loco leaves and takes
 -- it out again when the loco is coupled back on.
@@ -12,12 +12,12 @@
 function data()
 return {
 	boundingInfo = {
-		bbMax = { 0.5, 0.5, 1, },
-		bbMin = { -0.5, -0.5, 0, },
+		bbMax = { 5.125, 0.5, 1, },
+		bbMin = { -5.125, -0.5, 0, },
 	},
 	collider = {
 		params = {
-			halfExtents = { 0.5, 0.5, 0.5, },
+			halfExtents = { 5.125, 0.5, 0.5, },
 		},
 		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
 		type = "BOX",
@@ -55,8 +55,8 @@ return {
 			},
 		},
 		extent = {
-			bbMax = { 0.5, 0.5, 1, },
-			bbMin = { -0.5, -0.5, 0, },
+			bbMax = { 5.125, 0.5, 1, },
+			bbMin = { -5.125, -0.5, 0, },
 		},
 		landVehicle = {
 			brakeDeceleration = 2.5,
@@ -89,12 +89,12 @@ return {
 						{
 							group = "RootNode",
 							offset = 0,
-							position = 0.25,
+							position = 2.5625,
 						},
 						{
 							group = "RootNode",
 							offset = 0,
-							position = -0.25,
+							position = -2.5625,
 						},
 					},
 				},

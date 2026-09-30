@@ -50,14 +50,17 @@ the run-around there. They are saved with the game.
   move the train's middle, and a real run-around moves it by a loco length: the
   loco ends up beyond the far coach. Instead of a jump, the mod moves the coaches
   gradually once the loco has driven off:
-  - A stand-in in front of them shrinks 1 m at a time while one behind them
-    grows, so the total length stays the same.
+  - A stand-in in front of them shrinks 0.25 m at a time, as fast as the game
+    confirms each step, while one behind them grows, so the total length stays
+    the same.
   - The train is flipped at the halfway point, when it is exactly symmetrical,
     so the flip moves nothing.
   - The creep then finishes on the other side, and the loco couples on where the
     remaining stand-in is.
-  This happens when the loco is the first part of the train. `creepLayout` turns
-  it off: the coaches then jump once, at the flip.
+  This happens when the loco is the first part of the train. Each step is a
+  vehicle replace, so the game's vehicle marker above the train jitters while
+  the coaches move. `creepStep` sets bigger, fewer steps, and `creepLayout` turns
+  the creep off: the coaches then jump once, at the flip.
 - The train is held (manual departure plus the vehicle window's stop) through
   every step. Otherwise it crept off on the stand-ins after the flip.
 - **Your loco, not a stand-in, runs round.** Every rail loco is prepared when
@@ -132,8 +135,8 @@ Only ghost copies are then used.
 - `res/models/runaround_ghost/real*.trf.lua` are the stock train and
   tilting-train transformators, pointed at the wrappers. The folder also holds
   plain silent copies of the base-game locos, as a last fallback.
-- `res/models/runaround_standin/standin_<metres>.mdl` are the invisible
-  stand-ins, 1 to 44 m in 1 m steps. The loco's length is measured from the
+- `res/models/runaround_standin/standin_cm<centimetres>.mdl` are the invisible
+  stand-ins, 0.25 to 44 m in 0.25 m steps. The loco's length is measured from the
   spacing of the carriages.
 - `runaround_gui.script.lua` and `runaround_vehicle.res.lua` are the UI: the
   train window card and the route tool. The tool draws the route

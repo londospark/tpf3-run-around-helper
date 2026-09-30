@@ -59,8 +59,12 @@ local CONFIG = {
 	-- nothing), and the creep finishes on the other side. Only when the loco is
 	-- the first part of the train.
 	creepLayout = true,
-	-- seconds between creep steps, and how far the loco drives before they start
-	creepStepSeconds = 0.35,
+	-- metres per creep step (a multiple of the stand-ins' 0.25 m), seconds between
+	-- steps (0 = as fast as the game confirms them), and how far the loco drives
+	-- before they start. Each step is a replace, so the game's vehicle marker above
+	-- the train jitters while the coaches move; bigger steps mean fewer, larger ones.
+	creepStep = 0.25,
+	creepStepSeconds = 0.0,
 	creepStartDistance = 30.0,
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
@@ -256,8 +260,8 @@ local function finishConfig(config, parts)
 	return config
 end
 
--- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl,
--- 1 to 44 m in 1 m steps); the one nearest wantLength. Found by name
+-- The invisible stand-in locos (res/models/runaround_standin/standin_cm<centimetres>.mdl,
+-- 0.25 to 44 m in 0.25 m steps); the one nearest wantLength. Found by name
 -- because a mod's resource prefix is not known in advance.
 local standInIds = nil -- length in metres -> model id
 local function findStandInModelId(wantLength)
@@ -267,8 +271,8 @@ local function findStandInModelId(wantLength)
 		if ok and all ~= nil then
 			for id, name in pairs(all) do
 				if type(name) == "string" then
-					local len = string.match(name, "runaround_standin/standin_(%d+)%.mdl")
-					if len then standInIds[tonumber(len)] = id end
+					local cm = string.match(name, "runaround_standin/standin_cm(%d+)%.mdl")
+					if cm then standInIds[tonumber(cm) / 100] = id end
 				end
 			end
 		end
@@ -466,11 +470,11 @@ end
 local function buildCreepConfig(tvc, a, b, locoSnap)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
-	if a > 0 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a), locoSnap) end
+	if a > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a), locoSnap) end
 	for _, part in ipairs(config.vehicles) do
 		if not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
 	end
-	if b > 0 then parts[#parts + 1] = makeStandInPart(findStandInModelId(b), locoSnap) end
+	if b > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(b), locoSnap) end
 	return finishConfig(config, parts)
 end
 
@@ -1407,15 +1411,18 @@ local function advanceLayout(run, dt)
 	if L.timer < CONFIG.creepStepSeconds then return false end
 	L.timer = 0
 	local half = L.len / 2
+	local step = CONFIG.creepStep or 0.25
 	if L.stage == "A" then
-		if L.a > half then
-			L.a, L.b, L.action = L.a - 1, L.b + 1, "replace"
+		if L.a > half + 1e-6 then
+			local d = math.min(step, L.a - half)
+			L.a, L.b, L.action = L.a - d, L.b + d, "replace"
 		else
 			L.stage, L.action = "flip", "flip"
 		end
 	elseif L.stage == "B" then
-		if L.b > 0 then
-			L.a, L.b, L.action = L.a + 1, L.b - 1, "replace"
+		if L.b > 1e-6 then
+			local d = math.min(step, L.b)
+			L.a, L.b, L.action = L.a + d, L.b - d, "replace"
 		else
 			L.stage = "done"
 			logInfo("creep: done")
@@ -1656,11 +1663,12 @@ local function startRunAround(state, vehicleEntity, loop)
 	local addTail = false
 	local creep = CONFIG.creepLayout and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	if creep then
-		-- an even length, so the train can be exactly symmetrical at the flip
-		local even = 2 * math.floor((locoLength or 12.0) / 2 + 0.5)
-		if even < 2 then even = 2 end
-		if even > 44 then even = 44 end
-		standId, standLength = findStandInModelId(even)
+		-- a multiple of 0.5 m, so it splits into two equal stand-ins (in 0.25 m
+		-- steps) and the train can be exactly symmetrical at the flip
+		local len = 0.5 * math.floor((locoLength or 12.0) / 0.5 + 0.5)
+		if len < 0.5 then len = 0.5 end
+		if len > 44 then len = 44 end
+		standId, standLength = findStandInModelId(len)
 	end
 	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
 	if not okBuild then

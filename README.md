@@ -1,6 +1,6 @@
-# Runaround Railways
+# Runaround Railways — ALPHA
 
-**Your locomotive runs round its train at the terminus, instead of the game's
+**Your locomotive runs around its train at the terminus, instead of the game's
 instant flip.**
 
 When a train arrives at a terminus you've set up, the loco uncouples and drives
@@ -19,9 +19,12 @@ engine that arrived bunker-first leaves chimney-first, as it would for real.
 - Works with every base-game and DLC loco. Works with modded locos too; see
   [Modded locos](#modded-locos).
 
-> **Status: early release.** It works end to end in a live game, but it has
-> only been tried on a few layouts. Please report problems. See
-> [Reporting a problem](#reporting-a-problem).
+> **ALPHA — an early test release.** It works end to end in a live game, but
+> it has only been tried on a few layouts. Expect rough edges, and please tell
+> me what breaks. See [Reporting a problem](#reporting-a-problem). Saves with
+> run-arounds set up stay compatible as it develops.
+
+*Also known as: run-around, run round, runaround, run-round loop.*
 
 ---
 
@@ -42,7 +45,7 @@ run-arounds set up is safe too: trains then flip as normal.
 1. **Open a train's window.** Pick any train on the line. It gets a
    **Run-around** card.
 2. **Add a run-around.** The card lists the stops of that line, with the one the
-   train is at first. Click the station where the loco should run round. The
+   train is at first. Click the station where the loco should run around. The
    run-around is named after the station.
 3. **Draw the route.** Click **Edit route on map**, then click a few points on
    the track where the loco should go, in order. For a simple loop that's
@@ -58,7 +61,7 @@ run-arounds set up is safe too: trains then flip as normal.
 4. **Check it.** The card shows the route's length, reversals and points. A
    warning says which two points could not be joined.
 5. **That's it.** The next time a train on that line arrives there, its loco
-   runs round.
+   runs around.
 
 ## The Run-around card
 
@@ -66,13 +69,13 @@ In the train window, one card per run-around on the train's line.
 
 - **Route line**: length, reversals and points, or what's missing.
 - **While a run-around is happening**: a progress bar and what the loco is doing
-  (running round, turning the train, coupling on).
+  (running around, turning the train, coupling on).
 - **Edit route on map / Done**: draws the route and adds clicked points.
   - **Undo point** and **Clear points** appear while editing.
 - **Show / Hide**: draws the route without editing.
 - **Settings** (the collapsible part):
   - **Name**: click the pencil to rename.
-  - **Speed** and **Acceleration** of the loco while it runs round.
+  - **Speed** and **Acceleration** of the loco while it runs around.
   - **Loco**: *automatic* (the default) or a chosen part of the train.
     Automatic picks the part standing nearest the first route point, which works
     for trains with different locos on the same line.
@@ -128,10 +131,10 @@ at the front throughout, so the game's vehicle marker keeps still.
 
 Every rail loco is prepared when the game loads, including modded ones.
 
-- **Uses the game's own sound set and train animation script:** runs round as
+- **Uses the game's own sound set and train animation script:** runs around as
   itself, with its own sound, smoke, wheels and paint. That's every base-game
   and DLC loco, and many mods.
-- **Brings its own sound set or animation script:** runs round as a copy of its
+- **Brings its own sound set or animation script:** runs around as a copy of its
   own model, with its smoke, wheels and paint. It has sound only if it uses one
   of the game's sound sets. The game doesn't let mods create sound sets while
   it runs, so only sound sets shipped as files can be wrapped.
@@ -157,7 +160,7 @@ Useful log lines:
 | Line | Meaning |
 |---|---|
 | `loco setup: N locos; M can be their own ghost, ...` | at start-up, how many locos were prepared |
-| `ghost model: using the loco's OWN model` | the loco runs round as itself |
+| `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
 | `creep: ...` | the coaches moving and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
@@ -175,7 +178,7 @@ These are in the files, for tinkering. Most people won't need them.
 | `creepLayout` | `true` | creep the coaches forward; `false` = they jump once at the flip |
 | `creepStep` | `0.25` | metres per creep step: bigger = fewer, larger steps |
 | `creepStartDistance` | `30` | how far the loco drives before the creep starts |
-| `useRealModel` | `true` | run round as the loco's own model when possible |
+| `useRealModel` | `true` | run around as the loco's own model when possible |
 | `useEffectGhosts` | `true` | otherwise use the copy with smoke and sound |
 | `verifyFacing` | `true` | check the loco's facing after coupling, and correct it |
 | `LOG_ARRIVALS`, `LOG_TRACES` | `true` | logging |

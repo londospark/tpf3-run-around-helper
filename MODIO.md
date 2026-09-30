@@ -2,7 +2,7 @@
 
 ## Name
 
-Runaround Railways
+Runaround Railways (ALPHA)
 
 ## Author
 
@@ -10,15 +10,21 @@ LondoSpark
 
 ## Summary (max 250 characters)
 
-Your locomotive runs round its train at the terminus instead of the instant flip. Click a few points on the track, and the loco uncouples, runs round with its own sound, smoke and paint, and couples on at the other end.
+ALPHA. Your loco runs around its train at the terminus instead of the instant flip. Click a few points on the track: it uncouples, runs around with its own sound, smoke and paint, and couples on at the other end.
 
 ## Tags
 
-Script Mod, Trains, Gameplay
+Script Mod, Trains, Gameplay, Alpha
+
+## Search keywords (put these in the description so people find it)
+
+run around, run-around, runaround, run round, run-round loop, locomotive, loco, terminus, flip, reverse, shunting, headshunt, wye, steam
 
 ## Description (paste into the description field; it is HTML)
 
-<p><strong>Your locomotive runs round its train at the terminus, instead of the game's instant flip.</strong></p>
+<p><strong>ALPHA - an early test release. It works, but it has only been tried on a few layouts: please try it and tell me what breaks.</strong></p>
+
+<p><strong>Your locomotive runs around its train at the terminus, instead of the game's instant flip.</strong> A proper run-around (run round, run-round loop) for Transport Fever 3.</p>
 
 <p>When a train arrives at a terminus you've set up, the loco uncouples and drives off along the route you picked: into a loop, onto a headshunt or round a wye. It reverses where it needs to, comes back down the other road and couples on at the far end. Then the train leaves with the loco leading.</p>
 
@@ -31,14 +37,14 @@ Script Mod, Trains, Gameplay
 <li>Set up entirely in game: click a few points on the track and the route is worked out for you with the game's own pathfinder, including where to reverse.</li>
 <li>The route is drawn on the track while you edit it.</li>
 <li>Any number of stations, on any number of lines. Every train on the line does it, clones included.</li>
-<li>Your loco runs round as itself: its own model, sound, smoke, turning wheels and paint.</li>
+<li>Your loco runs around as itself: its own model, sound, smoke, turning wheels and paint.</li>
 <li>Works with every base-game and DLC locomotive, and with modded locos (see below).</li>
 </ul>
 
 <h2>How to set up a run-around</h2>
 <ol>
 <li><strong>Open a train's window.</strong> Pick any train on the line. It has a new <strong>Run-around</strong> card.</li>
-<li><strong>Add a run-around.</strong> The card lists the stops of that line, with the one the train is at first. Click the station where the loco should run round.</li>
+<li><strong>Add a run-around.</strong> The card lists the stops of that line, with the one the train is at first. Click the station where the loco should run around.</li>
 <li><strong>Draw the route.</strong> Click <strong>Edit route on map</strong>, then click a few points on the track where the loco should go, in order. For a simple loop that's usually:
   <ol>
   <li>a piece of track beyond the points, where the loco will stop and reverse;</li>
@@ -47,7 +53,7 @@ Script Mod, Trains, Gameplay
   </ol>
 You don't click every piece of track, the station, or the exact reversing spot. The loco reverses just clear of the points. Right-click, Esc or <strong>Done</strong> when finished.</li>
 <li><strong>Check it.</strong> The card shows the route's length, reversals and points. A warning says which two points couldn't be joined.</li>
-<li><strong>That's it.</strong> The next time a train on that line arrives there, its loco runs round.</li>
+<li><strong>That's it.</strong> The next time a train on that line arrives there, its loco runs around.</li>
 </ol>
 
 <p>On the map, the route runs from <strong>blue</strong> at the start to <strong>orange</strong> at the end. The pieces where the loco reverses are <strong>purple</strong>, and the pieces you clicked have a <strong>white line</strong>. The card's settings hold the name, the loco's speed and acceleration, which part of the train is the loco (automatic by default), and delete.</p>
@@ -56,8 +62,8 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <ul>
 <li><strong>One loco plus coaches or wagons.</strong> Multiple units and double-heading are not handled yet.</li>
 <li><strong>The running loco ignores signals.</strong> Use a loop that other trains won't be on at the same time.</li>
-<li><strong>The coaches creep forward by one loco length</strong> while the loco is away. A train that has had its loco run round really is a loco length further along the track. In this game that can only happen by the coaches moving, so they slide a quarter of a metre at a time instead of jumping.</li>
-<li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run round as themselves. Those with their own sound or animation scripts run round as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets.</li>
+<li><strong>The coaches creep forward by one loco length</strong> while the loco is away. A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so they slide a quarter of a metre at a time instead of jumping.</li>
+<li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets.</li>
 <li>Run-arounds belong to a line and a stop. If you insert or remove stops earlier in the line, check the run-around still points at the right station.</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
 </ul>

@@ -355,7 +355,7 @@ function data()
 	-- Loop card content
 	-- ------------------------------------------------------------------
 	local PHASES = {
-		[""] = "Running round",
+		[""] = "Running around",
 		flip = "Turning the train",
 		settle = "Turning the train",
 		approach = "Coupling on",
@@ -375,7 +375,7 @@ function data()
 	local function RunStatus(loop, runs, vehicleEntity)
 		for _, run in ipairs(runs) do
 			if run.loop ~= nil and run.loop.id == loop.id and (vehicleEntity == nil or run.vehicleEntity == vehicleEntity) then
-				local text = PHASES[run.phase or ""] or "Running round"
+				local text = PHASES[run.phase or ""] or "Running around"
 				local progress = 0.0
 				if run.phase == nil and (loop.routeLength or 0) > 0 then
 					progress = math.min((run.gdist or 0) / loop.routeLength, 1.0)
@@ -536,7 +536,7 @@ function data()
 		end
 		if #addButtons > 0 then
 			local intro = Column({
-				Text(#cards == 0 and "Have the loco run round its train at a terminus instead of the instant flip. Add a run-around at:"
+				Text(#cards == 0 and "Have the loco run around its train at a terminus instead of the instant flip. Add a run-around at:"
 					or "Add a run-around at:", "font-scale-body"),
 				Buttons(addButtons),
 			}, "box-plugin-vertical-space")

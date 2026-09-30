@@ -5,9 +5,9 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Makes the locomotive run around its train at a chosen terminus instead of the game's instant flip. Pick a few points on the map in game; the loco runs round with its own sound, smoke, wheels and paint, reversing where needed, and couples on at the other end facing the right way.",
-    "name": "Runaround Railways",
-    "summary": "Your locomotive runs round its train at the terminus instead of the instant flip. Click a few points on the track; it uncouples, runs round with its own sound, smoke and paint, and couples on at the other end.",
+    "description": "ALPHA - early test release, feedback wanted. Run-around / run round / runaround for locomotives: instead of the game's instant flip at a terminus, the loco uncouples, runs around its train along a loop, headshunt or wye you pick on the map, and couples on at the other end, with its own sound, smoke, wheels and paint. Set up in the train window; see the README.",
+    "name": "Runaround Railways (ALPHA)",
+    "summary": "ALPHA. Your loco runs around its train at the terminus instead of the instant flip. Click a few points on the track: it uncouples, runs around with its own sound, smoke and paint, and couples on at the other end.",
     "tags": [
         "Script Mod"
     ],

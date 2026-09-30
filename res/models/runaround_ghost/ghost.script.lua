@@ -10,8 +10,13 @@ local function clamp(x, lo, hi)
 	return x
 end
 
-local updateFn = function(_captureParams, _params, _transfsOutput)
-	-- nothing to animate yet
+local updateFn = function(_captureParams, params, transfsOutput)
+	local cs = params.currentInfo.customState
+	local st = cs and cs.state
+	if st ~= nil and st.color ~= nil then
+		-- the loco's paint, as the colour attribute (position 0) of the instance
+		transfsOutput:setModelInstanceAttributeVec3f(0, api.type.Vec3f.new(st.color[1] or 0.0, st.color[2] or 0.0, st.color[3] or 0.0))
+	end
 end
 
 local updateParticleSystemFn = function(_captureParams, params, particleSystem)

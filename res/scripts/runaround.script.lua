@@ -437,7 +437,7 @@ local function pushGhostState(run, speed, vx, vy, dt, force)
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
-		state = { speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = run.headingFlipped and -1 or 1, t0 = gameTimeMs() },
+		state = { color = run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = run.headingFlipped and -1 or 1, t0 = gameTimeMs() },
 	})
 	if ok then
 		api.cmd.sendCommand(cmd)
@@ -1487,6 +1487,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				standInModelId = standId,
 				hasTail = hasTail,
 				effects = ghostEffects,
+				color = locoSnap.color and { locoSnap.color.x, locoSnap.color.y, locoSnap.color.z } or nil,
 				topSpeed = locoTopSpeed,
 				origRev = origRev,
 				ghost = ghost,

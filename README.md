@@ -168,6 +168,12 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Paint on the ghost (untested).** The real loco's colour is saved and put
+  back exactly as before. The ghost now wears it too: the colour is sent in the
+  ghost's state and set as the model instance's colour attribute (position 0) by
+  the wrapper (own-model ghost) or the ghost transformator (ghost copy). Whether
+  a free entity honours that attribute is not known yet; if the ghost shows the
+  default paint, this is why.
 - **Third live run: smoke works, sound does not yet, loco facing now checked
   (untested).** The log showed `built effects ghosts for 58 of 4586 models` and
   smoke on the ghost. Every sound set failed to add (`std::exception` from

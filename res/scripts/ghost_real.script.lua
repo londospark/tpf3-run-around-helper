@@ -24,6 +24,17 @@ local function base(ref)
 	return baseCache[ref]
 end
 
+-- The loco's paint: the ghost's state carries the colour the real loco had, and it
+-- is put on the model instance as the colour attribute (position 0), the way
+-- the game's transformators are written to (see the commented-out line in
+-- transformator_train.script).
+local function applyColor(st, transfsOutput)
+	local c = st.color
+	if c ~= nil then
+		transfsOutput:setModelInstanceAttributeVec3f(transformator_util.colorAttributePostition, api.type.Vec3f.new(c[1] or 0.0, c[2] or 0.0, c[3] or 0.0))
+	end
+end
+
 local function stateOf(currentInfo)
 	local cs = currentInfo.customState
 	return cs and cs.state or nil
@@ -80,6 +91,7 @@ local function trainUpdateFn(captureParams, params, transfsOutput)
 	if st.t0 ~= nil and now ~= nil then
 		dist = dist + (st.speed or 0.0) * math.max(now - st.t0, 0.0) / 1000.0
 	end
+	applyColor(st, transfsOutput)
 	local reversed = (st.dir or 1) < 0
 	transformator_util.addDriveAnimationState(dist, reversed, transfsOutput)
 	-- radius and duration of the loco's driving wheels are not available to a

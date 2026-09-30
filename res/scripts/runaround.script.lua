@@ -47,16 +47,21 @@ local CONFIG = {
 	-- Use the ghost copies built at load time (loco's meshes, smoke, sound) rather
 	-- than the plain silent copies shipped in res/models/runaround_ghost/.
 	useEffectGhosts = true,
-	-- Balance the train so that nothing moves. A vehicle replace keeps the CENTRE OF
-	-- THE FRONT PART where it was (traced live: a 1 m stand-in for a 12.8 m loco
-	-- stayed on the loco's centre and every wagon moved 5.9 m towards it), and the
-	-- flip mirrors the train about its middle. So: a stand-in exactly as long as the
-	-- loco in its place (nothing moves), and a second one of the same length on the
-	-- far end (added behind the front, nothing moves). The train is then symmetrical
-	-- about the wagons, so the flip leaves them where they are and puts the front
-	-- stand-in at the exit end; the loco replaces it there and the far one goes
-	-- (nothing moves). Only when the loco is the first part of the train.
-	balanceWithTail = true,
+	-- Move the coaches along by the loco's length gradually while the loco is away,
+	-- instead of in one jump. A vehicle replace keeps the MIDDLE of the train where
+	-- it was (traced live: adding or removing length moves both ends by half of it),
+	-- and the flip mirrors the train about that middle, so nothing but driving can
+	-- move the middle. A real run-around moves the train's middle by a loco length
+	-- (the loco ends up beyond the far coach), so the coaches have to shift by one
+	-- loco length at some point. Here they creep there in 1 m steps: the stand-in
+	-- in front of them shrinks while a second one behind them grows (same total
+	-- length), the train is flipped when it is symmetrical (so the flip moves
+	-- nothing), and the creep finishes on the other side. Only when the loco is
+	-- the first part of the train.
+	creepLayout = true,
+	-- seconds between creep steps, and how far the loco drives before they start
+	creepStepSeconds = 0.35,
+	creepStartDistance = 30.0,
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
@@ -277,6 +282,15 @@ local function findStandInModelId(wantLength)
 	return standInIds[bestLen], bestLen
 end
 
+-- True for any of the stand-in models.
+local function isStandIn(modelId)
+	if standInIds == nil then findStandInModelId(12) end
+	for _, id in pairs(standInIds or {}) do
+		if id == modelId then return true end
+	end
+	return false
+end
+
 local function carriagePos(carriageEntity)
 	local mil = api.engine.getComponent(carriageEntity, api.type.ComponentType.MODEL_INSTANCE_LIST)
 	return mil.fatInstances[1].transf:cols(3)
@@ -446,6 +460,20 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 	return finishConfig(config, parts)
 end
 
+-- The creep layout (see creepLayout): the coaches in their current order, with a
+-- stand-in of length a in front (the head) and one of length b behind, either
+-- left out when its length is 0.
+local function buildCreepConfig(tvc, a, b, locoSnap)
+	local config = api.type.TransportVehicleConfig.new(tvc)
+	local parts = {}
+	if a > 0 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a), locoSnap) end
+	for _, part in ipairs(config.vehicles) do
+		if not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
+	end
+	if b > 0 then parts[#parts + 1] = makeStandInPart(findStandInModelId(b), locoSnap) end
+	return finishConfig(config, parts)
+end
+
 -- Config with the stand-in(s) taken out and the real locomotive put back on the
 -- train. A loco cannot pass through its consist, so it can only couple onto the
 -- end it arrives at; which end that is comes from where the run finished (see
@@ -464,7 +492,7 @@ local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear,
 	if origRev ~= nil then
 		local wagons = {}
 		for _, part in ipairs(config.vehicles) do
-			if part.part.modelId ~= standId then wagons[#wagons + 1] = part end
+			if not isStandIn(part.part.modelId) then wagons[#wagons + 1] = part end
 		end
 		local parts = { loco }
 		for i = #wagons, 1, -1 do
@@ -478,7 +506,7 @@ local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear,
 	local parts = {}
 	if not attachAtRear then parts[1] = loco end
 	for _, part in ipairs(config.vehicles) do
-		if part.part.modelId ~= standId then -- the stand-in goes away here
+		if not isStandIn(part.part.modelId) then -- the stand-ins go away here
 			parts[#parts + 1] = part
 		end
 	end
@@ -961,9 +989,36 @@ local function locateOnRoute(loop, pos)
 	return bestK, bestS, math.sqrt(bestD2)
 end
 
+-- Where the loco goes back on after the creep: the stand-in left on the train,
+-- found by its model (not by list position, which misled the ghost into
+-- driving back through the coaches, live).
+local function readStandInPosition(vehicleEntity, awayFrom)
+	local best, bestD = nil, -1
+	pcall(function()
+		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+		for _, c in ipairs(cl.carriages) do
+			local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
+			local inst = mil.fatInstances[1]
+			if isStandIn(inst.modelId) then
+				local p = inst.transf:cols(3)
+				local d = awayFrom and ((p.x - awayFrom.x) ^ 2 + (p.y - awayFrom.y) ^ 2) or 0
+				if d > bestD then best, bestD = { x = p.x, y = p.y, z = p.z }, d end
+			end
+		end
+	end)
+	return best
+end
+
 -- The route is done: with the flip enabled the train is flipped next and the
 -- ghost then glides to where the loco goes back on; without it, the run ends.
 local function routeFinished(run)
+	if run.layout ~= nil and run.phase == nil then
+		run.phase = "waitLayout"
+		run.speed = 0.0
+		startSegment(run, 0.0, 0.0, 0.0)
+		pushGhostState(run, 0.0, 0.0, 0.0, 0.0)
+		return false
+	end
 	if CONFIG.reverseBeforeRecouple and run.phase == nil then
 		run.phase = "flip"
 		run.speed = 0.0
@@ -1033,6 +1088,23 @@ local function advanceGhost(run, dt)
 				logInfo("could not read the stand-in's position after the flip - the loco goes straight back on")
 				run.phase = "finish"
 			end
+		end
+		return false
+	end
+	if run.phase == "waitLayout" then
+		local L = run.layout
+		if L.stage == "done" or (L.stage == "failed" and run.flipped) then
+			run.target = readStandInPosition(run.vehicleEntity, run.locoPos)
+			if run.target ~= nil then
+				logInfo(string.format("ghost heading for the stand-in at %.1f, %.1f", run.target.x, run.target.y))
+				run.phase = "approach"
+			else
+				run.phase = "finish"
+			end
+		elseif L.stage == "failed" then
+			run.layout = nil -- not flipped: the plain way (flip now)
+			run.phase = nil
+			return routeFinished(run)
 		end
 		return false
 	end
@@ -1149,6 +1221,15 @@ end
 -- path so a problem here never leaves a train stuck at the station.
 local function releaseTrain(vehicleEntity)
 	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, false))
+	pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleSetStoppedByUserCmd(vehicleEntity, false)) end)
+end
+
+-- Keeps the train where it is. Sent again after every flip and replace: after a
+-- flip the train crept 18 m towards the exit on its two 1 kW stand-ins before the
+-- loco came back (traced live).
+local function holdTrain(vehicleEntity)
+	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, true))
+	pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleSetStoppedByUserCmd(vehicleEntity, true)) end)
 end
 
 -- True to attach at the rear (last part) of the consist, false for the front
@@ -1213,7 +1294,7 @@ end
 -- Ends a run: the ghost goes, the train is released.
 local function finalizeRun(run)
 	if not run.ghostGone then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
-	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
+	releaseTrain(run.vehicleEntity)
 	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
 	logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
 end
@@ -1311,6 +1392,87 @@ local function updateRun(state, vehicleEntity, fn)
 	state:set(data)
 end
 
+-- Steps the creep layout on (see creepLayout). Returns true when a command is
+-- due, which layoutStep then sends from postUpdate.
+local function advanceLayout(run, dt)
+	local L = run.layout
+	if L == nil or L.busy or L.stage == "done" or L.stage == "failed" then return false end
+	if L.stage == "waiting" then
+		if (run.gdist or 0) < CONFIG.creepStartDistance then return false end
+		L.stage = "A"
+		L.timer = 0
+		logInfo("creep: moving the coaches along by", L.len, "m while the loco is away")
+	end
+	L.timer = (L.timer or 0) + dt
+	if L.timer < CONFIG.creepStepSeconds then return false end
+	L.timer = 0
+	local half = L.len / 2
+	if L.stage == "A" then
+		if L.a > half then
+			L.a, L.b, L.action = L.a - 1, L.b + 1, "replace"
+		else
+			L.stage, L.action = "flip", "flip"
+		end
+	elseif L.stage == "B" then
+		if L.b > 0 then
+			L.a, L.b, L.action = L.a + 1, L.b - 1, "replace"
+		else
+			L.stage = "done"
+			logInfo("creep: done")
+			return false
+		end
+	else
+		return false
+	end
+	L.busy = true
+	return true
+end
+
+local function layoutStep(state, vehicleEntity)
+	local data = state:get()
+	local run = nil
+	for _, r in ipairs(data.runs) do if r.vehicleEntity == vehicleEntity then run = r end end
+	if run == nil or run.layout == nil then return end
+	local L = run.layout
+	local function done(fn)
+		holdTrain(vehicleEntity)
+		updateRun(state, vehicleEntity, function(r)
+			if r.layout ~= nil then
+				r.layout.busy = false
+				if fn then fn(r) end
+			end
+		end)
+	end
+	local function fail(why)
+		logInfo("creep: stopped -", why)
+		done(function(r) r.layout.stage = "failed" end)
+	end
+	if L.action == "flip" then
+		local ok, cmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
+		if not ok then return fail("reverse command rejected: " .. tostring(cmd)) end
+		api.cmd.sendCommand(cmd, function(_, success)
+			if not success then return fail("reverse command failed") end
+			logInfo("creep: train flipped (it is symmetrical now, so nothing should move)")
+			scheduleTrace(state, "after the flip (+4 ticks)", vehicleEntity, 4)
+			done(function(r)
+				r.layout.stage = "B"
+				r.flipped = true
+			end)
+		end)
+		return
+	end
+	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+	if tv == nil then return fail("the train is gone") end
+	local okB, cfg = pcall(buildCreepConfig, tv.transportVehicleConfig, L.a, L.b, run.locoPart)
+	if not okB then return fail("could not build the layout: " .. tostring(cfg)) end
+	local okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, cfg)
+	if not okC then return fail("replace rejected: " .. tostring(cmd)) end
+	api.cmd.sendCommand(cmd, function(_, success)
+		if not success then return fail("replace failed") end
+		done(nil)
+	end)
+end
+
 -- The game flips a train that has to leave a terminus by the way it came (it
 -- mirrors the consist end for end and keeps the parts list order), and it does
 -- that at departure. A loco coupled on at the exit end was therefore flipped
@@ -1394,7 +1556,8 @@ local function finishRun(state, run)
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
 		-- Head faces the exit and the stand-in is the head part: loco goes there.
-		recouple(state, run, tv, false, reversed, "train was flipped first, loco takes the head, wagons restored; " .. tostring(why), run.origRev or {})
+		local restore = run.layout == nil and (run.origRev or {}) or nil
+		recouple(state, run, tv, false, reversed, "train was flipped first, loco takes the head; " .. tostring(why), restore)
 		return
 	end
 	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
@@ -1490,7 +1653,15 @@ local function startRunAround(state, vehicleEntity, loop)
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
 	end
-	local addTail = CONFIG.balanceWithTail and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
+	local addTail = false
+	local creep = CONFIG.creepLayout and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
+	if creep then
+		-- an even length, so the train can be exactly symmetrical at the flip
+		local even = 2 * math.floor((locoLength or 12.0) / 2 + 0.5)
+		if even < 2 then even = 2 end
+		if even > 44 then even = 44 end
+		standId, standLength = findStandInModelId(even)
+	end
 	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
@@ -1503,7 +1674,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	end
 
 	traceNow("before the detach", vehicleEntity)
-	api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(vehicleEntity, true))
+	holdTrain(vehicleEntity)
 
 	api.cmd.sendCommand(replaceCmd, function(_, success)
 		if not success then
@@ -1556,6 +1727,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				standInModelId = standId,
 				standInLength = standLength,
 				hasTail = addTail,
+				layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
 				locoLength = locoLength,
 				startHead = startHead,
 				startSign = startSign,
@@ -1883,6 +2055,11 @@ return {
 					result.finishes[#result.finishes + 1] = run
 				else
 					remaining[#remaining + 1] = run
+					if advanceLayout(run, dt) then
+						result = result or {}
+						result.layout = result.layout or {}
+						result.layout[#result.layout + 1] = run.vehicleEntity
+					end
 					if run.phase == "flip" and not run.flipSent then
 						run.flipSent = true
 						result = result or {}
@@ -1917,6 +2094,12 @@ return {
 				if loop ~= nil then
 					startRunAround(state, p.vehicleEntity, loop)
 				end
+			end
+		end
+
+		if updateResult.layout ~= nil then
+			for _, vehicleEntity in ipairs(updateResult.layout) do
+				layoutStep(state, vehicleEntity)
 			end
 		end
 

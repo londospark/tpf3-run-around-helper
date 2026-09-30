@@ -4,7 +4,6 @@
 	  * A "Run-around" card in the train window (VehicleEowExtensionPoint): set up
 	    a run-around at the stop the train is at, see the route and a live run,
 	    edit the route on the map, and tune it.
-	  * A "Run-Around" button in the mod-button area listing every loop.
 	  * The route tool: while it is active the loop's route is drawn on the
 	    track (builtin.NodeViewer: a colour gradient from start to finish, the
 	    reversing pieces highlighted, the clicked pieces marked), and in edit mode
@@ -28,8 +27,6 @@ function data()
 	local react = ug_require "::/gui/main/react.lua"
 	local builtin = ug_require "::/gui/main/builtin.lua"
 	local gui_react_util = ug_require "::/gui/main/gui_react_util.tl"
-	local main_mod_button_area = ug_require "::/gui/main/main_mod_button_area.tl"
-	local mod_entry_point = ug_require "::/gui/main/mod_entry_point.tl"
 	local okCard, content_card = pcall(function() return ug_require "::/gui/main/content_card.tl" end)
 	if not okCard then content_card = nil end
 	local okEow, vehicle_eow = pcall(function() return ug_require "::/gui/entity_window/vehicle/vehicle_eow.script.tl" end)
@@ -558,49 +555,6 @@ function data()
 		return Column(cards, "box-plugin-vertical-space")
 	end)
 
-	-- ------------------------------------------------------------------
-	-- Mod-button panel: every loop
-	-- ------------------------------------------------------------------
-	local AllLoopsPanel = react.RegisterRecipe("RunAroundAllLoops", function()
-		local st = react.useState(readState())
-		local tick = react.useRef(0)
-		react.onStep(function()
-			tick:set(tick:get() + 1)
-			if tick:get() % 15 == 0 then st:set(readState()) end
-		end)
-		local state = st:old() or { loops = {}, runs = {} }
-		local rows = { Text("Run-arounds", "font-scale-title-4") }
-		if #state.loops == 0 then
-			rows[#rows + 1] = Text("None yet. Open a train's window and add one at any stop of its line.", "font-scale-body")
-		end
-		for _, loop in ipairs(state.loops) do
-			local text, icon = routeLine(loop)
-			rows[#rows + 1] = Column({
-				Text(loopName(loop), "font-scale-body"),
-				Text(loopPlace(loop), "font-scale-annotation"),
-				Row({ Icon(icon), Text(text, "font-scale-annotation") }),
-				RunStatus(loop, state.runs, nil),
-				Buttons({
-					IconButton(ICON.eye, "Show on map", "Draw this route on the track (Esc to hide)", function() toggleRouteTool(loop.id, false, nil) end, "secondary"),
-					IconButton(ICON.edit, "Edit route", "Edit this route on the map", function() toggleRouteTool(loop.id, true, nil) end, "secondary"),
-				}),
-				LoopSettings{ loop = loop, vehicleEntity = nil },
-			}, "box-plugin-vertical-space")
-		end
-		return Column(rows)
-	end)
-
-	local function ToggleButtonPanel()
-		local open = react.useState(false)
-		return Column({
-			IconButton(ICON.route, "Run-Around", "Run Around Helper: every run-around", function() open:set(not open:old()) end),
-			open:old() and AllLoopsPanel{} or nil,
-		})
-	end
-
-	local RunAroundHelperButton = react.RegisterPluginRecipe(main_mod_button_area.MainModButtonAreaExtension, "RunAroundHelperButton", ToggleButtonPanel)
-	local RunAroundHelperEntry = react.RegisterPluginRecipe(mod_entry_point.ModEntryPointExtension, "RunAroundHelperEntry", ToggleButtonPanel)
-
 	local RunAroundHelperVehiclePlugin = nil
 	if vehicle_eow ~= nil then
 		local ok, recipe = pcall(function()
@@ -616,8 +570,6 @@ function data()
 	print("[RunAroundHelper] GUI registered")
 
 	return {
-		RunAroundHelperButton = RunAroundHelperButton,
-		RunAroundHelperEntry = RunAroundHelperEntry,
 		RunAroundHelperVehiclePlugin = RunAroundHelperVehiclePlugin,
 	}
 end

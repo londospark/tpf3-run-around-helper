@@ -158,12 +158,12 @@ local function isRailEngine(meta)
 	return tv ~= nil and tv.carrier == "RAIL" and lv ~= nil and lv.engines ~= nil and #lv.engines > 0
 end
 
-local function build(modelId, modelName, trfName)
+local function build(modelId, modelName, trfName, namePrefix)
 	local ok, src = pcall(api.res.modelRep.getAsTable, modelId)
 	if not ok or type(src) ~= "table" or not isRailEngine(src.metadata) then return false end
 	local file = string.match(modelName, "([^/]+)%.mdl$")
 	if file == nil or string.find(modelName, "runaround_", 1, true) then return false end
-	local ghostName = "runaround_ghost_dyn/" .. file .. ".mdl"
+	local ghostName = (namePrefix or "runaround_ghost_dyn/") .. file .. ".mdl"
 	if api.res.modelRep.find(ghostName) >= 0 then return true end
 
 	local meta = src.metadata
@@ -199,7 +199,15 @@ end
 -- ---------------------------------------------------------------------
 local BASE_SOUND_UPDATE = "::/scripts/soundset_default.script@updateSoundSet"
 local patchedSoundSets = {}
+local realReady = {} -- model id -> true when the loco can be its own ghost
 local patchStats = { sounds = 0, soundFailed = 0, trfs = 0, trfFailed = 0, skipped = 0 }
+
+local skipLogs = 0
+local function skipLog(...)
+	skipLogs = skipLogs + 1
+	if skipLogs <= 6 then log("real-model support:", ...) end
+	patchStats.skipped = patchStats.skipped + 1
+end
 
 local function patchSoundSet(soundSetName, prefix, wrapperRef)
 	if soundSetName == nil then return end
@@ -212,11 +220,11 @@ local function patchSoundSet(soundSetName, prefix, wrapperRef)
 		local found = api.res.soundSetRep.find(c)
 		if found ~= nil and found >= 0 then id = found break end
 	end
-	if id == nil then patchStats.skipped = patchStats.skipped + 1 return end
+	if id == nil then skipLog("sound set not found:", soundSetName, "(tried", table.concat(candidates, ", ") .. ")") return end
 	local t = api.res.soundSetRep.getAsTable(id)
 	local us = t.updateScript
-	if type(us) ~= "table" or type(us.fileName) ~= "string" then patchStats.skipped = patchStats.skipped + 1 return end
-	if us.fileName ~= BASE_SOUND_UPDATE then patchStats.skipped = patchStats.skipped + 1 return end -- a custom update script: left alone
+	if type(us) ~= "table" or type(us.fileName) ~= "string" then skipLog("sound set", soundSetName, "has no readable update script:", type(us)) return end
+	if us.fileName ~= BASE_SOUND_UPDATE then skipLog("sound set", soundSetName, "has its own update script:", us.fileName) return end -- left alone
 	us.fileName = wrapperRef
 	local ok, res = pcall(api.res.soundSetRep.setAsTable, id, t)
 	if ok and res ~= false then
@@ -232,17 +240,19 @@ local function patchModelTransformator(modelId, src, realTrf)
 	local md = src.metadata
 	local name = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
 	if type(name) ~= "string" or not string.find(name, "default_train.trf", 1, true) then
-		patchStats.skipped = patchStats.skipped + 1
-		return
+		skipLog("model", modelId, "has its own transformator:", tostring(name))
+		return false
 	end
 	md.transformatorConfig.transformator.name = realTrf
 	local ok, res = pcall(api.res.modelRep.setAsTable, modelId, src)
 	if ok and res ~= false then
 		patchStats.trfs = patchStats.trfs + 1
+		return true
 	else
 		patchStats.trfFailed = patchStats.trfFailed + 1
 		if patchStats.trfFailed <= 3 then log("real-model support: could not patch the transformator of", modelId, "-", tostring(res)) end
 	end
+	return false
 end
 
 local function patchRealModelSupport(modId, all)
@@ -254,10 +264,12 @@ local function patchRealModelSupport(modId, all)
 			if ok and type(src) == "table" and isRailEngine(src.metadata) then
 				local md = src.metadata
 				local prefix = string.match(name, "^(.-)::") or ""
-				pcall(function()
-					patchSoundSet(md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name, prefix, soundWrapper)
-				end)
-				pcall(patchModelTransformator, id, src, realTrf)
+				local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
+				pcall(patchSoundSet, soundName, prefix, soundWrapper)
+				local okT, trfDone = pcall(patchModelTransformator, id, src, realTrf)
+				-- A loco is ready to be the ghost itself only if its transformator and (if it
+				-- has one) its sound set both went through the wrappers.
+				if okT and trfDone and (soundName == nil or patchedSoundSets[soundName] == true) then realReady[id] = true end
 			end
 		end
 	end
@@ -287,6 +299,9 @@ mod.postRunFn = function(_configDict, _allModParams)
 			tried = tried + 1
 			local ok, res = pcall(build, id, name, trfName)
 			if ok and res then built = built + 1 end
+			-- A marker the run script can see (it cannot read model metadata): this loco
+			-- may be used as its own ghost.
+			if realReady[id] then pcall(build, id, name, trfName, "runaround_ghost_real/") end
 		end
 	end
 	log("ghost models: built effects ghosts for", built, "of", tried, "models")

@@ -168,6 +168,28 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Fifth live run: wrong-way coupling for half a second, jerky wheels, and the
+  own-model ghost still not used (fixes untested).** The log showed why the loco
+  was first put on the wrong way: the flag was worked out from the carriages'
+  positions one tick after the flip, when the game still reports the old
+  positions (`dot = 1.00`, then `verify: ... dot = -1.00` and a correction). It
+  is now worked out from geometry that is known in advance: the loco's world
+  facing (the ghost's final facing, which follows the track, so it also copes
+  with a wye or balloon that really turns the loco), the train's head direction
+  (the one at the start, reversed once by the flip), and how the part's flag
+  related to its facing at the start. The reversal count does not decide this: a
+  loco that reverses does not turn round, so an odd or even count does not say
+  which way it faces; what changes the loco's facing relative to the train is
+  the train being flipped once, and any turning by the track. Wheels: the
+  animation is only updated once per simulation tick, so at the true rate they
+  jump a large part of a turn per tick; they now turn at about a third of the
+  true rate (`WHEEL_RADIUS` in `ghost_real.script.lua` / `ghost.script.lua`).
+  The own-model ghost was rejected because a game script cannot read model
+  metadata (`model not readable`); the load script now leaves a marker model
+  (`runaround_ghost_real/<file>.mdl`) for each loco it managed to wrap, and the
+  run script looks for that. `real-model support: patched 0 sound sets` in the log
+  means the sound sets were not patched; the load script now says why for the
+  first few.
 - **Fourth live run: real-model wrapper broke the train transformator, and two
   locos showed at coupling; both fixed, wheels reworked (untested).** The wrapper
   called the stock train transformator through `util.useFn`, which does not work

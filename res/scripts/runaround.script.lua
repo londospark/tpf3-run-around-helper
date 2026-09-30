@@ -388,31 +388,18 @@ end
 -- that at load). If not, using it would raise Lua errors every frame ("attempt to
 -- index local 'vehicleInfo'").
 local function realModelReady(locoModelId)
-	local ok, model = pcall(api.res.modelRep.getAsTable, locoModelId)
-	if not ok or type(model) ~= "table" or not model.metadata then return false, "model not readable" end
-	local md = model.metadata
-	local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
-	if trf ~= nil and not string.find(trf, "real.trf", 1, true) then return false, "its transformator was not patched (" .. tostring(trf) .. ")" end
-	local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
-	if soundName ~= nil then
-		local okS, patched = pcall(function()
-			local all = api.res.modelRep.getAll(true)
-			local modelName = all[locoModelId] or ""
-			local prefix = string.match(modelName, "^(.-)::") or ""
-			local candidates = { soundName }
-			if string.sub(soundName, 1, 1) == "/" then candidates[#candidates + 1] = prefix .. "::" .. soundName end
-			for _, c in ipairs(candidates) do
-				local id = api.res.soundSetRep.find(c)
-				if id ~= nil and id >= 0 then
-					local us = api.res.soundSetRep.getAsTable(id).updateScript
-					return us ~= nil and type(us.fileName) == "string" and string.find(us.fileName, "ghost_real.script", 1, true) ~= nil
-				end
-			end
-			return false
-		end)
-		if not okS or not patched then return false, "its sound set was not patched" end
+	-- Model metadata cannot be read from a game script, so ghost_build.script.lua
+	-- leaves a marker model, "runaround_ghost_real/<file>.mdl", for every loco whose
+	-- sound set and transformator it has wrapped.
+	local okAll, all = pcall(api.res.modelRep.getAll, true)
+	if not okAll or all == nil then return false, "models not listable" end
+	local locoName = all[locoModelId]
+	local base = type(locoName) == "string" and string.match(locoName, "([^/]+)%.mdl$") or nil
+	if base == nil then return false, "model name unknown" end
+	for _, name in pairs(all) do
+		if type(name) == "string" and string.find(name, "runaround_ghost_real/" .. base .. ".mdl", 1, true) then return true end
 	end
-	return true
+	return false, "its sound set or transformator was not wrapped at load"
 end
 
 -- Feeds an effects ghost's smoke and sound (see ghost.script.lua): its speed
@@ -1240,10 +1227,21 @@ end
 -- train and pulls it tender-first). reversed = facing against the train's
 -- head direction.
 local function locoIsReversed(run)
-	local dx, dy = headDirection(run.vehicleEntity)
-	if dx == nil or run.gyaw == nil then return nil, "unknown facing" end
-	local dot = math.cos(run.gyaw) * dx + math.sin(run.gyaw) * dy
-	return dot < 0, string.format("facing dot head direction = %.2f", dot)
+	if run.gyaw == nil or run.startHead == nil or run.startSign == nil then return nil, "no start geometry" end
+	-- The head direction now is the one at the start, or its opposite once the
+	-- game's flip has been done: known from the geometry, NOT read from the
+	-- carriages, whose positions are still the old ones for a tick or two after
+	-- a flip (that gave the wrong answer and showed the loco the wrong way for a
+	-- moment before the check put it right).
+	local hx, hy = run.startHead.x, run.startHead.y
+	if run.flipped then hx, hy = -hx, -hy end
+	local dot = math.cos(run.gyaw) * hx + math.sin(run.gyaw) * hy
+	local sign = dot >= 0 and 1 or -1
+	-- The part's flag was reversed=startReversed when its facing had sign
+	-- startSign against the head; the same sign needs the same flag.
+	local reversed = run.startReversed
+	if sign ~= run.startSign then reversed = not reversed end -- (not `and/or`: that fails when the flag is false)
+	return reversed, string.format("ghost facing dot head direction = %.2f (was %+d at the start with reversed=%s)", dot, run.startSign, tostring(run.startReversed))
 end
 
 -- Edits one run in the saved state (a run handed to postUpdate is a copy).
@@ -1417,10 +1415,13 @@ local function startRunAround(state, vehicleEntity, loop)
 		local lv = okM and type(model) == "table" and model.metadata and model.metadata.landVehicle
 		if lv and lv.topSpeed and lv.topSpeed > 1 then locoTopSpeed = lv.topSpeed end
 	end
+	local startHead, startSign = nil, nil
 	do
 		local okH, hx, hy = pcall(headDirection, vehicleEntity)
 		if okH and hx ~= nil and locoTransf ~= nil then
 			local c0 = locoTransf:cols(0)
+			startHead = { x = hx, y = hy }
+			startSign = (c0.x * hx + c0.y * hy) >= 0 and 1 or -1
 			logInfo(string.format("loco at start: part reversed=%s, facing dot train head direction = %.2f", tostring(locoSnap.reversed), c0.x * hx + c0.y * hy))
 		end
 	end
@@ -1490,6 +1491,9 @@ local function startRunAround(state, vehicleEntity, loop)
 				locoPart = locoSnap,
 				standInModelId = standId,
 				hasTail = hasTail,
+				startHead = startHead,
+				startSign = startSign,
+				startReversed = locoSnap.reversed and true or false,
 				effects = ghostEffects,
 				color = locoSnap.color and { locoSnap.color.x, locoSnap.color.y, locoSnap.color.z } or nil,
 				topSpeed = locoTopSpeed,

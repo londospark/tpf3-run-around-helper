@@ -58,7 +58,7 @@ local function applyColor(st, transfsOutput)
 	end
 end
 
-local WHEEL_RADIUS = 0.9 -- metres, typical driving wheel
+local WHEEL_RADIUS = 2.5 -- metres. A real driving wheel is about 0.9, but a script only sees the game time in whole simulation ticks, and at the true rate the wheel jumps a large part of a turn each tick (jerky); this turns them at about a third of the true rate
 local WHEEL_ANIMATION_MS = 5000 -- one revolution of the wheel animation
 
 local function stateOf(currentInfo)

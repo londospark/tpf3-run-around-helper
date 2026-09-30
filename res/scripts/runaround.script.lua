@@ -181,6 +181,10 @@ local function snapshotPart(tvp)
 	for i, lc in ipairs(tvp.part.compartment2loadConfig) do
 		loads[i] = { loadConfigIndex = lc.loadConfigIndex, cargoTypeId = lc.cargoTypeId }
 	end
+	local autos = {}
+	if tvp.autoLoadConfig ~= nil then
+		for i, b in ipairs(tvp.autoLoadConfig) do autos[i] = b end
+	end
 	local color = nil
 	local c = tvp.part.color
 	if c ~= nil then color = { x = c.x, y = c.y, z = c.z } end
@@ -189,6 +193,7 @@ local function snapshotPart(tvp)
 		reversed = tvp.part.reversed,
 		color = color,
 		loads = loads,
+		autos = autos,
 		purchaseTime = tvp.purchaseTime,
 		maintenanceChange = tvp.maintenanceChange,
 		maintenanceState = tvp.maintenanceState,
@@ -202,14 +207,20 @@ end
 -- one), never from a fixed number. Where the loco being put back had settings
 -- for a compartment (which load config is selected, and its cargo type), they
 -- are restored; anything the model has extra starts at load config 0.
-local function loadConfigsForModel(modelId, savedLoads)
+local function loadConfigsForModel(modelId, savedLoads, savedAutos)
 	local declared = nil
+	local optionCounts = {} -- per compartment: how many load configs the model offers
 	local ok, model = pcall(api.res.modelRep.get, modelId)
 	if ok and model ~= nil then
 		local okMeta, tvMeta = pcall(function() return model.metadata["transportVehicle"] end)
 		if okMeta and tvMeta ~= nil then
 			declared = 0
-			for _ in ipairs(tvMeta.compartments) do declared = declared + 1 end
+			for _, comp in ipairs(tvMeta.compartments) do
+				declared = declared + 1
+				local n = 0
+				for _ in ipairs(comp.loadConfigs) do n = n + 1 end
+				optionCounts[declared] = n
+			end
 		end
 	end
 	local count = declared or (savedLoads and #savedLoads) or 1
@@ -220,13 +231,24 @@ local function loadConfigsForModel(modelId, savedLoads)
 	for i = 1, count do
 		local lc = api.type.LoadConfig.new()
 		local saved = savedLoads and savedLoads[i]
-		lc.loadConfigIndex = saved and saved.loadConfigIndex or 0
+		local index = saved and saved.loadConfigIndex or 0
+		-- The game asserts 0 <= index < (number of load configs the model offers
+		-- for this compartment); a saved index from another model can exceed it.
+		if optionCounts[i] ~= nil and (index < 0 or index >= optionCounts[i]) then index = 0 end
+		lc.loadConfigIndex = index
 		if saved and saved.cargoTypeId ~= nil then
 			pcall(function() lc.cargoTypeId = saved.cargoTypeId end)
 		end
 		loads[i] = lc
 	end
-	return loads
+	-- The game also asserts autoLoadConfig.size() == compartment2loadConfig.size()
+	-- (vehicle_util_engine.cpp:352); a freshly created part has it empty.
+	local autos = {}
+	for i = 1, count do
+		local saved = savedAutos and savedAutos[i]
+		autos[i] = (saved == true)
+	end
+	return loads, autos
 end
 
 -- Rebuilds a real TransportVehiclePart from a snapshot (built the way
@@ -236,7 +258,9 @@ local function partFromSnapshot(snap, reversed)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = snap.modelId
 	part.part.reversed = reversed
-	part.part.compartment2loadConfig = loadConfigsForModel(snap.modelId, snap.loads)
+	local loads, autos = loadConfigsForModel(snap.modelId, snap.loads, snap.autos)
+	part.part.compartment2loadConfig = loads
+	part.autoLoadConfig = autos
 	if snap.color ~= nil then
 		part.part.color = api.type.Vec3f.new(snap.color.x, snap.color.y, snap.color.z)
 	end
@@ -280,7 +304,9 @@ local function makeStandInPart(standId, locoSnap)
 	local part = api.type.TransportVehiclePart.new()
 	part.part.modelId = standId
 	part.part.reversed = false
-	part.part.compartment2loadConfig = loadConfigsForModel(standId, nil)
+	local loads, autos = loadConfigsForModel(standId, locoSnap.loads, locoSnap.autos)
+	part.part.compartment2loadConfig = loads
+	part.autoLoadConfig = autos
 	part.purchaseTime = locoSnap.purchaseTime
 	part.maintenanceChange = locoSnap.maintenanceChange
 	part.maintenanceState = 1

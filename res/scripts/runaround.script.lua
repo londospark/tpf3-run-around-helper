@@ -471,13 +471,15 @@ end
 -- game's vehicle marker, which sits on it, stays still (it wiggled at every step
 -- when the head stand-in itself was shrinking).
 local CREEP_HEAD = 0.5
-local function buildCreepConfig(tvc, a, b, locoSnap)
+local function buildCreepConfig(tvc, a, b, locoSnap, skipIdx)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	parts[#parts + 1] = makeStandInPart(findStandInModelId(CREEP_HEAD), locoSnap)
 	if a - CREEP_HEAD > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a - CREEP_HEAD), locoSnap) end
-	for _, part in ipairs(config.vehicles) do
-		if not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
+	for i, part in ipairs(config.vehicles) do
+		-- skipIdx: the loco itself, at the detach (it is not a stand-in, so without
+		-- this it stayed on the train and the ghost made a second loco, live)
+		if i ~= skipIdx and not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
 	end
 	if b > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(b), locoSnap) end
 	return finishConfig(config, parts)
@@ -1691,7 +1693,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	end
 	local okBuild, strippedConfig
 	if creep then
-		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap)
+		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap, locoIdx)
 	else
 		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
 	end

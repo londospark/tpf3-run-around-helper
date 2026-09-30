@@ -93,15 +93,18 @@ While editing or showing:
 ## What happens during a run-around
 
 1. The train arrives and is held.
-2. The loco and every coach are shown as exact copies of themselves, on the
-   spot. The real train underneath is swapped for invisible stand-ins of the same
-   lengths, because a train without a powered vehicle crashes the game.
+2. The loco and every coach or wagon are shown as exact copies of themselves,
+   on the spot, with their own paint and, for wagons, their own load. The real
+   loco is swapped for an invisible stand-in of the same length, because a train
+   without a powered vehicle crashes the game. The real coaches and wagons stay
+   in the train, just hidden, so **passengers and goods stay aboard**.
 3. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-4. Out of sight, the invisible train is turned round. The coaches glide forward
-   by one loco length, see [The coaches move forward](#the-coaches-move-forward).
-5. The loco comes back, brakes to a stop against the far coach, and the real
-   train is swapped back in exactly where the copies are.
+4. Out of sight, the hidden train is turned round. The copied coaches glide
+   forward by one loco length, see [The coaches move forward](#the-coaches-move-forward).
+5. The loco comes back and brakes to a stop against the far coach. The real
+   loco takes the stand-in's place, the real coaches reappear exactly where the
+   copies are, and the copies go.
 6. The train loads as normal and leaves, with the loco leading.
 
 ## Tips and limitations
@@ -123,16 +126,17 @@ When the loco couples on at the far end, the train is a loco length further
 along the track than it was. In this game that can only happen by the coaches
 moving: a vehicle swap keeps the middle of the train fixed, and the flip mirrors
 the train about its middle. So while the loco is away, the coaches glide forward
-smoothly by one loco length, as copies, while the real train is rearranged out of
-sight. The game's vehicle marker only re-attaches three times: at the detach, the
+smoothly by one loco length, as copies, while the hidden real train is turned
+out of sight. The game's vehicle marker only re-attaches three times: at the detach, the
 turn and the recouple.
 
-Coaches that can't be shown as copies fall back to an older method: the real
-coaches creep in small steps, and the marker flickers.
+This works for passenger coaches and goods wagons alike. Nothing is taken out of
+the train: the coaches and wagons are the same vehicles throughout, so their
+passengers and cargo are kept.
 
-Passengers who boarded before the loco uncoupled may be lost, because the coaches
-are taken out of the train and put back. The train then loads again as normal
-before it leaves.
+A coach or wagon that can't be hidden (a modded one with its own animation
+script) makes the whole run fall back to an older method: the real coaches creep
+forward in small steps, and the marker flickers.
 
 ### Modded locos
 
@@ -166,7 +170,8 @@ Useful log lines:
 
 | Line | Meaning |
 |---|---|
-| `loco setup: N locos; M can be their own ghost, ...` | at start-up, how many locos were prepared |
+| `loco setup: N rail vehicles; M can be their own ghost, ...` | at start-up, how many locos, coaches and wagons were prepared |
+| `stand-in: ... m; loco ... m long (from its model)` | the loco's length, from its model or, failing that, from the carriage spacing |
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
 | `ghost rake: ...` | the coaches shown as copies, the slide and where it ends |
@@ -183,7 +188,7 @@ These are in the files, for tinkering. Most people won't need them.
 |---|---|---|
 | `detachEnabled` | `true` | turns the run-around off entirely |
 | `reverseBeforeRecouple` | `true` | turn the train before the loco couples on, so the game doesn't flip it back |
-| `ghostRake` | `true` | show the loco and coaches as copies and rearrange the invisible train (the smooth way) |
+| `ghostRake` | `true` | show the loco and coaches as copies, hide the real train and turn it out of sight (the smooth way) |
 | `rakeSlideSpeed` | `1.2` | m/s at which the copied coaches glide |
 | `creepLayout` | `true` | fallback when a coach can't be copied: the real coaches creep forward; `false` = they jump once at the flip |
 | `creepStep` | `0.25` | metres per creep step: bigger = fewer, larger steps |
@@ -202,12 +207,12 @@ untouched. Only the copies are then used.
 
 | File | Role |
 |---|---|
-| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts over an invisible stand-in train, drives the loco ghost along the planned route, turns and rearranges the invisible train, glides the coach ghosts, swaps the real train back |
+| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts, swaps the loco for an invisible stand-in and hides the real coaches, drives the loco ghost along the planned route, turns the hidden train, glides the coach ghosts, puts the loco back and shows the coaches again |
 | `ghost_build.script.lua` | the load-time script (`postRunScript`): prepares every rail vehicle, locos and coaches |
-| `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions |
+| `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions; they also draw a real carriage painted the flag colour as nothing, and give its ghost the same load |
 | `res/audio/ghostwrap/*.snd.lua` | the game's own rail sound sets, generated with absolute sound paths and the update script wrapped |
 | `res/models/runaround_ghost/` | `real*.trf.lua` (the stock train and tilting-train transformators, wrapped), plus plain silent copies of the base locos as a last fallback |
-| `res/models/runaround_standin/` | the invisible 1 kW stand-ins, 0.25 to 44 m in 0.25 m steps |
+| `res/models/runaround_standin/` | the invisible 1 kW stand-ins, 0.25 to 44 m in 0.25 m steps, with blank icons for the train window |
 | `res/scripts/runaround_gui.script.lua`, `runaround_vehicle.res.lua` | the train window card and the route tool |
 
 More detail:
@@ -217,7 +222,13 @@ More detail:
   and transformator at the wrappers. The wrappers behave exactly as the game's
   functions for a real train. For the ghost, they build vehicle data from its
   custom entity state and run the game's own functions on it. The state is
-  `{ speed01, power01, state = { speed, power, vx, vy, color, dir, seg } }`.
+  `{ speed01, power01, state = { speed, power, vx, vy, color, dir, seg, mirror } }`,
+  where `mirror` is the hidden carriage a coach ghost copies its load from.
+- **Hidden coaches.** A real coach is hidden by painting its part a flag colour
+  that nobody uses. The wrapped transformator sees that colour and scales the
+  model's root to zero, as the base game does to make fireworks vanish. The
+  coach's real paint is put back from a snapshot matched by model and purchase
+  time.
 - **Smooth wheels.** The wheel animation follows a motion segment computed from
   the game clock: start distance, speed, acceleration and start time.
 - **Routes.** Routes come from `findPathNodeToNode` between the clicked pieces. A
@@ -245,6 +256,11 @@ Learned while building this. The full write-up is in the modding guide.
   - A flip releases a held train. Hold it again with manual departure and
     `makeVehicleSetStoppedByUserCmd`.
 - **Reversed flag.** A part's `reversed` flag is relative to the train's head.
+- **Lengths.** Vehicles are butted together by their `metadata.extent` along x,
+  which need not be centred on the model's origin. The BR 75's is -6.42 to
+  6.19 m. A carriage's reported position is its origin.
+- **Cargo.** Passengers and goods belong to the vehicle entity, so they stay
+  aboard through replaces and flips as long as the vehicle does.
 - **Model repository.**
   - `modelRep.getAsTable` works in a load script but not in a game script, where
     `modelRep.get` works.

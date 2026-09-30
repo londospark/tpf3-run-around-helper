@@ -39,6 +39,28 @@ end
 local WHEEL_RADIUS = 0.9
 local WHEEL_ANIMATION_MS = 5000
 
+-- A real carriage whose paint is this flag colour is drawn as nothing (its root
+-- node scaled to zero, as the base game's fireworks vanish): the run-around hides
+-- the real coaches this way while their ghost copies are shown, so the coaches -
+-- and their passengers and goods - never leave the train.
+local HIDE = { 0.1234567, 0.7654321, 0.3141593 }
+local function isHidden(vehicleInfo)
+	local c = vehicleInfo and vehicleInfo.color
+	return c ~= nil and math.abs(c.x - HIDE[1]) < 1e-3 and math.abs(c.y - HIDE[2]) < 1e-3 and math.abs(c.z - HIDE[3]) < 1e-3
+end
+
+-- Load nodes of the hidden real carriages, by carriage entity, so that the ghost
+-- copy of a loaded wagon shows the same load (its state names the carriage).
+local hiddenLoads = {}
+
+local function hide(params, transfsOutput)
+	local ci = params.currentInfo
+	local indices = {}
+	for i, v in ipairs(ci.vehicle.indicesLoadConfig or {}) do indices[i] = v end
+	hiddenLoads[params.entityId] = indices
+	transfsOutput:setUserTransf(0, api.type.Mat4f.scale(api.type.Vec3f.new(0.0, 0.0, 0.0)))
+end
+
 local function stateOf(currentInfo)
 	local cs = currentInfo.customState
 	return cs and cs.state or nil
@@ -81,6 +103,9 @@ local function ghostUpdate(params, transfsOutput)
 	local st = stateOf(ci)
 	if st == nil then return end
 	applyColor(st, transfsOutput)
+	if st.mirror ~= nil and hiddenLoads[st.mirror] ~= nil then
+		transformator_util.scaleUserTransfIndicesLoadConfig(hiddenLoads[st.mirror], transfsOutput)
+	end
 	local dist = segmentDistance(st, ci.world and ci.world.gameTime)
 	local reversed = (st.dir or 1) < 0
 	transformator_util.addDriveAnimationState(dist, reversed, transfsOutput)
@@ -107,6 +132,7 @@ end
 
 local function trainUpdateFn(_captureParams, params, transfsOutput)
 	if params.currentInfo.landVehicle ~= nil then
+		if isHidden(params.currentInfo.vehicle) then return hide(params, transfsOutput) end
 		return stockTrainUpdate(params, transfsOutput)
 	end
 	return ghostUpdate(params, transfsOutput)
@@ -117,6 +143,7 @@ local function tiltingTrainUpdateFn(_captureParams, params, transfsOutput)
 	if params.currentInfo.landVehicle == nil then
 		return ghostUpdate(params, transfsOutput)
 	end
+	if isHidden(params.currentInfo.vehicle) then return hide(params, transfsOutput) end
 	stockTrainUpdate(params, transfsOutput)
 	local ci = params.currentInfo
 	local tilt = transformator_util.calculateTilt(params.landVehicleApi, ci.vehicle.speed, 80.0, ci.landVehicle.reversed)
@@ -134,6 +161,10 @@ end
 local function particleFn(captureParams, params, particleSystem)
 	local ci = params.currentInfo
 	if ci.vehicle ~= nil then
+		if isHidden(ci.vehicle) then
+			for i = 0, particleSystem:getSize() - 1 do particleSystem:setFrequencyScale(i, 0.0) end
+			return
+		end
 		return transformator_util.updateParticleSystemFn(captureParams, params, particleSystem)
 	end
 	local st = stateOf(ci)

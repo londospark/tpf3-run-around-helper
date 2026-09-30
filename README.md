@@ -168,6 +168,10 @@ through earlier versions of this mod is fine.
   use a ghost copy. Also fixed: ghost-copy sound sets are now added in the same
   folder as the original (the earlier `std::exception` was the game not finding
   the sound files relative to my folder).
+- **Colour test switched on.** `debugTintGhost` in `runaround.script.lua` paints the
+  ghost magenta through the colour path, to settle whether a free entity honours
+  the colour attribute (and so whether the custom paint seen on the ghost came from
+  it). It is on for now; set it to `false` afterwards.
 - **Seventh live run: traces read, wheel funk, consist jump, loco half a length
   back at the detach (changes untested).** The trace lines showed: the flip
   mirrors the train about the middle of its extent (the jump before the recouple

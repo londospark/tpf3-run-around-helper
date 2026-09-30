@@ -91,6 +91,9 @@ local CONFIG = {
 	reverseBeforeRecouple = true,
 	-- Use the smoke-and-sound ghosts built at load time (ghost_build.script.lua). Turn off
 	-- to use the plain silent ghosts if the effects ghosts ever misbehave.
+	-- DEBUG: paint the ghost bright magenta through the colour path, to see whether a
+	-- free entity honours the colour attribute at all. Turn off once it has been tried.
+	debugTintGhost = true,
 	useEffectGhosts = true,
 	-- EXPERIMENT: draw the ghost from the loco's own model, not a ghost copy. It has the
 	-- loco's own sound, smoke and wheel scripts, which expect vehicle data a free entity
@@ -430,7 +433,7 @@ local function pushGhostState(run, speed, vx, vy, dt, force)
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
-		state = { color = run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = ((run.headingFlipped and 1 or 0) + ((run.yawOffset or 0) > 1 and 1 or 0)) % 2 == 1 and -1 or 1 },
+		state = { color = CONFIG.debugTintGhost and { 1.0, 0.0, 1.0 } or run.color, speed = speed, power = power, vx = vx, vy = vy, dist = run.gdist or 0.0, dir = ((run.headingFlipped and 1 or 0) + ((run.yawOffset or 0) > 1 and 1 or 0)) % 2 == 1 and -1 or 1 },
 	})
 	if ok then
 		api.cmd.sendCommand(cmd)

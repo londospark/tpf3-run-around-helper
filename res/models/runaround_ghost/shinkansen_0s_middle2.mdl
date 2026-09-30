@@ -1,0 +1,307 @@
+-- Generated ghost model: the geometry of the base-game vehicle model shinkansen_0s/shinkansen_0s_middle2.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 16, 4, 8.23, },
+		bbMin = { -16, -4, -0.0232365, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 12.7675, 1.67902, 2.96102, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_body_lod0.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_glass21_lft_lod0.msh",
+								name = "middle2_glass21_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.58, 1.62009, 2.35269, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_glass21_rgt_lod0.msh",
+								name = "middle2_glass21_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.101926, -1.6201, 2.35269, 1, },
+							},
+						},
+						name = "middle2_glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_interior_lod0.msh",
+						name = "middle2_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2384, 0, 0.491634, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.2384, 0, 0.491634, 1, },
+							},
+						},
+						name = "middle2_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.64997, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2384, 0, 0.491634, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.2384, 0, 0.491634, 1, },
+							},
+						},
+						name = "middle2_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.64997, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_door_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_glass_lft_lod0.msh",
+								name = "middle2_d1_glass_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.90735e-06, 1.5758, 0.51625, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_door.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_lft_lod0.msh",
+						name = "middle2_d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.4539, 0, 2.23631, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_door_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_glass_lft_lod0.msh",
+								name = "middle2_d2_glass_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.90735e-06, 1.57581, 0.516251, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_door.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_lft_lod0.msh",
+						name = "middle2_d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.4557, 0, 2.23631, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_door_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_glass_rgt_lod0.msh",
+								name = "middle2_d1_glass_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.90735e-06, -1.57851, 0.516251, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_door.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_rgt_lod0.msh",
+						name = "middle2_d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.4539, 0, 2.23631, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_glass.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_door_glass.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_glass_rgt_lod0.msh",
+								name = "middle2_d2_glass_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.90735e-06, -1.57851, 0.51625, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp.mtl", "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_door.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_rgt_lod0.msh",
+						name = "middle2_d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.4557, 0, 2.23631, 1, },
+					},
+					{
+						children = { },
+						name = "comp_middle2",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_body_lod1.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_interior_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_interior_lod1.msh",
+						name = "middle2_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2384, 0, 0.491634, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.2384, 0, 0.491634, 1, },
+							},
+						},
+						name = "middle2_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.64997, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2384, 0, 0.491634, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+								mesh = "::/vehicle/train/shinkansen_0s/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.2384, 0, 0.491633, 1, },
+							},
+						},
+						name = "middle2_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.64997, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_lft_lod1.msh",
+						name = "middle2_d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.4539, 0, 2.23631, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_lft_lod1.msh",
+						name = "middle2_d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.4557, 0, 2.23631, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d1_rgt_lod1.msh",
+						name = "middle2_d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.4539, 0, 2.23631, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_d2_rgt_lod1.msh",
+						name = "middle2_d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.4557, 0, 2.23631, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shinkansen_0s/mat/shinkansen_0s_wp_lod.mtl", },
+						mesh = "::/vehicle/train/shinkansen_0s/msh/middle2_body_lod2.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

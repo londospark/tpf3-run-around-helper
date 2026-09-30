@@ -1,0 +1,463 @@
+-- Generated ghost model: the geometry of the base-game vehicle model schienenbus/schienenbus.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 26.4, 9.35236, 9.31111, },
+		bbMin = { -26.4, -9.35236, -9.97153, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 6.97158, 1.63128, 1.866, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/body_lod0.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass_left_frt_lod0.msh",
+								name = "glass_left_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6.23585, 0.5475, 2.31116, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass_right_frt_lod0.msh",
+								name = "glass_right_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6.23479, -0.5505, 2.31116, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass1_lft_lod0.msh",
+								name = "glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.93736, 1.31102, 2.31117, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass2_lft_lod0.msh",
+								name = "glass2_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2.53825, 1.51451, 2.29521, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass8_lft_lod0.msh",
+								name = "glass8_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.93636, 1.31109, 2.31118, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass1_rgt_lod0.msh",
+								name = "glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.93753, -1.30999, 2.31117, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass2_rgt_lod0.msh",
+								name = "glass2_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.808, -1.515, 2.29396, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass9_rgt_lod0.msh",
+								name = "glass9_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.93653, -1.31005, 2.31118, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass_left_bck_lod0.msh",
+								name = "glass_left_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -6.23587, 0.5475, 2.31116, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/glass_right_bck_lod0.msh",
+								name = "glass_right_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -6.23481, -0.5505, 2.31116, 1, },
+							},
+						},
+						name = "glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/interior_lod0.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -2.38419e-07, -5.36442e-07, 1.93111, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/w1_lod0.msh",
+						name = "w1",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.00004, -4.82797e-07, 0.415829, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/w1_lod0.msh",
+						name = "w2",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.00008, 4.23197e-07, 0.415829, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_lft_glass_lod0.msh",
+								name = "d1_lft_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.143735, 0.0213524, 1.68137, 1, },
+							},
+							{
+								children = {
+									{
+										children = { },
+										materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+										mesh = "::/vehicle/train/schienenbus/msh/d1_c1_lft_glass_lod0.msh",
+										name = "d1_c1_lft_glass",
+										transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.143727, 0, 1.68137, 1, },
+									},
+								},
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_c1_lft_lod0.msh",
+								name = "d1_c1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.28747, 0.0113523, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d1_lft_lod0.msh",
+						name = "d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.50432, 1.45741, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d2_lft_glass_lod0.msh",
+								name = "d2_lft_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.137673, -0.00324023, 1.68137, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d2_lft_lod0.msh",
+						name = "d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.648, 1.47, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d3_lft_glass_lod0.msh",
+								name = "d3_lft_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.133674, 0.00275981, 1.68137, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d3_lft_lod0.msh",
+						name = "d3_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.654, 1.466, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_lft_glass_lod0.msh",
+								name = "d4_lft_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.143732, 0.0113522, 1.68137, 1, },
+							},
+							{
+								children = {
+									{
+										children = { },
+										materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+										mesh = "::/vehicle/train/schienenbus/msh/d4_c1_lft_glass_lod0.msh",
+										name = "d4_c1_lft_glass",
+										transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.143727, 0, 1.68137, 1, },
+									},
+								},
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_c1_lft_lod0.msh",
+								name = "d4_c1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.287471, 0.0113521, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d4_lft_lod0.msh",
+						name = "d4_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.50433, 1.45741, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_rgt_glass_lod0.msh",
+								name = "d1_rgt_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.143732, -0.0113521, 1.68137, 1, },
+							},
+							{
+								children = {
+									{
+										children = { },
+										materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+										mesh = "::/vehicle/train/schienenbus/msh/d1_c1_rgt_glass_lod0.msh",
+										name = "d1_c1_rgt_glass",
+										transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.143727, 0, 1.68137, 1, },
+									},
+								},
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_c1_rgt_lod0.msh",
+								name = "d1_c1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.28747, -0.0113521, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d1_rgt_lod0.msh",
+						name = "d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.50432, -1.45741, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d2_rgt_glass_lod0.msh",
+								name = "d2_rgt_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.137673, -0.00476265, 1.68137, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d2_rgt_lod0.msh",
+						name = "d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.648, -1.461, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d3_rgt_glass_lod0.msh",
+								name = "d3_rgt_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.149174, -0.00525975, 1.68137, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d3_rgt_lod0.msh",
+						name = "d3_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.636, -1.464, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_rgt_glass_lod0.msh",
+								name = "d4_rgt_glass",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.143732, -0.0113523, 1.68137, 1, },
+							},
+							{
+								children = {
+									{
+										children = { },
+										materials = { "::/vehicle/train/schienenbus/mat/schienenbus_glass.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior_glass.mtl", },
+										mesh = "::/vehicle/train/schienenbus/msh/d4_c1_rgt_glass_lod0.msh",
+										name = "d4_c1_rgt_glass",
+										transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.143727, 0, 1.68137, 1, },
+									},
+								},
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_c1_rgt_lod0.msh",
+								name = "d4_c1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.287471, -0.0113523, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus.mtl", "::/vehicle/train/schienenbus/mat/schienenbus_doors_interior.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d4_rgt_lod0.msh",
+						name = "d4_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.50433, -1.45741, 0, 1, },
+					},
+					{
+						children = { },
+						name = "comp_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/body_lod1.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_interior_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/interior_lod1.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -2.38419e-07, -5.36442e-07, 1.93111, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/w1_lod1.msh",
+						name = "w1",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.00004, -4.82797e-07, 0.415829, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/w1_lod1.msh",
+						name = "w2",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.00008, 4.23197e-07, 0.415829, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_c1_lft_lod1.msh",
+								name = "d1_c1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.28747, 0.0113523, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d1_lft_lod1.msh",
+						name = "d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.50432, 1.45741, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d2_lft_lod1.msh",
+						name = "d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.648, 1.47, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d3_lft_lod1.msh",
+						name = "d3_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.654, 1.466, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_c1_lft_lod1.msh",
+								name = "d4_c1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.287471, 0.0113521, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d4_lft_lod1.msh",
+						name = "d4_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.50433, 1.45741, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d1_c1_rgt_lod1.msh",
+								name = "d1_c1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.28747, -0.0113521, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d1_rgt_lod1.msh",
+						name = "d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.50432, -1.45741, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d2_rgt_lod1.msh",
+						name = "d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.648, -1.461, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d3_rgt_lod1.msh",
+						name = "d3_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.636, -1.464, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+								mesh = "::/vehicle/train/schienenbus/msh/d4_c1_rgt_lod1.msh",
+								name = "d4_c1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.287471, -0.0113523, 0, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/d4_rgt_lod1.msh",
+						name = "d4_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.50433, -1.45741, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/schienenbus/mat/schienenbus_lod.mtl", },
+						mesh = "::/vehicle/train/schienenbus/msh/body_lod2.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

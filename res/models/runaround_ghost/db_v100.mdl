@@ -1,0 +1,319 @@
+-- Generated ghost model: the geometry of the base-game vehicle model db_v100/db_v100.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 30.7387, 11.4655, 8.17048, },
+		bbMin = { -31.2613, -11.4655, -12.6394, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 6.27446, 1.72917, 2.22521, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_lod0.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_left_frt_lod0.msh",
+								name = "glass1_left_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.376206, 0.71212, 3.71881, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_right_frt_lod0.msh",
+								name = "glass1_right_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.376199, -0.711615, 3.71863, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_lft_lod0.msh",
+								name = "glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.214952, 1.23046, 3.7021, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass2_lft_lod0.msh",
+								name = "glass2_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.91562, 1.23051, 3.70195, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass3_lft_lod0.msh",
+								name = "glass3_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.44998, 1.23043, 3.70214, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_rgt_lod0.msh",
+								name = "glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0492308, -1.23054, 3.70206, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass2_rgt_lod0.msh",
+								name = "glass2_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.583274, -1.23056, 3.70204, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass3_rgt_lod0.msh",
+								name = "glass3_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.28394, -1.23051, 3.70202, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_right_bck_lod0.msh",
+								name = "glass1_right_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.87301, -0.711429, 3.71812, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100_glass.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/glass1_left_bck_lod0.msh",
+								name = "glass1_left_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.87301, 0.711416, 3.71755, 1, },
+							},
+						},
+						name = "glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100_transparent.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_tr_lod0.msh",
+						name = "body_tr",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.261288, -2.01361e-07, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100_interior.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/interior_lod0.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.261288, -2.01361e-07, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_lod0.msh",
+								name = "b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_part_lod0.msh",
+								name = "b1_part",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.01876, 6.96635e-07, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod0.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.0996, 0, 0.492342, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod0.msh",
+								name = "w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.0996, 2.85244e-07, 0.492342, 1, },
+							},
+						},
+						name = "b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.01876, -6.96635e-07, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_lod0.msh",
+								name = "b2",
+								transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod0.msh",
+								name = "w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.0996, 0, 0.492342, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod0.msh",
+								name = "w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.0996, 4.04453e-07, 0.492342, 1, },
+							},
+						},
+						name = "b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.01283, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/g_lod0.msh",
+						name = "g",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.61199, -5.79577e-07, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_lod1.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100_glass_lod.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_glass_lod1.msh",
+						name = "body_glass",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.261288, -2.01361e-07, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100_transparent.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_tr_lod1.msh",
+						name = "body_tr",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100_interior.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/interior_lod1.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.261288, -2.01361e-07, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_lod1.msh",
+								name = "b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_part_lod1.msh",
+								name = "b1_part",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.01876, 6.96635e-07, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod1.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.0996, 0, 0.492342, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod1.msh",
+								name = "w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.0996, 2.85244e-07, 0.492342, 1, },
+							},
+						},
+						name = "b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.01876, -6.96635e-07, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/b1_lod1.msh",
+								name = "b2",
+								transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod1.msh",
+								name = "w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.0996, 0, 0.492342, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+								mesh = "::/vehicle/train/db_v100/msh/w1_lod1.msh",
+								name = "w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.0996, 4.04453e-07, 0.492342, 1, },
+							},
+						},
+						name = "b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.01283, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/g_lod1.msh",
+						name = "g",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.61199, -5.79577e-07, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/db_v100/mat/v100.mtl", },
+						mesh = "::/vehicle/train/db_v100/msh/body_lod2.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

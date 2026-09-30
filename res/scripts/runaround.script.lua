@@ -299,6 +299,42 @@ local function findStandInModelId()
 	return nil
 end
 
+-- The ghost loco is drawn from a "ghost" copy of the loco's model: same meshes,
+-- but no vehicle metadata, sound, particles or scripts (generated from the
+-- base-game models into res/models/runaround_ghost/). A free entity has no
+-- vehicle for the model's sound/transformator scripts to read, and the base
+-- game's own free entities (ufo, fireworks) all use models with empty metadata.
+-- Modded locos with no ghost of their own get the ghost of a base loco of the
+-- same engine type.
+local ghostIdsByFile = nil
+local GHOST_FALLBACK = { STEAM = "mogul_2_6_0.mdl", ELECTRIC = "br_e94.mdl", DIESEL = "alco_hh600.mdl" }
+local function findGhostModelId(locoModelId)
+	local okAll, all = pcall(api.res.modelRep.getAll, true)
+	if not okAll or all == nil then return nil end
+	if ghostIdsByFile == nil then
+		ghostIdsByFile = {}
+		for id, name in pairs(all) do
+			if type(name) == "string" and string.find(name, "runaround_ghost/", 1, true) then
+				ghostIdsByFile[string.match(name, "([^/]+)$")] = id
+			end
+		end
+	end
+	local locoName = all[locoModelId]
+	local file = type(locoName) == "string" and string.match(locoName, "([^/]+)$") or nil
+	if file ~= nil and ghostIdsByFile[file] ~= nil then
+		logInfo("ghost model: exact match for", locoName)
+		return ghostIdsByFile[file]
+	end
+	local engineType = "DIESEL"
+	local okM, model = pcall(api.res.modelRep.getAsTable, locoModelId)
+	if okM and type(model) == "table" and model.metadata and model.metadata.landVehicle then
+		local eng = model.metadata.landVehicle.engines and model.metadata.landVehicle.engines[1]
+		if eng and GHOST_FALLBACK[eng.type] then engineType = eng.type end
+	end
+	logInfo("ghost model: no exact match for", tostring(locoName), "- using the generic", engineType, "ghost")
+	return ghostIdsByFile[GHOST_FALLBACK[engineType]]
+end
+
 -- A real TransportVehiclePart for the stand-in.
 local function makeStandInPart(standId, locoSnap)
 	local part = api.type.TransportVehiclePart.new()
@@ -965,6 +1001,11 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: the stand-in model was not found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/standin.mdl loaded?")
 		return
 	end
+	local ghostModelId = findGhostModelId(locoSnap.modelId)
+	if ghostModelId == nil then
+		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
+		return
+	end
 	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
@@ -985,9 +1026,17 @@ local function startRunAround(state, vehicleEntity, loop)
 			return
 		end
 
-		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(locoSnap.modelId), function(createRes, createSuccess)
+		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(ghostModelId), function(createRes, createSuccess)
 			if not createSuccess then
-				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- the loco is now missing from the train")
+				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- putting the loco back on the train")
+				local tvNow = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+				if tvNow ~= nil then
+					local okB, cfg = pcall(buildConfigWithLocoReattached, tvNow.transportVehicleConfig, locoSnap, false, standId)
+					local okC, cmd = false, nil
+					if okB then okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, cfg) end
+					if okC then api.cmd.sendCommand(cmd) else logInfo("could not restore the loco:", tostring(okB and cmd or cfg)) end
+				end
+				releaseTrain(vehicleEntity)
 				return
 			end
 			local ghost = createRes.resultEntity

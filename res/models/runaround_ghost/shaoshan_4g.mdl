@@ -1,0 +1,394 @@
+-- Generated ghost model: the geometry of the base-game vehicle model shaoshan_4g/shaoshan_4g.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 32.3, 11.6655, 8.47048, },
+		bbMin = { -8.23317, -11.6655, -12.3394, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 8.14565, 1.66642, 2.96628, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0575261, 1.78814e-07, 2.93122, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+						mesh = "::/vehicle/train/shaoshan_4g/msh/body_lod0.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_int.mtl", },
+						mesh = "::/vehicle/train/shaoshan_4g/msh/interior_lod0.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_down_lod0.msh",
+								name = "g_down",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_front_forward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_down_lod0.msh",
+								name = "g_down_2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_inner_forward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_up_lod0.msh",
+								name = "g_up",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_inner_backward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_up_lod0.msh",
+								name = "g_up",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_back_backward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/b1_lod0.msh",
+								name = "b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0.617887, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod0.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.22349, -3.63005e-07, 0.65089, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod0.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.64751, -3.63005e-07, 0.65089, 1, },
+							},
+						},
+						name = "b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.2356, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/b1_lod0.msh",
+								name = "b1",
+								transf = { -1, 0, -1.50996e-07, 0, 0, -1, -1.50996e-07, 0, -1.50996e-07, -1.50996e-07, 1, 0, 0, 0, 0.610608, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod0.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.64751, -3.64189e-07, 0.65089, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod0.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.22349, -3.64189e-07, 0.65089, 1, },
+							},
+						},
+						name = "b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.2986, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_frt_lod0.msh",
+								name = "glass1_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.47762, -3.57628e-07, 3.95822, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass4_frt_lod0.msh",
+								name = "glass4_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.70241, 0, 1.99516, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass6_frt_lod0.msh",
+								name = "glass6_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.58142, 0, 2.96038, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_bck_lod0.msh",
+								name = "glass1_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -7.79267, 0.535457, 2.65119, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_lft_lod0.msh",
+								name = "glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0823917, 1.47027, 3.05945, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_rgt_lod0.msh",
+								name = "glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0823915, -1.47027, 3.05945, 1, },
+							},
+						},
+						name = "glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 219.843,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+						mesh = "::/vehicle/train/shaoshan_4g/msh/body_lod1.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -3.16235, 3.17408, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_int.mtl", },
+						mesh = "::/vehicle/train/shaoshan_4g/msh/interior_lod1.msh",
+						name = "interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_down_lod1.msh",
+								name = "g_down",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_front_forward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_down_lod1.msh",
+								name = "g_down",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_inner_forward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_up_lod1.msh",
+								name = "g_up",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_inner_backward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/g_up_lod1.msh",
+								name = "g_up",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "g_back_backward_parts",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/b1_lod1.msh",
+								name = "b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3.82004e-06, 0, 0.617887, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod1.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.22349, -3.57628e-07, 0.65089, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod1.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.64751, -3.57628e-07, 0.65089, 1, },
+							},
+						},
+						name = "b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.2356, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod1.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.22349, -3.57628e-07, 0.65089, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/w1_lod1.msh",
+								name = "w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.64751, -3.57628e-07, 0.65089, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/b1_lod1.msh",
+								name = "b1",
+								transf = { -1, 0, -1.50996e-07, 0, 0, -1, -1.50996e-07, 0, -1.50996e-07, -1.50996e-07, 1, 0, 1.62735e-06, 0, 0.610608, 1, },
+							},
+						},
+						name = "b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -4.2986, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_frt_lod1.msh",
+								name = "glass1_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.47763, 0, 3.95822, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass4_frt_lod1.msh",
+								name = "glass4_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.70241, 0, 1.99516, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass7_frt_lod1.msh",
+								name = "glass7_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.58142, 0, 2.96038, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass2_bck_lod1.msh",
+								name = "glass2_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -7.79267, 0.535457, 2.65119, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_lft_lod1.msh",
+								name = "glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.082392, 1.47027, 3.05945, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g_glass_lod.mtl", },
+								mesh = "::/vehicle/train/shaoshan_4g/msh/glass1_rgt_lod1.msh",
+								name = "glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.082392, -1.47027, 3.05945, 1, },
+							},
+						},
+						name = "glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 219.843,
+			visibleTo = 659.53,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/shaoshan_4g/mat/shaoshan4g.mtl", },
+						mesh = "::/vehicle/train/shaoshan_4g/msh/body_lod2.msh",
+						name = "body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 659.53,
+			visibleTo = 1978.59,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

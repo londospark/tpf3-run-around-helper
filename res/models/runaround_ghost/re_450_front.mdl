@@ -1,0 +1,298 @@
+-- Generated ghost model: the geometry of the base-game vehicle model re_450/re_450_front.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 34, 11.4655, 7.87048, },
+		bbMin = { -9.39475, -11.4655, -12.9394, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 9.49755, 1.80388, 2.96965, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.102799, 0, 2.9503, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_body_lod0.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass_frt_lod0.msh",
+								name = "front_glass_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.54538, -1.60933e-06, 3.03713, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass1_lft_lod0.msh",
+								name = "front_glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.5575, 1.48639, 2.80161, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass3_lft_lod0.msh",
+								name = "front_glass3_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -6.96382, 1.4675, 2.80258, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass1_rgt_lod0.msh",
+								name = "front_glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.56414, -1.4864, 2.80161, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass3_rgt_lod0.msh",
+								name = "front_glass3_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -6.96382, -1.4675, 2.80258, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_interior_glass.mtl", "::/vehicle/train/re_450/mat/re_450_front_glass.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_glass_bck_lod0.msh",
+								name = "front_glass_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.87267, 0.00500001, 2.87779, 1, },
+							},
+						},
+						name = "front_glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_interior.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_interior_lod0.msh",
+						name = "front_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.37557, -1.78814e-07, -4.76837e-07, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod0.msh",
+								name = "front_w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.37557, 1.78814e-07, 0, 1, },
+							},
+						},
+						name = "front_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.28861, 0, 0.555768, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_b1_lod0.msh",
+								name = "front_b2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod0.msh",
+								name = "front_w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.37557, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod0.msh",
+								name = "front_w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.37557, 0, -4.76837e-07, 1, },
+							},
+						},
+						name = "front_b2_grp",
+						transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, -5.28861, 0, 0.555768, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_on_lod0.msh",
+						name = "front_mirrors_on",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_off_lod0.msh",
+						name = "front_mirrors_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_inner_fwd_off_lod0.msh",
+						name = "front_mirrors_inner_fwd_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_inner_bwd_off_lod0.msh",
+						name = "front_mirrors_inner_bwd_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_body_lod1.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_interior_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_interior_lod1.msh",
+						name = "front_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.37557, -1.78814e-07, -4.76837e-07, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod1.msh",
+								name = "front_w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.37557, 1.78814e-07, 0, 1, },
+							},
+						},
+						name = "front_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.28861, 0, 0.555768, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_b1_lod1.msh",
+								name = "front_b2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod1.msh",
+								name = "front_w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.37557, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+								mesh = "::/vehicle/train/re_450/msh/front_w1_lod1.msh",
+								name = "front_w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.37557, 0, -4.76837e-07, 1, },
+							},
+						},
+						name = "front_b2_grp",
+						transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, -5.28861, 0, 0.555768, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_on_lod1.msh",
+						name = "front_mirrors_on",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_off_lod1.msh",
+						name = "front_mirrors_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_inner_fwd_off_lod1.msh",
+						name = "front_mirrors_inner_fwd_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_mirrors_inner_bwd_off_lod1.msh",
+						name = "front_mirrors_inner_bwd_off",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/re_450/mat/re_450_front_lod.mtl", },
+						mesh = "::/vehicle/train/re_450/msh/front_body_lod2.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

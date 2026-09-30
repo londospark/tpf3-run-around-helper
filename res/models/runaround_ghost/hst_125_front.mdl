@@ -1,0 +1,290 @@
+-- Generated ghost model: the geometry of the base-game vehicle model hst_125/hst_125_front.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 33.4633, 11.5155, 8.12047, },
+		bbMin = { -8.98489, -11.5155, -12.6894, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 8.94824, 1.4054, 1.94981, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_body_lod0.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.036654, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front_transparent.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_body_tr_lod0.msh",
+						name = "front_body_tr",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0365624, -3.51906e-05, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front_int.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_interior_lod0.msh",
+						name = "front_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0365624, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.38965, -4.9958e-05, 0.494733, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod0.msh",
+								name = "front_w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.18628, -4.9958e-05, 0.494733, 1, },
+							},
+						},
+						name = "front_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.01629, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_b2_lod0.msh",
+								name = "front_b2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod0.msh",
+								name = "front_w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.18628, 4.98543e-05, 0.494733, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod0.msh",
+								name = "front_w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.38965, 5.00795e-05, 0.494733, 1, },
+							},
+						},
+						name = "front_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.02848, -0.00011117, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_frt_lod0.msh",
+								name = "front_glass1_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.65918, 0, 2.74748, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass2_frt_lod0.msh",
+								name = "front_glass2_frt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.56285, 0, 1.66816, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_lft_lod0.msh",
+								name = "front_glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.14256, 1.22962, 2.55747, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass3_lft_lod0.msh",
+								name = "front_glass3_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -6.51087, 1.31516, 2.53745, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_bottom_lft_lod0.msh",
+								name = "front_glass1_bottom_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.09857, 1.33207, 1.45385, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_rgt_lod0.msh",
+								name = "front_glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.14256, -1.22962, 2.55747, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass2_rgt_lod0.msh",
+								name = "front_glass2_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6.2773, -1.3045, 2.57127, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_bottom_rgt_lod0.msh",
+								name = "front_glass1_bottom_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7.09857, -1.33302, 1.45385, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass_bck_lod0.msh",
+								name = "front_glass_bck",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.5638, 0, 2.75041, 1, },
+							},
+						},
+						name = "front_glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_body_lod1.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.036654, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front_transparent.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_body_tr_lod1.msh",
+						name = "front_body_tr",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0365624, -3.51906e-05, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front_int.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_interior_lod1.msh",
+						name = "front_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.0365624, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.38965, -4.9958e-05, 0.494733, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod1.msh",
+								name = "front_w2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.18628, -4.9958e-05, 0.494733, 1, },
+							},
+						},
+						name = "front_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.01629, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_b2_lod1.msh",
+								name = "front_b2",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod1.msh",
+								name = "front_w3",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.18628, 4.98543e-05, 0.494733, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_w1_lod1.msh",
+								name = "front_w4",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.38965, 5.00795e-05, 0.494733, 1, },
+							},
+						},
+						name = "front_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -5.02848, -0.00011117, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/hst_125/mat/hst_125_front_glass_lod.mtl", },
+								mesh = "::/vehicle/train/hst_125/msh/front_glass1_lod1.msh",
+								name = "front_glass1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+							},
+						},
+						name = "front_glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/hst_125/mat/hst_125_front.mtl", },
+						mesh = "::/vehicle/train/hst_125/msh/front_body_lod2.msh",
+						name = "front_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.036654, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

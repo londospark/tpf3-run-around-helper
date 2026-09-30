@@ -1,0 +1,391 @@
+-- Generated ghost model: the geometry of the base-game vehicle model fuxing_hao/fuxing_hao_middle2.mdl
+-- with no vehicle metadata, sound, particles or scripts, so it is safe as a free entity.
+function data()
+return {
+	boundingInfo = {
+		bbMax = { 17, 4, 8.3, },
+		bbMin = { -17, -4, -0.019542, },
+	},
+	collider = {
+		params = {
+			halfExtents = { 12.8296, 1.65506, 2.95709, },
+		},
+		transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+		type = "BOX",
+	},
+	lods = {
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_back_forward_lod0.msh",
+						name = "g_back_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_back_backward_lod0.msh",
+						name = "g_back_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_inner_forward_lod0.msh",
+						name = "g_inner_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_inner_backward_lod0.msh",
+						name = "g_inner_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_front_forward_lod0.msh",
+						name = "g_front_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_front_backward_lod0.msh",
+						name = "g_front_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_body_lod0.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_interior_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_glass1_lft_lod0.msh",
+								name = "middle2_glass1_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6.585, 1.61966, 2.55414, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_interior_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_glass1_rgt_lod0.msh",
+								name = "middle2_glass1_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 6.585, -1.61964, 2.55413, 1, },
+							},
+						},
+						name = "middle2_glass_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_interior.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_interior_lod0.msh",
+						name = "middle2_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2.86102e-05, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2801, 0, 0.450121, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.28006, 0, 0.450121, 1, },
+							},
+						},
+						name = "middle2_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.95524, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_b1_lod0.msh",
+								name = "front_b1",
+								transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 2.09808e-05, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2801, 0, 0.450121, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod0.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.28005, 0, 0.450121, 1, },
+							},
+						},
+						name = "middle2_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.95524, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_glass_lft_lod0.msh",
+								name = "middle2_d1_glass_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.90735e-06, 0.00502974, 2.6981, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_lft_lod0.msh",
+						name = "middle2_d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.6957, 1.59416, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_glass_lft_lod0.msh",
+								name = "middle2_d2_glass_lft",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.72205e-06, 0.00502956, 2.6981, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_lft_lod0.msh",
+						name = "middle2_d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.6955, 1.59416, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_glass_rgt_lod0.msh",
+								name = "middle2_d1_glass_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.90735e-06, -0.00502962, 2.6981, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_rgt_lod0.msh",
+						name = "middle2_d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.6957, -1.59414, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_glass.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door_glass.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_glass_rgt_lod0.msh",
+								name = "middle2_d2_glass_rgt",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5.72205e-06, -0.00502968, 2.6981, 1, },
+							},
+						},
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", "::/vehicle/train/fuxing_hao/mat/fuxing_hao_door.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_rgt_lod0.msh",
+						name = "middle2_d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.6955, -1.59415, 0, 1, },
+					},
+					{
+						children = { },
+						name = "middle2_comp_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 0,
+			visibleTo = 100,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_back_forward_lod1.msh",
+						name = "g_back_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_back_backward_lod1.msh",
+						name = "g_back_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_inner_forward_lod1.msh",
+						name = "g_inner_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_inner_backward_lod1.msh",
+						name = "g_inner_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_front_forward_lod1.msh",
+						name = "g_front_forward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/g_front_backward_lod1.msh",
+						name = "g_front_backward",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_body_lod1.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_interior.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_interior_lod1.msh",
+						name = "middle2_interior",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2.95639e-05, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2801, 0, 0.450121, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.28006, 0, 0.450121, 1, },
+							},
+						},
+						name = "middle2_b1_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8.95524, 0, 0, 1, },
+					},
+					{
+						children = {
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_b1_lod1.msh",
+								name = "front_b1",
+								transf = { -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 2.00272e-05, 0, 0, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.2801, 0, 0.450121, 1, },
+							},
+							{
+								children = { },
+								materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+								mesh = "::/vehicle/train/fuxing_hao/msh/front_w1_lod1.msh",
+								name = "front_w1",
+								transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.28006, 0, 0.450121, 1, },
+							},
+						},
+						name = "middle2_b2_grp",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -8.95524, 0, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_lft_lod1.msh",
+						name = "middle2_d1_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.6957, 1.59416, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_lft_lod1.msh",
+						name = "middle2_d2_lft",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.6955, 1.59416, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d1_rgt_lod1.msh",
+						name = "middle2_d1_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 11.6957, -1.59414, 0, 1, },
+					},
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_d2_rgt_lod1.msh",
+						name = "middle2_d2_rgt",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -11.6955, -1.59415, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 100,
+			visibleTo = 400,
+		},
+		{
+			node = {
+				children = {
+					{
+						children = { },
+						materials = { "::/vehicle/train/fuxing_hao/mat/fuxing_hao_lod.mtl", },
+						mesh = "::/vehicle/train/fuxing_hao/msh/middle2_body_lod2.msh",
+						name = "middle2_body",
+						transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+					},
+				},
+				name = "RootNode",
+				transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+			},
+			visibleFrom = 400,
+			visibleTo = 1600,
+		},
+	},
+	metadata = { },
+	version = 2,
+}
+end

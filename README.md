@@ -98,6 +98,22 @@ through earlier versions of this mod is fine.
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
+- **The ghost loco is drawn from a "ghost" copy of the loco's model, not the
+  loco model itself.** A free entity has no vehicle behind it, but a loco model's
+  sound and animation scripts read vehicle data (the steam "chuffs" sound script
+  reads speed and chuff step with no nil check), so spawning the real model was a
+  risk. The base game's own free entities (ufo, cows, fireworks) all use models
+  with empty metadata, so `res/models/runaround_ghost/` holds 55 generated ghosts:
+  the meshes and materials of each base-game loco and multiple unit (checked: all
+  5,936 referenced files exist), with no metadata, sound, particles, lights or
+  animations. The run picks the ghost with the same file name as the loco's model.
+  **Modded locos** have no ghost of their own, so they get the ghost of a base
+  loco of the same engine type (steam, diesel or electric): the ghost will look
+  like a different loco while it runs round, but the real loco, with its own model
+  and colours, is what goes back on the train. **Colours:** custom entities
+  cannot be coloured, so the ghost shows the model's default colours; the real
+  loco's colour is saved and restored exactly. If no ghost is found, or the ghost
+  fails to spawn, the loco is not detached (or is put straight back).
 - **Click-to-pick works, with a caveat.** The first version put a
   `builtin.Selector` inside the panel, which the UI cannot render (hard crash).
   It now lives in a registered tool pushed onto the tool stack, as the base game

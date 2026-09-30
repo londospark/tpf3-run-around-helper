@@ -86,6 +86,9 @@ local CONFIG = {
 	-- the invisible stand-in model in res/models/runaround_standin/ while the
 	-- ghost loco is away, and the run is refused if that model isn't found.
 	detachEnabled = true,
+	-- Flip the train (game's own reverse command) before putting the loco back, so the
+	-- game doesn't flip the loco back to the buffer end at departure. See finishRun.
+	reverseBeforeRecouple = true,
 
 	-- Logs the structure of the chosen loco's model table when a loop is
 	-- created (read-only). Not needed now the stand-in model is authored.
@@ -283,20 +286,40 @@ end
 
 -- The invisible stand-in loco (res/models/runaround_standin/standin.mdl).
 -- Found by name because a mod's resource path prefix isn't known in advance.
-local standInId = nil
-local function findStandInModelId()
-	if standInId ~= nil then return standInId end
-	local ok, all = pcall(api.res.modelRep.getAll, true)
-	if ok and all ~= nil then
-		for id, name in pairs(all) do
-			if type(name) == "string" and string.find(name, "runaround_standin/standin.mdl", 1, true) then
-				standInId = id
-				logInfo("stand-in model found:", name, "id", id)
-				return id
+local standInIds = nil -- length in metres -> model id
+local function standInLengthFor(locoModelId)
+	local ok, model = pcall(api.res.modelRep.getAsTable, locoModelId)
+	local ext = ok and type(model) == "table" and model.metadata and model.metadata.extent
+	if ext and ext.bbMax and ext.bbMin then return ext.bbMax[1] - ext.bbMin[1] end
+	return nil
+end
+
+-- The stand-in should be as long as the loco it replaces, so the wagons stay
+-- where they are while the loco is away (with a 1 m stand-in they slid forward
+-- over the ghost's starting spot). The mod ships stand-ins in 2 m steps; this
+-- picks the nearest to the loco's length (its model's extent along the track).
+local function findStandInModelId(locoModelId)
+	if standInIds == nil then
+		standInIds = {}
+		local ok, all = pcall(api.res.modelRep.getAll, true)
+		if ok and all ~= nil then
+			for id, name in pairs(all) do
+				if type(name) == "string" then
+					local len = string.match(name, "runaround_standin/standin_(%d+)%.mdl")
+					if len then standInIds[tonumber(len)] = id end
+				end
 			end
 		end
 	end
-	return nil
+	local want = locoModelId and standInLengthFor(locoModelId) or nil
+	local bestLen, bestDiff = nil, nil
+	for len in pairs(standInIds) do
+		local d = math.abs(len - (want or 12))
+		if bestDiff == nil or d < bestDiff then bestLen, bestDiff = len, d end
+	end
+	if bestLen == nil then return nil end
+	logInfo("stand-in model:", bestLen, "m for a loco of", want and string.format("%.1f", want) or "unknown", "m, id", standInIds[bestLen])
+	return standInIds[bestLen]
 end
 
 -- The ghost loco is drawn from a "ghost" copy of the loco's model: same meshes,
@@ -907,19 +930,8 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 	return atRear, string.format("nearest the last route point: front end %d m away, rear end %d m away", math.floor(dFront), math.floor(dRear))
 end
 
-local function finishRun(run)
-	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
-	if tv == nil then
-		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
-		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
-		return
-	end
-
-	local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
-	if not okEnd then
-		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
-		atRear, why = true, "fallback"
-	end
+-- Puts the real loco back. attachAtRear/why say where (see chooseAttachEnd).
+local function recouple(run, tv, atRear, why)
 	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist, facing outward -", why)
 
 	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId)
@@ -946,6 +958,59 @@ local function finishRun(run)
 		api.cmd.sendCommand(api.cmd.makeVehicleSetManualDepartureCmd(run.vehicleEntity, false))
 		api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
 		logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+	end)
+end
+
+-- The game flips a train that has to leave a terminus by the way it came (it
+-- mirrors the consist end for end and keeps the parts list order), and it does
+-- that at departure. A loco coupled on at the exit end was therefore flipped
+-- straight back to the buffer end (seen live). So the train is flipped HERE,
+-- while only wagons and the invisible stand-in are on it: the head then faces
+-- the exit, the stand-in sits at the exit end where the ghost has arrived, and
+-- the loco replaces it at the head, so nothing needs flipping at departure.
+local function finishRun(run)
+	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+	if tv == nil then
+		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
+		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+		return
+	end
+
+	local function fallback(reason)
+		local okEnd, atRear, why = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
+		if not okEnd then
+			logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
+			atRear, why = true, "fallback"
+		end
+		recouple(run, tv, atRear, reason .. "; " .. tostring(why))
+	end
+
+	if not CONFIG.reverseBeforeRecouple then
+		fallback("reverse-before-recouple is off")
+		return
+	end
+	local okRev, revCmd = pcall(api.cmd.makeVehicleReverseCmd, run.vehicleEntity)
+	if not okRev then
+		fallback("reverse command rejected: " .. tostring(revCmd))
+		return
+	end
+	api.cmd.sendCommand(revCmd, function(_, success)
+		if not success then
+			fallback("reverse command failed")
+			return
+		end
+		local tvNow = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+		if tvNow == nil then
+			logInfo("finishRun: vehicle", run.vehicleEntity, "vanished after the reverse")
+			api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+			return
+		end
+		local order = {}
+		for i, part in ipairs(tvNow.transportVehicleConfig.vehicles) do
+			order[#order + 1] = (part.part.modelId == run.standInModelId) and "S" or "w"
+		end
+		logInfo("train reversed; parts now (S = stand-in):", table.concat(order))
+		recouple(run, tvNow, false, "train was reversed first so its head faces the exit")
 	end)
 end
 
@@ -996,7 +1061,7 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: could not read the loco's position (", tostring(locoTransf), ") - the ghost will appear on the route instead")
 		locoTransf = nil
 	end
-	local standId = findStandInModelId()
+	local standId = findStandInModelId(locoSnap.modelId)
 	if standId == nil then
 		logInfo("startRunAround: the stand-in model was not found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/standin.mdl loaded?")
 		return

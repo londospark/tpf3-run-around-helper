@@ -6,7 +6,7 @@ loco is detached from the consist, driven round a loop you define (as a free
 model entity, animated along the real track geometry), then re-attached at the
 other end. The other terminus of the line keeps the normal vanilla behaviour.
 
-**Status: work in progress, not published.** Setting up a loop works (panel,
+**Status: work in progress, not published.** The run-around has now been seen to work end to end in a live game (ghost loco drives the route, re-couples), with two visual problems found and fixed below (untested). Setting up a loop works (panel,
 click-to-pick route points, automatic route and reversal planning, automatic
 loco choice). The run itself - swap the loco for an invisible stand-in, animate
 the ghost loco round the route, recouple - is built but has not yet been seen to
@@ -76,7 +76,7 @@ through earlier versions of this mod is fine.
   in `calculateFallbackPowerOutput`: every land vehicle's model scripts (sound,
   smoke, animation) are handed a per-render-step `powerOutput`, and a consist
   with no powered part asserts as soon as its wagons are drawn. So the mod ships
-  its own tiny model, `res/models/runaround_standin/standin.mdl` (one metre long,
+  its own tiny models, `res/models/runaround_standin/standin_<length>.mdl` (invisible, sized to match the loco,
   no meshes, 1 kW, no sound or lights, hidden from the purchase lists), puts it
   in the loco's place while the ghost loco is away, and takes it out again when
   the real loco is coupled back on. If the model isn't found, the run is
@@ -98,6 +98,24 @@ through earlier versions of this mod is fine.
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
+- **First full live run: it worked, with two glitches, both fixed but untested.**
+  (1) The ghost started in the middle of the consist: the 1 m stand-in left a
+  gap the wagons closed up into, over the ghost's start point. The stand-in now
+  comes in 2 m steps (`res/models/runaround_standin/standin_4.mdl` to `_44.mdl`)
+  and the mod picks the one nearest the loco's length (its model's extent), so
+  the wagons stay put. (2) The loco snapped back to its original end when the
+  train set off. The game flips a train that must leave a terminus the way it
+  came - it mirrors the consist end for end, keeping the parts-list order - and
+  it does that at departure, so a loco coupled on at the exit end was flipped
+  straight back to the buffer end. Now the mod flips the train itself, with the
+  game's own `makeVehicleReverseCmd`, while only the wagons and the stand-in are
+  on it, then swaps the stand-in for the loco at the head of the train. The
+  head then already faces the exit, so nothing is flipped at departure. The
+  wagons do change end for end at that moment, as the game's flip always does.
+  `reverseBeforeRecouple` in `runaround.script.lua` turns this off (the loco
+  then goes on at the end nearest the last route point, as before). Unconfirmed
+  in a live game; the log line "train reversed; parts now" shows what the game
+  did to the parts list.
 - **The ghost loco is drawn from a "ghost" copy of the loco's model, not the
   loco model itself.** A free entity has no vehicle behind it, but a loco model's
   sound and animation scripts read vehicle data (the steam "chuffs" sound script

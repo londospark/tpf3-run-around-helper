@@ -14,13 +14,14 @@ and attach the log lines starting `[RunAroundHelper]` from `stdout.txt`.
 
 ## Setting up a run-around (in game)
 
-1. Open the window of a train standing at the terminus you want. It has a
-   **Run-around** card. Choose **Set up a run-around here**.
+1. Open the window of any train on the line. Its **Run-around** card lists
+   every stop of the line that has no run-around yet, with the stop the train
+   is at first. Choose the one you want. The run-around is named after the
+   station, and you can rename it.
 2. Choose **Edit route on map**. The route is drawn on the track while you edit:
    - the colour runs from blue at the start to orange at the end;
-   - reversing pieces are purple, with a reverse marker;
-   - clicked pieces carry a white line and a marker;
-   - dots flow along the route in the direction of travel.
+   - reversing pieces are purple;
+   - clicked pieces carry a white line.
 
    Click a few points along where the loco should go, in order: for example a
    piece of the loop, then track at the far end of the train. You don't click
@@ -43,14 +44,18 @@ on different lines and termini. They are saved with the game.
 ## What to expect
 
 - **One loco plus wagons.** Multiple units and double-heading are not handled.
-- **The wagons should stay put (untested).** A vehicle replace keeps the rear of
-  the train where it was. The stand-in is therefore only 1 m long:
-  - swapping it in shortens the train at the loco's end;
-  - the game's flip (needed so that the game does not flip the loco back at
-    departure) then moves the wagons by only that metre;
-  - putting the loco back grows the train at the exit end, where a real loco
-    couples on.
-  The coaches keep their order and facing.
+- **The wagons should stay put (untested).** The game shifts the train when
+  its parts are swapped, so the mod balances the swap out:
+  - A vehicle replace keeps the centre of the train's front part where it was,
+    and the flip mirrors the train about its middle.
+  - While the loco is away it is replaced by an invisible stand-in of the same
+    length, and a second stand-in of that length goes on the far end.
+  - That makes the train symmetrical about the wagons, so the flip (needed so
+    that the game does not flip the loco back at departure) leaves them in place.
+  - The loco then takes the front stand-in's place at the exit end, and the far
+    stand-in goes.
+  The coaches keep their order and facing. This is only done when the loco is the
+  first part of the train.
 - **Your loco, not a stand-in, runs round.** Every rail loco is prepared when
   the game loads, modded ones included. Where it uses the game's own sound set
   and train transformator (all base-game and DLC locos, and many mods), the
@@ -61,7 +66,7 @@ on different lines and termini. They are saved with the game.
 - **Wheel speed is approximate.** Scripts can't read a loco's driving-wheel
   radius, so a typical one (0.9 m) is used.
 - **The running loco ignores signals.** Use a loop no other train uses.
-- **An invisible 1 m stand-in** holds the train together while the loco is away, because a train with no powered part crashes the game. It
+- **Invisible stand-ins** hold the train together while the loco is away, because a train with no powered part crashes the game. It
   shows in the vehicle window during a run and is gone afterwards.
 - **Install, then restart the game fully.** Script mods are not reloaded by
   loading a save.
@@ -100,7 +105,7 @@ Only ghost copies are then used.
 
 - `res/scripts/runaround.script.lua` is the game script. For each run:
   1. It queues the run when a train arrives.
-  2. It swaps the loco for a 1 m stand-in.
+  2. It swaps the loco for a stand-in of its length, plus one on the far end.
   3. It spawns the ghost (a free entity) where the loco stood and drives it
      along the planned route.
   4. It flips the train with the game's reverse command and waits for the game
@@ -123,9 +128,8 @@ Only ghost copies are then used.
   tilting-train transformators, pointed at the wrappers. The folder also holds
   plain silent copies of the base-game locos, as a last fallback.
 - `res/models/runaround_standin/standin_<metres>.mdl` are the invisible
-  stand-ins (1 m is used; `standInLength`). The loco's length is measured from
-  the spacing of the carriages, so that the ghost aims for where the loco will
-  sit.
+  stand-ins, 1 to 44 m in 1 m steps. The loco's length is measured from the
+  spacing of the carriages.
 - `runaround_gui.script.lua` and the `*.res.lua` files are the UI: the train
   window card, the mod-button list, and the route tool. The tool draws the route
   with `builtin.NodeViewer` (coloured strips on given track pieces) and
@@ -144,8 +148,8 @@ Learned while building this. The full write-up is in
   load configs, `autoLoadConfig` and load-config indexes must match its model's
   compartments.
 - A train with no powered part crashes the game when drawn.
-- A vehicle replace keeps the rear of the train where it was. The flip mirrors
-  the train about the middle of its length. Carriage positions are reported late for
+- A vehicle replace keeps the centre of the train's front part where it was. The
+  flip mirrors the train about the middle of its length. Carriage positions are reported late for
   a tick or two after either.
 - A part's `reversed` flag is relative to the train's head.
 - `modelRep.getAsTable` works in a load script but not in a game script.

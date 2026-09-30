@@ -7,9 +7,8 @@
 	  * A "Run-Around" button in the mod-button area listing every loop.
 	  * The route tool: while it is active the loop's route is drawn on the
 	    track (builtin.NodeViewer: a colour gradient from start to finish, the
-	    reversing pieces highlighted), markers flow along it in the direction of
-	    travel and sit on the clicked points (api.gui.spawnEphemeralHudImage), and
-	    in edit mode clicking track adds a point (builtin.Selector).
+	    reversing pieces highlighted, the clicked pieces marked), and in edit mode
+	    clicking track adds a point (builtin.Selector).
 
 	Loading: each plugin needs a ".res.lua" descriptor (runaround_*.res.lua) whose
 	filePath points here ("<modId>::/res/scripts/runaround_gui.script@<Export>").
@@ -50,8 +49,6 @@ function data()
 		undo = "::/gui/entity_window/icons/arrow_head_left.tga",
 		eye = "::/gui/game_bar/icons/symbol_eye.tga",
 		train = "::/gui/game_bar/icons/vehicle_train_30.tga",
-		waypoint = "::/gui/hud/icons/signal_waypoint.tga",
-		dot = "::/gui/hud/rendering/point.tga",
 		ok = "::/gui/entity_window/icons/circle_check.tga",
 		warn = "::/gui/hud/icons/line_vehicle_warning.tga",
 		add = "::/gui/camera_tool/icons/plus19.tga",
@@ -102,6 +99,24 @@ function data()
 		return ok and name ~= nil and name ~= "" and name or nil
 	end
 
+	local function stopStationName(lineEntity, stopIndex)
+		local ok, name = pcall(function()
+			local l = api.engine.getComponent(lineEntity, api.type.ComponentType.LINE)
+			return entityName(l.stops[stopIndex + 1].stationGroup)
+		end)
+		return ok and name or nil
+	end
+
+	-- A loop's display name: its own, unless it still has an old default name
+	-- ("Loop 3"), in which case the station it is at.
+	local function loopName(loop)
+		local name = loop.name
+		if name == nil or name == "" or string.match(name, "^Loop %d+$") then
+			return stopStationName(loop.lineEntity, loop.stopIndex) or name or "Run-around"
+		end
+		return name
+	end
+
 	-- "Line name, at Station name" for a loop.
 	local function loopPlace(loop)
 		local line = entityName(loop.lineEntity) or ("line " .. tostring(loop.lineEntity))
@@ -140,6 +155,12 @@ function data()
 		return builtin.BoxLayout{ meta = class and { class = class } or nil, orientation = V, children = children }
 	end
 
+	-- A group of buttons one above the other with the entity window's spacing
+	-- (buttons side by side had no gap between them).
+	local function Buttons(list)
+		return Column(list, "box-plugin-vertical-space")
+	end
+
 	local function IconButton(icon, text, tooltip, onClick, class)
 		return builtin.Button{
 			meta = { tooltip = tooltip, class = class },
@@ -163,42 +184,6 @@ function data()
 	local function edgeGeometry(e)
 		local tn = api.engine.getComponent(e.entity, api.type.ComponentType.TRANSPORT_NETWORK)
 		return tn.edges[e.index + 1].geometry
-	end
-
-	-- Points every `spacing` metres along the route, in travel order, plus the
-	-- positions of the reversals. Cached per route.
-	local sampleCache = {}
-	local function routeSamples(loop, spacing)
-		local edges = loop.loopEdges or {}
-		local key = tostring(loop.id) .. ":" .. #edges .. ":" .. tostring(loop.routeLength)
-		if sampleCache[key] ~= nil then return sampleCache[key] end
-		local calc = api.engine.util.transport.calcPosition
-		local points, reversals = {}, {}
-		local carry = 0.0
-		for i, e in ipairs(edges) do
-			local ok = pcall(function()
-				local g = edgeGeometry(e)
-				local n = 16
-				local prev = calc(g, e.forward and 0.0 or 1.0)
-				if e.reversal then reversals[#reversals + 1] = prev end
-				for k = 1, n do
-					local t = k / n
-					local p = calc(g, e.forward and t or (1.0 - t))
-					local d = math.sqrt((p.x - prev.x) ^ 2 + (p.y - prev.y) ^ 2)
-					carry = carry + d
-					while carry >= spacing do
-						carry = carry - spacing
-						local f = d > 0 and (1.0 - carry / d) or 1.0
-						points[#points + 1] = api.type.Vec3f.new(prev.x + (p.x - prev.x) * f, prev.y + (p.y - prev.y) * f, prev.z + (p.z - prev.z) * f + 1.5)
-					end
-					prev = p
-				end
-			end)
-			if not ok then break end
-		end
-		local result = { points = points, reversals = reversals }
-		sampleCache[key] = result
-		return result
 	end
 
 	-- NodeViewer config: every route piece coloured along the start-to-end
@@ -235,35 +220,6 @@ function data()
 			table.insert(config[w.entity], d)
 		end
 		return config
-	end
-
-	local function pieceMiddle(piece)
-		local ok, p = pcall(function() return api.engine.util.transport.calcPosition(edgeGeometry(piece), 0.5) end)
-		return ok and p or nil
-	end
-
-	-- Markers on the map, called every frame: dots flowing along the route in
-	-- the direction of travel, a marker on each clicked point, and one at each
-	-- reversal.
-	local function spawnRouteMarkers(loop, frame)
-		if frame % 10 == 0 then
-			local s = routeSamples(loop, 12.0)
-			local phase = math.floor(frame / 10) % 4
-			for i = 1 + phase, #s.points, 4 do
-				pcall(api.gui.spawnEphemeralHudImage, ICON.dot, nil, api.type.Vec4f.new(1, 1, 1, 0.9), s.points[i], 0.3, true, true)
-			end
-		end
-		if frame % 60 == 0 then
-			for _, w in ipairs(loop.waypoints or {}) do
-				local p = pieceMiddle(w)
-				if p ~= nil then
-					pcall(api.gui.spawnEphemeralHudImage, ICON.waypoint, nil, nil, api.type.Vec3f.new(p.x, p.y, p.z + 4.0), 1.05, false, false)
-				end
-			end
-			for _, r in ipairs(routeSamples(loop, 12.0).reversals) do
-				pcall(api.gui.spawnEphemeralHudImage, ICON.reverse, nil, vec4(COLOUR_REVERSE), api.type.Vec3f.new(r.x, r.y, r.z + 6.0), 1.05, false, false)
-			end
-		end
 	end
 
 	-- ------------------------------------------------------------------
@@ -327,8 +283,6 @@ function data()
 				pcall(api.gui.byId.setVisible, param.keepWindowId, true)
 			end
 			if f % 15 == 0 then stateRef:set(readState()) end
-			local loop = findLoop(stateRef:old() or { loops = {} }, param.loopId)
-			if loop ~= nil then pcall(spawnRouteMarkers, loop, f) end
 		end)
 		local loop = findLoop(stateRef:old() or { loops = {} }, param.loopId)
 		local children = {}
@@ -368,34 +322,35 @@ function data()
 				return routeToolAction({ loopId = param.loopId, edit = param.edit, keepWindowId = param.keepWindowId, finish = finish })
 			end)
 		end,
-		pop = function(_ctx, _param) end,
+		pop = function(_ctx, param)
+			if routeTool ~= nil and routeTool.loopId == param.loopId then routeTool = nil end
+		end,
 		shelve = function(_ctx, _param, _shelve) end,
 	})
 
-	-- Which loop / mode the route tool is showing, or nil.
+	-- Which loop / mode the route tool is showing: tracked here (asking the tool
+	-- stack did not report it back, so the Show button never turned into Hide).
+	local routeTool = nil -- { loopId, mode, key }
 	local function activeRouteTool()
-		local ok, key = pcall(function()
-			local _, k = getToolStackApi().getActiveTool()
-			return k
-		end)
-		if not ok or type(key) ~= "string" or string.sub(key, 1, #TOOL_KEY_PREFIX) ~= TOOL_KEY_PREFIX then return nil end
-		local mode, id = string.match(string.sub(key, #TOOL_KEY_PREFIX + 1), "^(%a+):(%d+)$")
-		return tonumber(id), mode, key
+		if routeTool == nil then return nil end
+		return routeTool.loopId, routeTool.mode, routeTool.key
 	end
 
 	-- Switches the route tool for a loop on (in the given mode) or off.
 	local function toggleRouteTool(loopId, edit, vehicleEntity)
 		pcall(function()
 			local stack = getToolStackApi()
-			local activeId, activeMode, activeKey = activeRouteTool()
 			local mode = edit and "edit" or "view"
-			if activeKey ~= nil then
-				stack.pop(RunAroundRouteTool, activeKey)
-				if activeId == loopId and activeMode == mode then return end
+			if routeTool ~= nil then
+				local same = routeTool.loopId == loopId and routeTool.mode == mode
+				pcall(stack.pop, RunAroundRouteTool, routeTool.key)
+				routeTool = nil
+				if same then return end
 			end
+			local key = TOOL_KEY_PREFIX .. mode .. ":" .. tostring(loopId)
 			local keepWindowId = vehicleEntity ~= nil and ("temp.view.entity_" .. tostring(vehicleEntity)) or nil
-			stack.push(RunAroundRouteTool, TOOL_KEY_PREFIX .. mode .. ":" .. tostring(loopId),
-				{ loopId = loopId, edit = edit, keepWindowId = keepWindowId }, true)
+			routeTool = { loopId = loopId, mode = mode, key = key }
+			stack.push(RunAroundRouteTool, key, { loopId = loopId, edit = edit, keepWindowId = keepWindowId }, true)
 		end)
 	end
 
@@ -449,7 +404,7 @@ function data()
 			Text(loopPlace(loop), "font-scale-annotation"),
 			Row({ Icon(icon), Text(text, "font-scale-body") }),
 			RunStatus(loop, param.runs, param.vehicleEntity),
-			Row({
+			Buttons({
 				IconButton(ICON.edit, editing and "Done" or "Edit route on map",
 					"Draws the route on the track. Click a few points along where the loco should go, in order; the route and the reversals are worked out for you. Right-click or Esc when done.",
 					function() toggleRouteTool(loop.id, true, param.vehicleEntity) end, editing and "secondary" or "primary"),
@@ -460,12 +415,12 @@ function data()
 		}
 		if editing then
 			children[#children + 1] = Text("Click track to add points in order (a piece of the loop, then track at the far end of the train). Right-click or Esc to finish.", "font-scale-annotation")
-			children[#children + 1] = Row({
+			children[#children + 1] = Buttons({
 				IconButton(ICON.undo, "Undo point", "Remove the last point", function() sendGuiCmd("RemoveLastLoopEdge", { loopId = loop.id }) end, "secondary"),
 				IconButton(ICON.trash, "Clear points", "Remove every point", function() sendGuiCmd("ClearLoopPoints", { loopId = loop.id }) end, "secondary"),
 			})
 		end
-		return Column(children)
+		return Column(children, "box-plugin-vertical-space")
 	end)
 
 	local LoopSettings = react.RegisterRecipe("RunAroundLoopSettings", function(param)
@@ -480,14 +435,14 @@ function data()
 		return Column({
 			Row({
 				renaming:old() and gui_react_util.FocusTextInputField{
-					value = loop.name or "",
+					value = loopName(loop),
 					maxLength = 40,
 					onValueChange = function(value)
 						sendGuiCmd("RenameLoop", { loopId = loop.id, newName = value })
 						renaming:set(false)
 					end,
 					onCancel = function() renaming:set(false) end,
-				} or Text(loop.name or "Run-around", "font-scale-body"),
+				} or Text(loopName(loop), "font-scale-body"),
 				not renaming:old() and IconButton(ICON.edit, nil, "Rename", function() renaming:set(true) end, "secondary") or nil,
 			}),
 			Text("Speed: " .. speed .. " km/h", "font-scale-body"),
@@ -526,10 +481,10 @@ function data()
 	local function LoopCard(loop, st, params, vehicleEntity)
 		local summary = LoopSummary{ loop = loop, runs = st.runs, vehicleEntity = vehicleEntity }
 		local settings = LoopSettings{ loop = loop, vehicleEntity = vehicleEntity }
-		if content_card == nil or params == nil then return Card(loop.name or "Run-around", summary, settings) end
+		if content_card == nil or params == nil then return Card(loopName(loop), summary, settings) end
 		local key = "runaround_settings_" .. tostring(loop.id)
 		return content_card.ContentCard{
-			title = "Run-around: " .. (loop.name or ""),
+			title = "Run-around: " .. loopName(loop),
 			extraChildrenPermanent = { summary },
 			hasPermanentFocusables = true,
 			initialCalloutTextCollapsible = "",
@@ -557,19 +512,37 @@ function data()
 		if line == nil or line < 0 then return Column({}) end
 
 		local cards = {}
-		local hereHasLoop = false
+		local taken = {}
 		for _, loop in ipairs(state.loops) do
 			if loop.lineEntity == line then
 				cards[#cards + 1] = LoopCard(loop, state, params, vehicleEntity)
-				if loop.stopIndex == stop then hereHasLoop = true end
+				taken[loop.stopIndex] = true
 			end
 		end
-		if not hereHasLoop then
+		-- "Add a run-around at <station>" for every stop of the line without one,
+		-- the stop the train is at first.
+		local stops = {}
+		pcall(function()
+			local l = api.engine.getComponent(line, api.type.ComponentType.LINE)
+			for i = 1, #l.stops do stops[#stops + 1] = i - 1 end
+		end)
+		table.sort(stops, function(a, b) return (a == stop) and b ~= stop end)
+		local addButtons = {}
+		for _, s in ipairs(stops) do
+			if not taken[s] then
+				local station = stopStationName(line, s) or ("stop " .. tostring(s + 1))
+				addButtons[#addButtons + 1] = IconButton(ICON.add, station .. (s == stop and "  (this stop)" or ""),
+					"Set up a run-around for this line at " .. station,
+					function() sendGuiCmd("AddLoopAtStop", { lineEntity = line, stopIndex = s, name = station, vehicleEntity = vehicleEntity }) end,
+					(#cards == 0 and s == stop) and "primary" or "secondary")
+			end
+		end
+		if #addButtons > 0 then
 			local intro = Column({
-				Text("Have the loco run round its train at this stop instead of the instant flip.", "font-scale-body"),
-				IconButton(ICON.add, "Set up a run-around here", "Creates a run-around for this line at the stop this train is at",
-					function() sendGuiCmd("AddLoopFromVehicle", { vehicleEntity = vehicleEntity }) end, "primary"),
-			})
+				Text(#cards == 0 and "Have the loco run round its train at a terminus instead of the instant flip. Add a run-around at:"
+					or "Add a run-around at:", "font-scale-body"),
+				Buttons(addButtons),
+			}, "box-plugin-vertical-space")
 			if content_card ~= nil and #cards == 0 then
 				cards[#cards + 1] = content_card.ContentCard{
 					title = "Run-around",
@@ -598,16 +571,16 @@ function data()
 		local state = st:old() or { loops = {}, runs = {} }
 		local rows = { Text("Run-arounds", "font-scale-title-4") }
 		if #state.loops == 0 then
-			rows[#rows + 1] = Text("None yet. Open a train's window at a terminus and choose \"Set up a run-around here\".", "font-scale-body")
+			rows[#rows + 1] = Text("None yet. Open a train's window and add one at any stop of its line.", "font-scale-body")
 		end
 		for _, loop in ipairs(state.loops) do
 			local text, icon = routeLine(loop)
 			rows[#rows + 1] = Column({
-				Text(loop.name or "Run-around", "font-scale-body"),
+				Text(loopName(loop), "font-scale-body"),
 				Text(loopPlace(loop), "font-scale-annotation"),
 				Row({ Icon(icon), Text(text, "font-scale-annotation") }),
 				RunStatus(loop, state.runs, nil),
-				Row({
+				Buttons({
 					IconButton(ICON.eye, "Show on map", "Draw this route on the track (Esc to hide)", function() toggleRouteTool(loop.id, false, nil) end, "secondary"),
 					IconButton(ICON.edit, "Edit route", "Edit this route on the map", function() toggleRouteTool(loop.id, true, nil) end, "secondary"),
 				}),

@@ -47,13 +47,16 @@ local CONFIG = {
 	-- Use the ghost copies built at load time (loco's meshes, smoke, sound) rather
 	-- than the plain silent copies shipped in res/models/runaround_ghost/.
 	useEffectGhosts = true,
-	-- Length of the invisible stand-in that holds the train while the loco is away.
-	-- Short on purpose: a vehicle replace keeps the REAR of the train where it was
-	-- (a 1 m stand-in for a 12.7 m loco left the wagons in place, live), and after
-	-- the flip the rear is the buffer end. So with a short stand-in the flip moves
-	-- the wagons only by its length, and putting the loco back grows the train at
-	-- the exit end, where a real loco couples on: the wagons end up where they were.
-	standInLength = 1,
+	-- Balance the train so that nothing moves. A vehicle replace keeps the CENTRE OF
+	-- THE FRONT PART where it was (traced live: a 1 m stand-in for a 12.8 m loco
+	-- stayed on the loco's centre and every wagon moved 5.9 m towards it), and the
+	-- flip mirrors the train about its middle. So: a stand-in exactly as long as the
+	-- loco in its place (nothing moves), and a second one of the same length on the
+	-- far end (added behind the front, nothing moves). The train is then symmetrical
+	-- about the wagons, so the flip leaves them where they are and puts the front
+	-- stand-in at the exit end; the loco replaces it there and the far one goes
+	-- (nothing moves). Only when the loco is the first part of the train.
+	balanceWithTail = true,
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
@@ -248,8 +251,8 @@ local function finishConfig(config, parts)
 	return config
 end
 
--- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl:
--- 1, 2, then 4 to 44 m in 2 m steps); the one nearest wantLength. Found by name
+-- The invisible stand-in locos (res/models/runaround_standin/standin_<metres>.mdl,
+-- 1 to 44 m in 1 m steps); the one nearest wantLength. Found by name
 -- because a mod's resource prefix is not known in advance.
 local standInIds = nil -- length in metres -> model id
 local function findStandInModelId(wantLength)
@@ -429,7 +432,7 @@ end
 -- Config with the locomotive swapped for the stand-in, in the same place, and
 -- the wagons untouched. NOT with the loco simply removed: a consist with no
 -- powered part cannot be drawn and crashes the game.
-local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
+local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	for i, part in ipairs(config.vehicles) do
@@ -439,10 +442,11 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
 			parts[#parts + 1] = part
 		end
 	end
+	if addTail then parts[#parts + 1] = makeStandInPart(standId, locoSnap) end -- see balanceWithTail
 	return finishConfig(config, parts)
 end
 
--- Config with the stand-in taken out and the real locomotive put back on the
+-- Config with the stand-in(s) taken out and the real locomotive put back on the
 -- train. A loco cannot pass through its consist, so it can only couple onto the
 -- end it arrives at; which end that is comes from where the run finished (see
 -- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
@@ -1020,15 +1024,8 @@ local function advanceGhost(run, dt)
 		run.settleTicks = (run.settleTicks or 0) + 1
 		if run.settleTicks >= 4 then
 			run.target = readHeadPosition(run.vehicleEntity)
-			if run.target ~= nil and run.startHead ~= nil then
-				-- The loco is longer than the stand-in and the train keeps its rear end
-				-- where it is, so the loco's centre will be further out along the new
-				-- head direction (the opposite of the one at the start) than the
-				-- stand-in's centre.
-				local out = ((run.locoLength or 12.0) - (run.standInLength or 1.0)) / 2.0
-				run.target.x = run.target.x - run.startHead.x * out
-				run.target.y = run.target.y - run.startHead.y * out
-			end
+			-- (the loco's centre goes where the stand-in's is: a replace keeps the centre
+			-- of the front part fixed)
 			if run.target ~= nil then
 				run.phase = "approach"
 				logInfo(string.format("ghost heading for the flipped stand-in at %.1f, %.1f", run.target.x, run.target.y))
@@ -1457,7 +1454,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	end
 	local okLen, locoLength = pcall(carriageLength, vehicleEntity, locoIdx)
 	if not okLen or locoLength == nil or locoLength < 2 or locoLength > 60 then locoLength = nil end
-	local standId, standLength = findStandInModelId(CONFIG.standInLength)
+	local standId, standLength = findStandInModelId(locoLength)
 	logInfo("stand-in:", tostring(standLength), "m; loco", locoLength and string.format("%.1f m long", locoLength) or "of unknown length")
 	if standId == nil then
 		logInfo("startRunAround: no stand-in model found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/ loaded?")
@@ -1493,7 +1490,8 @@ local function startRunAround(state, vehicleEntity, loop)
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
 	end
-	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
+	local addTail = CONFIG.balanceWithTail and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
+	local okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return
@@ -1557,6 +1555,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				locoPart = locoSnap,
 				standInModelId = standId,
 				standInLength = standLength,
+				hasTail = addTail,
 				locoLength = locoLength,
 				startHead = startHead,
 				startSign = startSign,
@@ -1719,6 +1718,32 @@ local function handleGuiCmd(data, name, param)
 		}
 		data.loops[#data.loops + 1] = loop
 		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
+
+	elseif name == "AddLoopAtStop" then
+		-- From the panel's "Add a run-around at <station>": any stop of the line,
+		-- named after its station.
+		if param.lineEntity == nil or param.stopIndex == nil then return end
+		for _, l in ipairs(data.loops) do
+			if l.lineEntity == param.lineEntity and l.stopIndex == param.stopIndex then return end
+		end
+		local snap = param.vehicleEntity and readVehicleSnapshot(param.vehicleEntity)
+		local loop = {
+			id = newLoopId(data),
+			name = param.name or ("Run-around " .. tostring(#data.loops + 1)),
+			lineEntity = param.lineEntity,
+			stopIndex = param.stopIndex,
+			locoModelId = snap and snap.vehicles[1] and snap.vehicles[1].part.modelId or nil,
+			locoManual = false,
+			locoCandidateIndex = 0,
+			locoPartCount = snap and #snap.vehicles or 0,
+			waypoints = {},
+			loopEdges = {},
+			pathStatus = "no points yet",
+			speed = CONFIG.defaultSpeed,
+			accel = CONFIG.defaultAccel,
+		}
+		data.loops[#data.loops + 1] = loop
+		logInfo("GUI: added run-around", loopLabel(loop), "at line", param.lineEntity, "stop", param.stopIndex)
 
 	elseif name == "CycleLocoCandidate" then
 		-- Steps automatic -> part 1 -> part 2 ... -> last part -> automatic.

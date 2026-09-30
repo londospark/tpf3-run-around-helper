@@ -103,6 +103,27 @@
         "res/audio/ghostwrap/waggon_modern.snd.lua",
         "res/audio/ghostwrap/waggon_old.snd.lua",
         "res/models/runaround_standin/standin_1.mdl",
-        "res/models/runaround_standin/standin_2.mdl"
+        "res/models/runaround_standin/standin_2.mdl",
+        "res/models/runaround_standin/standin_11.mdl",
+        "res/models/runaround_standin/standin_13.mdl",
+        "res/models/runaround_standin/standin_15.mdl",
+        "res/models/runaround_standin/standin_17.mdl",
+        "res/models/runaround_standin/standin_19.mdl",
+        "res/models/runaround_standin/standin_21.mdl",
+        "res/models/runaround_standin/standin_23.mdl",
+        "res/models/runaround_standin/standin_25.mdl",
+        "res/models/runaround_standin/standin_27.mdl",
+        "res/models/runaround_standin/standin_29.mdl",
+        "res/models/runaround_standin/standin_3.mdl",
+        "res/models/runaround_standin/standin_31.mdl",
+        "res/models/runaround_standin/standin_33.mdl",
+        "res/models/runaround_standin/standin_35.mdl",
+        "res/models/runaround_standin/standin_37.mdl",
+        "res/models/runaround_standin/standin_39.mdl",
+        "res/models/runaround_standin/standin_41.mdl",
+        "res/models/runaround_standin/standin_43.mdl",
+        "res/models/runaround_standin/standin_5.mdl",
+        "res/models/runaround_standin/standin_7.mdl",
+        "res/models/runaround_standin/standin_9.mdl"
     ]
 }

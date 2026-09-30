@@ -145,6 +145,12 @@ through earlier versions of this mod is fine.
   ghost, or the game refuses one, it falls back to the plain silent ghost.
   `useEffectGhosts` in `runaround.script.lua` turns the effects off. Wheels do
   not turn yet.
+- **Experiment: the ghost drawn from the loco's own model.** `useRealModel` in
+  `runaround.script.lua` (currently `true`) spawns the loco's own model as the
+  ghost instead of a ghost copy, to see whether its own smoke, sound and wheels
+  work on a free entity (the game's scripts for them expect vehicle data, so
+  they may error, do nothing or crash the game). Set it to `false` to go back to
+  the ghost copies.
 - **Third live run: smoke works, sound does not yet, loco facing now checked
   (untested).** The log showed `built effects ghosts for 58 of 4586 models` and
   smoke on the ghost. Every sound set failed to add (`std::exception` from

@@ -92,6 +92,10 @@ local CONFIG = {
 	-- Use the smoke-and-sound ghosts built at load time (ghost_build.script.lua). Turn off
 	-- to use the plain silent ghosts if the effects ghosts ever misbehave.
 	useEffectGhosts = true,
+	-- EXPERIMENT: draw the ghost from the loco's own model, not a ghost copy. It has the
+	-- loco's own sound, smoke and wheel scripts, which expect vehicle data a free entity
+	-- doesn't have: they may error, do nothing, or crash the game. false = ghost copies.
+	useRealModel = true,
 	-- After the loco goes back on, read its real facing off the game and compare it with the
 	-- ghost's; if they differ, flip the loco part once. See verifyRun.
 	verifyFacing = true,
@@ -1349,6 +1353,10 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 	local ghostModelId, ghostEffects = findGhostModelId(locoSnap.modelId)
+	if CONFIG.useRealModel then
+		ghostModelId, ghostEffects = locoSnap.modelId, false
+		logInfo("ghost model: EXPERIMENT - using the loco's own model", locoSnap.modelId)
+	end
 	if ghostModelId == nil then
 		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
 		return

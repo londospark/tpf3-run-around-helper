@@ -36,9 +36,10 @@ Everything is configured in game - no editing Lua.
    train** does the same using the track piece a train is sitting on. **Undo
    last point** removes the last click and re-plans.
    **Finishing:** press **Esc** or **right-click** to leave pick mode, or press
-   the toggle button again. While pick mode is on it replaces the normal
-   click-a-train behaviour, so the vehicle window (and this panel) closes; click
-   the train again afterwards to bring the panel back.
+   the toggle button again. The train's information window stays open while you
+   pick (the pick tool is stacked on top of the game's own tool, and the window
+   is re-shown if the game hides it), so the panel's **Route:** line updates as
+   you click. If the window ever does close, click the train to bring it back.
 4. **Loco end** and **Flip on recouple** control which end of the consist the
    loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
    speed. If the loco comes back on the wrong end or facing the wrong way,

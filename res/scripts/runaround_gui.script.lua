@@ -246,13 +246,31 @@ function data()
 		push = function(ctx, param)
 			local colours = makeSelectorColours()
 			-- Way out of pick mode. While this tool is active it replaces the
-			-- normal click-a-train behaviour, which closes the vehicle window
-			-- (and this panel with it), so without an exit the player is stuck.
+			-- normal click-a-train behaviour, so the player needs an exit.
 			local function finish()
 				print("[RunAroundHelper] pick mode finished")
 				ctx.popSelf()
 			end
+			-- Keep the train's information window on screen while picking.
+			-- Pushed as a STACKED tool the game's entity-details tool is
+			-- shelved rather than closed, and shelving hides its window
+			-- (view_manager.tl: shelve -> setVisible(id, false)), so show it
+			-- again. Window ids are "temp.view.entity_<entity>".
+			local function keepWindowVisible()
+				if param.keepWindowId ~= nil then
+					pcall(api.gui.byId.setVisible, param.keepWindowId, true)
+				end
+			end
+			keepWindowVisible()
 			ctx.setActionFn(function()
+				-- Re-assert for a few frames in case the hide lands after push().
+				local frames = react.useRef(0)
+				react.onStep(function()
+					if frames:get() < 10 then
+						frames:set(frames:get() + 1)
+						keepWindowVisible()
+					end
+				end)
 				local selectorParam = {
 					stopOnMenuBack = false,
 					-- Allow track-segment entities (the default filter
@@ -396,7 +414,8 @@ function data()
 						toolStack.pop(RunAroundPickTool, activeKey)
 						pickModeState:set(false)
 					else
-						toolStack.push(RunAroundPickTool, key, { loopId = loop.id }, false)
+						local keepWindowId = vehicleEntity ~= nil and ("temp.view.entity_" .. tostring(vehicleEntity)) or nil
+						toolStack.push(RunAroundPickTool, key, { loopId = loop.id, keepWindowId = keepWindowId }, true)
 						pickModeState:set(true)
 					end
 				end)
@@ -411,7 +430,7 @@ function data()
 			children[#children + 1] = builtin.TextView{ text = "for example a piece of the loop, then track at the far end of the train." }
 			children[#children + 1] = builtin.TextView{ text = "Loose clicks are fine: the route between them, and where the loco reverses, is worked out for you." }
 			children[#children + 1] = builtin.TextView{ text = "Click more points to steer it, e.g. through one side of a wye." }
-			children[#children + 1] = builtin.TextView{ text = "Press Esc or right-click to finish picking, then click the train to reopen this panel." }
+			children[#children + 1] = builtin.TextView{ text = "Press Esc or right-click (or this button again) to finish picking. This window stays open; if it ever closes, click the train to reopen it." }
 		end
 
 		return builtin.BoxLayout{ orientation = builtin.type.Orientation.Vertical, children = children }

@@ -26,7 +26,7 @@ expect rough edges (see below), and please report what you find on the
   they were (same places, same order, same facing). The flip itself shows for a
   frame or two just as the loco couples on. (Versions before 2026-09-30 let the
   wagons jump one loco length and swap end for end: see below.)
-- **The ghost is a stand-in model.** While the loco runs round, it is drawn
+- **The ghost is a copy of the loco's model, with smoke and engine sound but still wheels.** While the loco runs round, it is drawn
   from a copy of a base-game loco model (the exact one if it's a base-game loco,
   otherwise one of the same engine type - steam, diesel or electric). So a
   modded loco will look like a base-game one for those few seconds, and paint
@@ -129,6 +129,22 @@ through earlier versions of this mod is fine.
   model with an empty mesh node, and whether it can be used in a consist swap,
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
+- **Smoke and sound on the ghost (untested).** At load time
+  (`ghost_build.script.lua`) the mod reads every rail locomotive model the game
+  has, modded ones included, and builds a "ghost" of each: a new model that
+  reuses the loco's meshes but none of its vehicle data, keeping the loco's own
+  particle emitters (chimney smoke, cylinder steam, exhaust) and a converted copy
+  of its own sound set (the continuous engine tracks, driven by speed and power;
+  horn, clacks and squeal are dropped). During the run the mod feeds the ghost
+  its speed as custom entity state, and a small transformator
+  (`res/models/runaround_ghost/ghost.trf.lua`) turns that into smoke frequency,
+  size and drift and into engine sound. This is how the base game's own free
+  entities (fireworks, rockets) get particles and sound. The log says
+  `ghost models: built effects ghosts for N of M models` at load and
+  `ghost model: effects ghost ...` when a run starts. If a loco has no effects
+  ghost, or the game refuses one, it falls back to the plain silent ghost.
+  `useEffectGhosts` in `runaround.script.lua` turns the effects off. Wheels do
+  not turn yet.
 - **Wagon jump fixed (untested).** A video of the live run showed the wagons
   jumping about one loco length and swapping end for end when the train was
   flipped. The flip mirrors the train around its own extent, so with an

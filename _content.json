@@ -82,6 +82,9 @@
         "res/models/runaround_standin/standin_42.mdl",
         "res/models/runaround_standin/standin_44.mdl",
         "res/models/runaround_standin/standin_6.mdl",
-        "res/models/runaround_standin/standin_8.mdl"
+        "res/models/runaround_standin/standin_8.mdl",
+        "ghost_build.script.lua",
+        "res/models/runaround_ghost/ghost.trf.lua",
+        "res/models/runaround_ghost/ghost.script.lua"
     ]
 }

@@ -89,6 +89,9 @@ local CONFIG = {
 	-- Flip the train (game's own reverse command) before putting the loco back, so the
 	-- game doesn't flip the loco back to the buffer end at departure. See finishRun.
 	reverseBeforeRecouple = true,
+	-- Use the smoke-and-sound ghosts built at load time (ghost_build.script.lua). Turn off
+	-- to use the plain silent ghosts if the effects ghosts ever misbehave.
+	useEffectGhosts = true,
 
 	-- Logs the structure of the chosen loco's model table when a loop is
 	-- created (read-only). Not needed now the stand-in model is authored.
@@ -332,23 +335,36 @@ end
 -- Modded locos with no ghost of their own get the ghost of a base loco of the
 -- same engine type.
 local ghostIdsByFile = nil
+local dynGhostIdsByFile = nil
 local GHOST_FALLBACK = { STEAM = "mogul_2_6_0.mdl", ELECTRIC = "br_e94.mdl", DIESEL = "alco_hh600.mdl" }
+-- Returns the ghost's model id and whether it is an effects ghost (smoke and
+-- sound driven by the ghost's state, built at load time from the loco's own
+-- model by ghost_build.script.lua, so it exists for modded locos too).
 local function findGhostModelId(locoModelId)
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then return nil end
 	if ghostIdsByFile == nil then
-		ghostIdsByFile = {}
+		ghostIdsByFile, dynGhostIdsByFile = {}, {}
 		for id, name in pairs(all) do
-			if type(name) == "string" and string.find(name, "runaround_ghost/", 1, true) then
-				ghostIdsByFile[string.match(name, "([^/]+)$")] = id
+			if type(name) == "string" then
+				if string.find(name, "runaround_ghost_dyn/", 1, true) then
+					dynGhostIdsByFile[string.match(name, "([^/]+)%.mdl$") or name] = id
+				elseif string.find(name, "runaround_ghost/", 1, true) then
+					ghostIdsByFile[string.match(name, "([^/]+)$")] = id
+				end
 			end
 		end
 	end
 	local locoName = all[locoModelId]
 	local file = type(locoName) == "string" and string.match(locoName, "([^/]+)$") or nil
+	local base = file and string.match(file, "^(.*)%.mdl$") or nil
+	if CONFIG.useEffectGhosts and base ~= nil and dynGhostIdsByFile[base] ~= nil then
+		logInfo("ghost model: effects ghost (smoke and sound) for", locoName)
+		return dynGhostIdsByFile[base], true
+	end
 	if file ~= nil and ghostIdsByFile[file] ~= nil then
-		logInfo("ghost model: exact match for", locoName)
-		return ghostIdsByFile[file]
+		logInfo("ghost model: plain ghost (no effects) for", locoName)
+		return ghostIdsByFile[file], false
 	end
 	local engineType = "DIESEL"
 	local okM, model = pcall(api.res.modelRep.getAsTable, locoModelId)
@@ -356,8 +372,34 @@ local function findGhostModelId(locoModelId)
 		local eng = model.metadata.landVehicle.engines and model.metadata.landVehicle.engines[1]
 		if eng and GHOST_FALLBACK[eng.type] then engineType = eng.type end
 	end
-	logInfo("ghost model: no exact match for", tostring(locoName), "- using the generic", engineType, "ghost")
-	return ghostIdsByFile[GHOST_FALLBACK[engineType]]
+	logInfo("ghost model: no ghost for", tostring(locoName), "- using the generic", engineType, "ghost")
+	return ghostIdsByFile[GHOST_FALLBACK[engineType]], false
+end
+
+-- Feeds an effects ghost's smoke and sound (see ghost.script.lua): its speed
+-- and velocity, as custom entity state. Sent when something changed, or now and
+-- then, not every step.
+local function pushGhostState(run, speed, vx, vy, dt, force)
+	if not run.effects then return end
+	run.stateAge = (run.stateAge or 0.0) + dt
+	local last = run.lastState
+	if not force and last ~= nil and run.stateAge < 1.0
+		and math.abs(speed - last.speed) < 0.5 and math.abs(vx - last.vx) < 2.0 and math.abs(vy - last.vy) < 2.0 then
+		return
+	end
+	local top = run.topSpeed or 27.8
+	local speed01 = math.min(speed / top, 1.0)
+	local power = math.min(0.25 + speed01, 1.0)
+	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
+		speed01 = speed01,
+		power01 = power,
+		state = { speed = speed, power = power, vx = vx, vy = vy },
+	})
+	if ok then
+		api.cmd.sendCommand(cmd)
+		run.lastState = { speed = speed, vx = vx, vy = vy }
+		run.stateAge = 0.0
+	end
 end
 
 -- A real TransportVehiclePart for the stand-in.
@@ -933,6 +975,7 @@ local function advanceApproach(run, dt)
 	local arrived = step >= dist
 	local f = arrived and 1.0 or (step / dist)
 	run.gx, run.gy, run.gz = run.gx + dx * f, run.gy + dy * f, run.gz + dz * f
+	pushGhostState(run, arrived and 0.0 or speed, arrived and 0.0 or dx / dist * speed, arrived and 0.0 or dy / dist * speed, dt)
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
 	if arrived then run.phase = "flip" end
@@ -952,6 +995,7 @@ local function advanceGhost(run, dt)
 	if run.pause ~= nil and run.pause > 0 then
 		run.pause = run.pause - dt
 		run.speed = 0.0
+		pushGhostState(run, 0.0, 0.0, 0.0, dt)
 		return false
 	end
 
@@ -1009,7 +1053,10 @@ local function advanceGhost(run, dt)
 		yaw = yaw + math.pi -- driving backwards: the loco keeps facing the way it faced
 	end
 	local transf = api.type.Mat4f.rotZTransl(yaw, pos)
+	local pvx, pvy = 0.0, 0.0
+	if run.gx ~= nil and dt > 0 then pvx, pvy = (pos.x - run.gx) / dt, (pos.y - run.gy) / dt end
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
+	pushGhostState(run, run.speed, pvx, pvy, dt)
 	run.loopSpeed = loop.speed
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
@@ -1235,10 +1282,16 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: the stand-in model was not found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/standin.mdl loaded?")
 		return
 	end
-	local ghostModelId = findGhostModelId(locoSnap.modelId)
+	local ghostModelId, ghostEffects = findGhostModelId(locoSnap.modelId)
 	if ghostModelId == nil then
 		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
 		return
+	end
+	local locoTopSpeed = nil
+	do
+		local okM, model = pcall(api.res.modelRep.getAsTable, locoSnap.modelId)
+		local lv = okM and type(model) == "table" and model.metadata and model.metadata.landVehicle
+		if lv and lv.topSpeed and lv.topSpeed > 1 then locoTopSpeed = lv.topSpeed end
 	end
 	local hasTail = CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	local origRev = {}
@@ -1306,6 +1359,8 @@ local function startRunAround(state, vehicleEntity, loop)
 				locoPart = locoSnap,
 				standInModelId = standId,
 				hasTail = hasTail,
+				effects = ghostEffects,
+				topSpeed = locoTopSpeed,
 				origRev = origRev,
 				ghost = ghost,
 				edgeCursor = startCursor,
@@ -1316,6 +1371,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				speed = 0.0,
 			}
 			state:set(data)
+			if ghostEffects then pushGhostState(data.runs[#data.runs], 0.0, 0.0, 0.0, 0.0, true) end
 			logInfo("run-around started for vehicle", vehicleEntity, "loop", loopLabel(loop))
 		end)
 	end)

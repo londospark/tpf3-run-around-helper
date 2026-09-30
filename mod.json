@@ -5,7 +5,7 @@
     "options": null,
     "params": null,
     "postRunScript": {
-        "fileName": ""
+        "fileName": "runaround_helper_1::ghost_build.script@postRunFn"
     },
     "preRunScript": {
         "fileName": ""

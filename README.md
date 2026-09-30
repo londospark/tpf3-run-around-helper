@@ -47,15 +47,20 @@ through earlier versions of this mod is fine.
 
 ## Known issues / not yet verified
 
-- **Click-to-pick was rebuilt after it crashed the game.** The first version put
-  a `builtin.Selector` inside the panel, which the UI cannot render (transform
-  assertion, hard crash). It now lives in a registered tool pushed onto the tool
-  stack, as the base game does. What a click on track actually delivers is not
-  yet confirmed; the mod logs `[RunAroundHelper] pick: clicked entity=... kind=...`
-  for every click, and falls back to edge index 0 of the clicked track segment
-  if no edge details are supplied.
+- **Click-to-pick works, with a caveat.** The first version put a
+  `builtin.Selector` inside the panel, which the UI cannot render (hard crash).
+  It now lives in a registered tool pushed onto the tool stack, as the base game
+  does, and a live test captured a track click. A click on track delivers the
+  track segment's entity with no edge details, so the mod uses edge index 0 of
+  that segment (fine for single track; it logs
+  `pick: clicked entity=... kind=...` and the fallback it took). Double track
+  or two-direction segments can't yet be told apart.
 - Clicks cannot tell direction, so picked edges default to `forward = true`.
-- The detach / animate / recouple sequence itself is untested in a live game;
+- **The first real run-around crashed the game** (`!m_betweenChanges`): commands
+  were being sent from inside the arrival-event handler, which the engine
+  forbids. Starts are now queued by the handler and sent from the next
+  `update()`. This fix has not been run in game yet, so the detach / animate /
+  recouple sequence is still untested end to end;
   the loco-end and flip-on-recouple toggles exist because the correct values
   are not known ahead of time.
 - Multiple-unit consists are not handled (assumes one loco plus separate wagons).

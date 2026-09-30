@@ -353,7 +353,19 @@ local function ensureData(state)
 	end
 	if data.runs == nil then data.runs = {} end
 	if data.loops == nil then data.loops = {} end
+	if data.pending == nil then data.pending = {} end
 	return data
+end
+
+-- True if this vehicle already has a run in flight or queued to start.
+local function vehicleBusy(data, vehicleEntity)
+	for _, run in ipairs(data.runs) do
+		if run.vehicleEntity == vehicleEntity then return true end
+	end
+	for _, p in ipairs(data.pending) do
+		if p.vehicleEntity == vehicleEntity then return true end
+	end
+	return false
 end
 
 -- Reads a vehicle's consist and current line/stop, for the GUI's
@@ -546,6 +558,27 @@ return {
 		state:subscribeToEvent("RunAroundGuiCmd")
 
 		local data = ensureData(state)
+
+		-- Start any run-arounds queued by handleEvent. Commands must be sent
+		-- from here, not from handleEvent: OnArriveAtStop is dispatched while
+		-- the engine is mid-modification, and a sendCommand from inside that
+		-- dispatch asserts "!m_betweenChanges" (Engine.cpp:545) and takes the
+		-- whole game down - hit live on the first real run-around.
+		if #data.pending > 0 then
+			local queued = data.pending
+			data.pending = {}
+			state:set(data)
+			for _, p in ipairs(queued) do
+				local loop = findLoopById(data.loops, p.loopId)
+				if loop ~= nil then
+					startRunAround(state, p.vehicleEntity, loop)
+				end
+			end
+			-- startRunAround's callbacks add to the run list through state,
+			-- so re-read rather than trust the table held above.
+			data = ensureData(state)
+		end
+
 		if #data.runs == 0 then
 			return
 		end
@@ -576,7 +609,12 @@ return {
 					logInfo("startRunAround: loop", loopLabel(loop), "has no locoModelId set yet (configure it from the GUI)")
 					return
 				end
-				startRunAround(state, param.vehicleEntity, loop)
+				-- Queue only; update() sends the commands (see there).
+				if not vehicleBusy(data, param.vehicleEntity) then
+					data.pending[#data.pending + 1] = { vehicleEntity = param.vehicleEntity, loopId = loop.id }
+					state:set(data)
+					logInfo("queued run-around for vehicle", param.vehicleEntity, "loop", loopLabel(loop))
+				end
 			end
 
 		elseif name == "RunAroundGuiCmd" then

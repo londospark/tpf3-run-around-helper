@@ -6,8 +6,11 @@ loco is detached from the consist, driven round a loop you define (as a free
 model entity, animated along the real track geometry), then re-attached at the
 other end. The other terminus of the line keeps the normal vanilla behaviour.
 
-**Status: work in progress, not published.** The setup UI works; the actual
-run-around animation has not yet been run end to end in a live game.
+**Status: work in progress, not published. The run itself is switched off.**
+Setting up a loop works (panel, click-to-pick route points, automatic route and
+reversal planning, automatic loco choice). Detaching the loco is disabled
+(`detachEnabled = false` in `runaround.script.lua`) because it crashes the game:
+see "Known issues" first.
 
 ## Setting up a loop (in game)
 
@@ -66,6 +69,21 @@ just reloading a save. Loops are stored in the save, so a save that has been
 through earlier versions of this mod is fine.
 
 ## Known issues / not yet verified
+
+- **Blocking: a train of only wagons crashes the game.** Once the loco was
+  detached (this got through the detach, spawn and loco choice in a live game),
+  the game exited about 25 seconds later with
+  `Assertion (trainMoveInfo.availPower)>(0.0f) failed` in
+  `calculateFallbackPowerOutput`. Every land vehicle's model scripts (sounds,
+  smoke, animations) are handed a per-render-step `powerOutput`, and a consist
+  with no powered part asserts as soon as its wagons are drawn - not a window or
+  hover problem, and nothing a mod can catch. So the loco cannot simply leave the
+  consist. The way round is to keep a powered part in the consist while the ghost
+  loco is away, ideally an invisible twin of the loco's own model created from
+  its model table (`api.res.modelRep.getAsTable` / `addAsTable` exist). When a
+  loop is created the mod now logs that model's structure (`model probe:` lines,
+  read-only, `DUMP_LOCO_MODEL`) so the twin can be designed from real data.
+  Until then, arrivals log "NOT started: detaching is switched off".
 
 - **Click-to-pick works, with a caveat.** The first version put a
   `builtin.Selector` inside the panel, which the UI cannot render (hard crash).

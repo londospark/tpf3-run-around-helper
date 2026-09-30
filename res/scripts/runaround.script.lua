@@ -81,6 +81,19 @@ local CONFIG = {
 	-- the single least-certain part of this mod).
 	LOG_ARRIVALS = true,
 
+	-- SAFETY SWITCH, off on purpose. Detaching the loco leaves a consist of
+	-- wagons only, and the game cannot draw one: every land vehicle's model
+	-- scripts are given a per-render-step powerOutput, and with no powered
+	-- part it asserts "trainMoveInfo.availPower > 0" (transformator_util_
+	-- scripting.cpp:91) and the whole game exits (seen live, about 25 s after
+	-- the detach, as soon as the wagons were on screen). Turn this on only once
+	-- the consist keeps a powered part while the ghost loco is away.
+	detachEnabled = false,
+
+	-- Logs the structure of the chosen loco's model table when a loop is
+	-- created (read-only), to design a hidden powered stand-in from real data.
+	DUMP_LOCO_MODEL = true,
+
 	-- Defaults applied to a newly-added loop; edit per-loop from the GUI afterwards.
 	defaultSpeed = 8.0,
 	defaultAccel = 2.0,
@@ -992,6 +1005,43 @@ end
 -- Handles one "RunAroundGuiCmd" event from runaround_gui.lua. All mutation
 -- of persistent loop config happens here (not in the GUI file) so there is
 -- a single source of truth and the GUI can stay a thin, best-effort layer.
+-- Read-only probe: prints the shape of a model table (keys, value types,
+-- lengths) to the log, depth- and size-limited.
+local function dumpModelShape(modelId)
+	local ok, t = pcall(api.res.modelRep.getAsTable, modelId)
+	if not ok or type(t) ~= "table" then
+		logInfo("model probe: getAsTable failed for", modelId, tostring(t))
+		return
+	end
+	local budget = 220
+	local function dump(v, indent, depth)
+		if budget <= 0 then return end
+		local keys = {}
+		for k in pairs(v) do keys[#keys + 1] = k end
+		table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+		for _, k in ipairs(keys) do
+			if budget <= 0 then return end
+			local val = v[k]
+			local tv = type(val)
+			local desc
+			if tv == "table" then
+				local n = 0
+				for _ in pairs(val) do n = n + 1 end
+				desc = "table(" .. n .. ")"
+			elseif tv == "string" then
+				desc = '"' .. string.sub(val, 1, 60) .. '"'
+			else
+				desc = tostring(val)
+			end
+			budget = budget - 1
+			logInfo("model probe: " .. string.rep("  ", indent) .. tostring(k) .. " = " .. desc)
+			if tv == "table" and depth < 4 then dump(val, indent + 1, depth + 1) end
+		end
+	end
+	logInfo("model probe: model", modelId, "structure follows")
+	dump(t, 0, 0)
+end
+
 local function handleGuiCmd(data, name, param)
 	if name == "AddLoopFromVehicle" then
 		local snap = readVehicleSnapshot(param.vehicleEntity)
@@ -1020,6 +1070,9 @@ local function handleGuiCmd(data, name, param)
 		}
 		data.loops[#data.loops + 1] = loop
 		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
+		if CONFIG.DUMP_LOCO_MODEL and loop.locoModelId ~= nil then
+			pcall(dumpModelShape, loop.locoModelId)
+		end
 
 	elseif name == "CycleLocoCandidate" then
 		-- Steps automatic -> part 1 -> part 2 ... -> last part -> automatic.
@@ -1192,6 +1245,10 @@ return {
 			if loop ~= nil then
 				if loop.locoManual and loop.locoModelId == nil then
 					logInfo("startRunAround: loop", loopLabel(loop), "has no locoModelId set yet (configure it from the GUI)")
+					return
+				end
+				if not CONFIG.detachEnabled then
+					logInfo("run-around for loop", loopLabel(loop), "NOT started: detaching is switched off (a train of only wagons crashes the game)")
 					return
 				end
 				-- Queue only; update() sends the commands (see there).

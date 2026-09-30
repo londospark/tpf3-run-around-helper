@@ -20,16 +20,26 @@ Everything is configured in game - no editing Lua.
 2. **Add loop from this vehicle** captures the line, the stop and a candidate
    locomotive. **Cycle loco candidate** steps through the consist's parts until
    the right locomotive model is selected.
-3. Record the path the loco should drive, in order, using either:
-   - **Pick edges on map** - toggles a click-to-pick tool. Click the track
-     pieces of your loop in the world, one per edge, in order. *(Newly rebuilt,
-     see "Known issues".)*
-   - **Capture edge here** - records the edge the selected train is currently
-     on (needs a train physically sitting on the loop track).
-4. **Undo edge** removes the last captured edge. **Loco end** and
-   **Flip on recouple** control which end of the consist the loco rejoins and
-   whether its facing flips; **Speed** bumps the ghost loco's speed. If the loco
-   comes back on the wrong end or facing the wrong way, toggle these.
+3. Give the loop its route by clicking a few points - you do not click every
+   track piece. Turn on **Pick route points on map**, then click track in the
+   order the loco travels:
+   1. the track in front of the station,
+   2. the track beyond the points, where the loco stops and reverses,
+   3. a piece of the loop,
+   4. the track at the far end of the train.
+
+   Add extra clicks if the layout needs them (a wye, for example). The mod uses
+   the game's pathfinder to work out the track between consecutive clicks,
+   chooses the direction of travel itself, and treats a click where the route
+   doubles back as a reversal (the loco pauses and sets back). The panel shows
+   the result on the **Route:** line (points, track pieces, reversals, length),
+   or says which pair of clicks it couldn't join. **Add point at this train**
+   does the same using the track piece a train is sitting on. **Undo last point**
+   removes the last click and re-plans.
+4. **Loco end** and **Flip on recouple** control which end of the consist the
+   loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
+   speed. If the loco comes back on the wrong end or facing the wrong way,
+   toggle these.
 
 Any number of independent loops (different lines/termini) can be configured;
 they are saved in the savegame.
@@ -55,7 +65,14 @@ through earlier versions of this mod is fine.
   that segment (fine for single track; it logs
   `pick: clicked entity=... kind=...` and the fallback it took). Double track
   or two-direction segments can't yet be told apart.
-- Clicks cannot tell direction, so picked edges default to `forward = true`.
+- **Route planning is new and untested in a live game.** It was checked against
+  a mock track layout (platform, stub beyond the points, loop rejoining at the
+  far end) but not yet on real track. Direction of travel at each click is chosen
+  automatically (shortest total, reversals cost extra), since a click carries no
+  direction. Reversals can only happen at a click, so click the track where the
+  loco should stop and set back. The loco starts moving from where it stood and
+  jumps to the start of the first clicked piece, so click close to the platform
+  end.
 - **The first real run-around crashed the game** (`!m_betweenChanges`): commands
   were being sent from inside the arrival-event handler, which the engine
   forbids. Starts are now queued by the handler and sent from the next

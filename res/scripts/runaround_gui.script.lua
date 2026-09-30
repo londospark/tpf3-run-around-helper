@@ -276,7 +276,7 @@ function data()
 			"  line=" .. tostring(loop.lineEntity) ..
 			" stop=" .. tostring(loop.stopIndex) ..
 			" loco=" .. tostring(loop.locoModelId) ..
-			" edges=" .. tostring(loop.loopEdges and #loop.loopEdges or 0)
+			" points=" .. tostring(loop.waypoints and #loop.waypoints or 0)
 	end
 
 	-- One row per configured loop: rename field, tuning toggles, and (when
@@ -301,6 +301,7 @@ function data()
 							maxLength = 40,
 						}
 						or builtin.TextView{ text = loopSummaryText(loop) },
+					builtin.TextView{ text = "Route: " .. (loop.pathStatus or "no points yet") },
 					builtin.Button{
 						meta = { tooltip = "Rename" },
 						content = builtin.TextView{ text = "Rename" },
@@ -328,8 +329,8 @@ function data()
 						end,
 					},
 					builtin.Button{
-						meta = { tooltip = "Remove last captured edge" },
-						content = builtin.TextView{ text = "Undo edge" },
+						meta = { tooltip = "Remove the last route point (the route is re-planned)" },
+						content = builtin.TextView{ text = "Undo last point" },
 						onClick = function() sendGuiCmd("RemoveLastLoopEdge", { loopId = loop.id }) end,
 					},
 					builtin.Button{
@@ -351,8 +352,8 @@ function data()
 						onClick = function() sendGuiCmd("CycleLocoCandidate", { loopId = loop.id, vehicleEntity = vehicleEntity }) end,
 					},
 					builtin.Button{
-						meta = { tooltip = "Drive this vehicle onto the next edge of your loop, then click this (needs the train already sitting on that track)" },
-						content = builtin.TextView{ text = "Capture edge here" },
+						meta = { tooltip = "Adds the track piece this train is on as the next route point (the train has to be sitting there)" },
+						content = builtin.TextView{ text = "Add point at this train" },
 						onClick = function() sendGuiCmd("AddLoopEdgeFromVehicle", { loopId = loop.id, vehicleEntity = vehicleEntity }) end,
 					},
 				},
@@ -367,7 +368,7 @@ function data()
 		-- the track, unlike "Capture edge here".
 		children[#children + 1] = builtin.Button{
 			meta = { tooltip = "Toggle click-to-pick mode, then click track in the world to append edges to this loop" },
-			content = builtin.TextView{ text = "Pick edges on map: " .. (pickModeState:old() and "ON (click track)" or "off") },
+			content = builtin.TextView{ text = "Pick route points on map: " .. (pickModeState:old() and "ON (click track)" or "off") },
 			onClick = function()
 				local key = PICK_KEY_PREFIX .. tostring(loop.id)
 				local ok, err = pcall(function()
@@ -385,6 +386,15 @@ function data()
 				end
 			end,
 		}
+
+		if pickModeState:old() then
+			children[#children + 1] = builtin.TextView{ text = "Click track in the order the loco travels:" }
+			children[#children + 1] = builtin.TextView{ text = " 1) the track in front of the station" }
+			children[#children + 1] = builtin.TextView{ text = " 2) the track beyond the points, where it stops and reverses" }
+			children[#children + 1] = builtin.TextView{ text = " 3) a piece of the loop" }
+			children[#children + 1] = builtin.TextView{ text = " 4) the track at the far end of the train" }
+			children[#children + 1] = builtin.TextView{ text = "Add extra clicks for a wye. The route between clicks is found for you." }
+		end
 
 		return builtin.BoxLayout{ orientation = builtin.type.Orientation.Vertical, children = children }
 	end

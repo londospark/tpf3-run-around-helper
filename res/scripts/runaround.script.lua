@@ -234,6 +234,208 @@ local function getEdgeGeometry(edgeDef)
 	return edge.geometry
 end
 
+-- ---------------------------------------------------------------------
+-- Route planning from clicked points.
+--
+-- The user clicks a few track pieces ("waypoints"); the route between them is
+-- worked out with the game's own pathfinder (findPathNodeToNode, called the
+-- same way mission_pathfinding_util.tl does). The pathfinder only finds
+-- forward routes, so each pair of consecutive points is one "leg", and at
+-- every intermediate point the planner may choose to REVERSE (loco stops and
+-- sets back) at a small cost - that is how a run-around into a loop comes
+-- out, and a wye simply shows up as an ordinary route through its junctions.
+-- Directions of travel are chosen automatically (shortest total, reversals
+-- penalised), because a click carries no direction.
+-- ---------------------------------------------------------------------
+local REVERSAL_PENALTY = 250.0 -- metres-equivalent cost of stopping to reverse at a click point
+local REVERSAL_PAUSE = 1.5     -- seconds the ghost loco waits when it reverses
+local STATES = { { true, true }, { true, false }, { false, true }, { false, false } } -- {arrive dir, depart dir}
+
+local function getTnEdge(entity, index)
+	local tn = api.engine.getComponent(entity, api.type.ComponentType.TRANSPORT_NETWORK)
+	if tn == nil then return nil end
+	return tn.edges[index + 1]
+end
+
+-- One {EdgeId, boolean} entry of a pathfinder result. The pair's runtime
+-- shape is unconfirmed (a positional read of the same declared type failed
+-- once for a component field), so try the plausible shapes.
+local function unpackPathPair(pair)
+	local shapes = {
+		function() return pair[1], pair[2] end,
+		function() return pair.edgeId, pair.dir end,
+		function() return pair.first, pair.second end,
+	}
+	for _, fn in ipairs(shapes) do
+		local ok, eid, dir = pcall(fn)
+		if ok and eid ~= nil and eid.entity ~= nil and eid.index ~= nil and type(dir) == "boolean" then
+			return eid, dir
+		end
+	end
+	return nil
+end
+
+local function sameEdge(x, y)
+	return x ~= nil and y ~= nil and x.entity == y.entity and x.index == y.index
+end
+
+-- Edges to drive from waypoint a (leaving in direction dA) to waypoint b
+-- (entering in direction dB), both endpoints included. nil + message if no route.
+local function legPath(a, dA, b, dB)
+	local ea, eb = getTnEdge(a.entity, a.index), getTnEdge(b.entity, b.index)
+	if ea == nil or eb == nil then return nil, "a clicked track piece no longer exists" end
+	local startNode = dA and ea.conns[2] or ea.conns[1]
+	local destNode = dB and eb.conns[1] or eb.conns[2]
+
+	local path = {}
+	if not (startNode.entity == destNode.entity and startNode.index == destNode.index) then
+		local ok, res = pcall(api.engine.util.pathfinding.findPathNodeToNode, { startNode }, { destNode }, { api.type.enum.TransportMode.TRAIN })
+		if not ok then return nil, "pathfinder error: " .. tostring(res) end
+		path = res
+		if #path == 0 then return nil, "no track route" end
+	end
+
+	local raw = { { entity = a.entity, index = a.index, forward = dA } }
+	for i = 1, #path do
+		local eid, dir = unpackPathPair(path[i])
+		if eid == nil then return nil, "unreadable pathfinder entry " .. i end
+		raw[#raw + 1] = { entity = eid.entity, index = eid.index, forward = dir }
+	end
+	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
+
+	local out = {}
+	for _, e in ipairs(raw) do
+		local last = out[#out]
+		if not (sameEdge(last, e) and last.forward == e.forward) then
+			out[#out + 1] = e
+		end
+	end
+	return out
+end
+
+-- Best route through all waypoints, or nil + message.
+-- Returns route (list of {entity,index,forward[,reversal]}), info {length, reversals}.
+local function planRoute(waypoints)
+	local n = #waypoints
+	if n < 2 then return nil, "need at least 2 points" end
+
+	local memo = {}
+	local function leg(i, d, a)
+		local key = i .. ":" .. tostring(d) .. ":" .. tostring(a)
+		local m = memo[key]
+		if m == nil then
+			local edges, err = legPath(waypoints[i], d, waypoints[i + 1], a)
+			local cost = math.huge
+			if edges ~= nil then
+				cost = 0
+				for _, e in ipairs(edges) do
+					cost = cost + estimateEdgeLength(getEdgeGeometry(e))
+				end
+			end
+			m = { edges = edges, cost = cost, err = err }
+			memo[key] = m
+		end
+		return m
+	end
+
+	local best, from = { {} }, {}
+	for s, st in ipairs(STATES) do
+		best[1][s] = (st[1] == st[2]) and 0 or math.huge -- no arrival at the first point
+	end
+	for i = 2, n do
+		best[i], from[i] = {}, {}
+		for s, st in ipairs(STATES) do
+			local a, d = st[1], st[2]
+			if i == n and a ~= d then
+				best[i][s] = math.huge -- departure at the last point is meaningless
+			else
+				local penalty = (a ~= d) and REVERSAL_PENALTY or 0
+				local bestCost, bestPrev = math.huge, nil
+				for ps, pst in ipairs(STATES) do
+					if best[i - 1][ps] < math.huge then
+						local l = leg(i - 1, pst[2], a)
+						if l.cost < math.huge then
+							local c = best[i - 1][ps] + l.cost + penalty
+							if c < bestCost then bestCost, bestPrev = c, ps end
+						end
+					end
+				end
+				best[i][s], from[i][s] = bestCost, bestPrev
+			end
+		end
+	end
+
+	local endState, endCost = nil, math.huge
+	for s = 1, #STATES do
+		if best[n][s] < endCost then endState, endCost = s, best[n][s] end
+	end
+	if endState == nil then
+		-- Say which pair of points cannot be joined, to make the message useful.
+		for i = 1, n - 1 do
+			local any = false
+			local lastErr = "no track route"
+			for _, ds in ipairs({ true, false }) do
+				for _, as in ipairs({ true, false }) do
+					local l = leg(i, ds, as)
+					if l.cost < math.huge then any = true else lastErr = l.err or lastErr end
+				end
+			end
+			if not any then
+				return nil, "point " .. i .. " to point " .. (i + 1) .. ": " .. lastErr
+			end
+		end
+		return nil, "no consistent route through these points"
+	end
+
+	local chosen = { [n] = endState }
+	for i = n, 2, -1 do chosen[i - 1] = from[i][chosen[i]] end
+
+	local route, reversals, length = {}, 0, 0
+	for i = 1, n - 1 do
+		local l = leg(i, STATES[chosen[i]][2], STATES[chosen[i + 1]][1])
+		for _, e in ipairs(l.edges) do
+			local last = route[#route]
+			if sameEdge(last, e) then
+				if last.forward ~= e.forward then
+					-- Same track piece taken again the other way round: the loco stops and reverses here.
+					route[#route + 1] = { entity = e.entity, index = e.index, forward = e.forward, reversal = true }
+					reversals = reversals + 1
+				end
+			else
+				route[#route + 1] = { entity = e.entity, index = e.index, forward = e.forward }
+			end
+		end
+	end
+	return route, { length = endCost, reversals = reversals }
+end
+
+-- Rebuilds loop.loopEdges from loop.waypoints and records a one-line status
+-- for the panel. Never throws.
+local function recomputeLoopRoute(loop)
+	loop.waypoints = loop.waypoints or {}
+	if #loop.waypoints < 2 then
+		loop.loopEdges = {}
+		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more"
+		return
+	end
+	local ok, route, info = pcall(planRoute, loop.waypoints)
+	if not ok then
+		loop.loopEdges = {}
+		loop.pathStatus = "route error: " .. tostring(route)
+		logInfo("route planning error for loop", loopLabel(loop), tostring(route))
+		return
+	end
+	if route == nil then
+		loop.loopEdges = {}
+		loop.pathStatus = "no route - " .. tostring(info)
+		logInfo("no route for loop", loopLabel(loop), "-", tostring(info))
+		return
+	end
+	loop.loopEdges = route
+	loop.pathStatus = string.format("%d points, %d track pieces, %d reversal(s), about %d m", #loop.waypoints, #route, info.reversals, math.floor(info.length))
+	logInfo("route for loop", loopLabel(loop), "-", loop.pathStatus)
+end
+
 -- Advances one run's ghost loco by dt seconds. Returns true once it has
 -- reached the end of its loop's loopEdges.
 local function advanceGhost(run, dt)
@@ -242,21 +444,45 @@ local function advanceGhost(run, dt)
 		return true
 	end
 
-	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
+	-- Waiting at a reversal point (loco changing ends).
+	if run.pause ~= nil and run.pause > 0 then
+		run.pause = run.pause - dt
+		run.speed = 0.0
+		return false
+	end
 
 	local edgeDef = loop.loopEdges[run.edgeCursor]
 	if run.edgeLength == nil then
+		if edgeDef.reversal and not run.reversalDone then
+			run.reversalDone = true
+			run.headingFlipped = not run.headingFlipped
+			run.pause = REVERSAL_PAUSE
+			return false
+		end
 		run.edgeLength = estimateEdgeLength(getEdgeGeometry(edgeDef))
 		run.edgeProgress = 0.0
 	end
 
+	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
 	run.edgeProgress = run.edgeProgress + run.speed * dt
 	local t = run.edgeLength > 0 and math.min(run.edgeProgress / run.edgeLength, 1.0) or 1.0
 
+	-- Position along the piece's geometry (u runs start -> end); travel is
+	-- towards u = 1 when forward, u = 0 when not. Heading comes from two
+	-- nearby points so it stays defined at the very ends of a piece.
 	local geometry = getEdgeGeometry(edgeDef)
-	local posAndDir = api.engine.util.transport.calcPositionAndDirection(geometry, t, edgeDef.forward)
-	local pos, dir = posAndDir[1], posAndDir[2]
-	local yaw = math.atan2(dir.y, dir.x)
+	local forward = edgeDef.forward
+	local u = forward and t or (1.0 - t)
+	local calc = api.engine.util.transport.calcPosition
+	local pos = calc(geometry, u)
+	local pa = calc(geometry, math.max(0.0, u - 0.02))
+	local pb = calc(geometry, math.min(1.0, u + 0.02))
+	local dx, dy = pb.x - pa.x, pb.y - pa.y
+	if not forward then dx, dy = -dx, -dy end
+	local yaw = math.atan2(dy, dx)
+	if run.headingFlipped then
+		yaw = yaw + math.pi -- driving backwards: the loco keeps facing the way it faced
+	end
 	local transf = api.type.Mat4f.rotZTransl(yaw, pos)
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
@@ -264,6 +490,7 @@ local function advanceGhost(run, dt)
 	if run.edgeProgress >= run.edgeLength then
 		run.edgeCursor = run.edgeCursor + 1
 		run.edgeLength = nil
+		run.reversalDone = false
 	end
 
 	return run.edgeCursor > #loop.loopEdges
@@ -466,7 +693,9 @@ local function handleGuiCmd(data, name, param)
 			stopIndex = snap.stopIndex,
 			locoModelId = snap.vehicles[1] and snap.vehicles[1].part.modelId or nil,
 			locoCandidateIndex = 1,
+			waypoints = {},
 			loopEdges = {},
+			pathStatus = "no points yet",
 			speed = CONFIG.defaultSpeed,
 			accel = CONFIG.defaultAccel,
 			locoLeadsWithFirstArrayEntry = CONFIG.defaultLocoLeadsWithFirstArrayEntry,
@@ -485,32 +714,46 @@ local function handleGuiCmd(data, name, param)
 		end
 
 	elseif name == "AddLoopEdgeFromVehicle" then
+		-- The edge a train is currently on becomes a route point (its own
+		-- direction is ignored - the planner chooses directions).
 		local loop = findLoopById(data.loops, param.loopId)
 		local edge = loop and readVehicleCurrentEdge(param.vehicleEntity)
 		if loop ~= nil and edge ~= nil then
-			loop.loopEdges[#loop.loopEdges + 1] = edge
-			logInfo("GUI: loop", loopLabel(loop), "captured edge", edge.entity, edge.index, edge.forward)
+			loop.waypoints = loop.waypoints or {}
+			local last = loop.waypoints[#loop.waypoints]
+			if not sameEdge(last, edge) then
+				loop.waypoints[#loop.waypoints + 1] = { entity = edge.entity, index = edge.index }
+				logInfo("GUI: loop", loopLabel(loop), "added route point from train position", edge.entity, edge.index)
+				recomputeLoopRoute(loop)
+			end
 		else
 			logInfo("AddLoopEdgeFromVehicle: could not read current edge for vehicle", param.vehicleEntity)
 		end
 
 	elseif name == "AddLoopEdgeFromWorldClick" then
-		-- From clicking track directly in the world (builtin.Selector's
-		-- onSelect, SelectionDetails.Type.TransportNetworkEdge) - no train
-		-- needs to be sitting on the track, unlike AddLoopEdgeFromVehicle
-		-- above. No direction is available from a world click (EdgePos has
-		-- no forward flag), so this always defaults forward=true; flip it
-		-- by hand in the file if a captured edge turns out backwards.
+		-- A click on track in the world becomes a route point: click the
+		-- track in front of the station, then the loop, then the track after
+		-- the points (more clicks for a wye). No train needs to be there.
 		local loop = findLoopById(data.loops, param.loopId)
 		if loop ~= nil then
-			loop.loopEdges[#loop.loopEdges + 1] = { entity = param.entity, index = param.index, forward = true }
-			logInfo("GUI: loop", loopLabel(loop), "captured edge (world click)", param.entity, param.index)
+			loop.waypoints = loop.waypoints or {}
+			local point = { entity = param.entity, index = param.index }
+			if sameEdge(loop.waypoints[#loop.waypoints], point) then
+				logInfo("GUI: loop", loopLabel(loop), "ignored a repeat click on the same track piece")
+			else
+				loop.waypoints[#loop.waypoints + 1] = point
+				logInfo("GUI: loop", loopLabel(loop), "added route point (world click)", param.entity, param.index)
+				recomputeLoopRoute(loop)
+			end
 		end
 
 	elseif name == "RemoveLastLoopEdge" then
 		local loop = findLoopById(data.loops, param.loopId)
-		if loop ~= nil and #loop.loopEdges > 0 then
-			loop.loopEdges[#loop.loopEdges] = nil
+		if loop ~= nil and loop.waypoints ~= nil and #loop.waypoints > 0 then
+			loop.waypoints[#loop.waypoints] = nil
+			recomputeLoopRoute(loop)
+		elseif loop ~= nil and #loop.loopEdges > 0 then
+			loop.loopEdges[#loop.loopEdges] = nil -- loop saved by an older version
 		end
 
 	elseif name == "RemoveLoop" then

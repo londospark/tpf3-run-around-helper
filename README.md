@@ -99,11 +99,13 @@ through earlier versions of this mod is fine.
   is unconfirmed until a live run; `detachEnabled` in `runaround.script.lua` is
   the kill switch.
 - **First full live run: it worked, with two glitches, both fixed but untested.**
-  (1) The ghost started in the middle of the consist: the 1 m stand-in left a
-  gap the wagons closed up into, over the ghost's start point. The stand-in now
-  comes in 2 m steps (`res/models/runaround_standin/standin_4.mdl` to `_44.mdl`)
-  and the mod picks the one nearest the loco's length (its model's extent), so
-  the wagons stay put. (2) The loco snapped back to its original end when the
+  (1) The ghost appeared in the middle of the consist. The wagons did not move
+  (a first guess, that the 1 m stand-in let them close up, was wrong; the
+  stand-in is now sized to the loco anyway, in 2 m steps, `standin_4.mdl` to
+  `_44.mdl`). The real cause: the route's first piece is the stop's track node,
+  about the middle of the platform, and the ghost was moved there on its first
+  step. It now starts at the point on the route nearest the loco's real
+  position (log: "ghost starts on route piece ..."). (2) The loco snapped back to its original end when the
   train set off. The game flips a train that must leave a terminus the way it
   came - it mirrors the consist end for end, keeping the parts-list order - and
   it does that at departure, so a loco coupled on at the exit end was flipped

@@ -415,7 +415,10 @@ local function captureLocoTransform(vehicleEntity, locoIdx)
 	local carriageList = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 	local carriageEntity = carriageList.carriages[locoIdx]
 	local mil = api.engine.getComponent(carriageEntity, api.type.ComponentType.MODEL_INSTANCE_LIST)
-	return mil.fatInstances[1].transf
+	local transf = mil.fatInstances[1].transf
+	-- A copy: the component's matrix must not be read again after the consist is replaced.
+	local okClone, copy = pcall(function() return transf:clone() end)
+	return okClone and copy or transf
 end
 
 -- Samples an edge's geometry at N points to approximate its length, since
@@ -832,6 +835,37 @@ local function recomputeLoopRoute(loop)
 	logInfo("route for loop", loopLabel(loop), "-", loop.pathStatus)
 end
 
+-- Where along the route the real loco is standing, so the ghost can start
+-- there instead of at the route's first piece (which is the stop's track node,
+-- about the middle of the platform - the ghost visibly jumped to the middle of
+-- the consist). Looks along the first few pieces for the point nearest the
+-- loco. Returns the piece number, the metres already covered on it, and the
+-- distance from the loco to that point; nil if the route has no pieces.
+local function locateOnRoute(loop, pos)
+	local edges = loop.loopEdges
+	if edges == nil or #edges == 0 then return nil end
+	local calc = api.engine.util.transport.calcPosition
+	local bestK, bestS, bestD2 = nil, 0, math.huge
+	for k = 1, math.min(#edges, 8) do
+		local edgeDef = edges[k]
+		if not edgeDef.reversal then
+			local ok, geometry = pcall(getEdgeGeometry, edgeDef)
+			if ok then
+				local len = estimateEdgeLength(geometry)
+				for i = 0, 20 do
+					local along = i / 20 -- fraction of the way travelled
+					local u = edgeDef.forward and along or (1.0 - along)
+					local p = calc(geometry, u)
+					local d2 = (p.x - pos.x) ^ 2 + (p.y - pos.y) ^ 2
+					if d2 < bestD2 then bestK, bestS, bestD2 = k, along * len, d2 end
+				end
+			end
+		end
+	end
+	if bestK == nil then return nil end
+	return bestK, bestS, math.sqrt(bestD2)
+end
+
 -- Advances one run's ghost loco by dt seconds. Returns true once it has
 -- reached the end of its loop's loopEdges.
 local function advanceGhost(run, dt)
@@ -856,7 +890,8 @@ local function advanceGhost(run, dt)
 			return false
 		end
 		run.edgeLength = estimateEdgeLength(getEdgeGeometry(edgeDef))
-		run.edgeProgress = 0.0
+		run.edgeProgress = run.startOffset or 0.0
+		run.startOffset = nil
 	end
 
 	run.speed = math.min(loop.speed, run.speed + loop.accel * dt)
@@ -1109,6 +1144,17 @@ local function startRunAround(state, vehicleEntity, loop)
 				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(ghost, locoTransf))
 			end
 
+			local startCursor, startOffset = 1, nil
+			if locoTransf ~= nil then
+				local c = locoTransf:cols(3)
+				local okL, k, off, dist = pcall(locateOnRoute, loop, { x = c.x, y = c.y })
+				if okL and k ~= nil and dist < 40 then
+					startCursor, startOffset = k, off
+					logInfo(string.format("ghost starts on route piece %d, %d m along it (%d m from the loco's position)", k, math.floor(off), math.floor(dist)))
+				else
+					logInfo("the loco is not on the first pieces of the route (", tostring(okL and dist or k), ") - the ghost starts at the route's first piece")
+				end
+			end
 			local data = state:get()
 			data.runs[#data.runs + 1] = {
 				vehicleEntity = vehicleEntity,
@@ -1116,7 +1162,8 @@ local function startRunAround(state, vehicleEntity, loop)
 				locoPart = locoSnap,
 				standInModelId = standId,
 				ghost = ghost,
-				edgeCursor = 1,
+				edgeCursor = startCursor,
+				startOffset = startOffset,
 				edgeLength = nil,
 				edgeProgress = 0.0,
 				speed = 0.0,

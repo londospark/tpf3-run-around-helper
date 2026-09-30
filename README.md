@@ -145,6 +145,10 @@ through earlier versions of this mod is fine.
   ghost, or the game refuses one, it falls back to the plain silent ghost.
   `useEffectGhosts` in `runaround.script.lua` turns the effects off. Wheels do
   not turn yet.
+- **Load error "function data() not defined", fixed.** The first effects build
+  crashed the game at load: a `.script.lua` file must define `data()` and return
+  its functions from it, unlike the base game's `.tl` scripts, which can return a
+  table directly. Both new scripts now do.
 - **Wagon jump fixed (untested).** A video of the live run showed the wagons
   jumping about one loco length and swapping end for end when the train was
   flipped. The flip mirrors the train around its own extent, so with an

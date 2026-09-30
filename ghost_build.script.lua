@@ -205,4 +205,8 @@ mod.postRunFn = function(_configDict, _allModParams)
 	log("ghost models: built effects ghosts for", built, "of", tried, "models")
 end
 
-return mod
+-- A .script.lua file must define data() and return its functions from it
+-- (a plain `return mod` fails with "function data() not defined").
+function data()
+	return mod
+end

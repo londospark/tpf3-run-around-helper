@@ -28,9 +28,11 @@ local updateParticleSystemFn = function(_captureParams, params, particleSystem)
 	end
 end
 
-return {
-	ghost = {
-		updateFn = updateFn,
-		updateParticleSystemFn = updateParticleSystemFn,
-	},
-}
+function data()
+	return {
+		ghost = {
+			updateFn = updateFn,
+			updateParticleSystemFn = updateParticleSystemFn,
+		},
+	}
+end

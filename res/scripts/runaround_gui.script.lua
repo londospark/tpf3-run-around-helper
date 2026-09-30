@@ -632,7 +632,9 @@ function data()
 	if vehicle_eow ~= nil then
 		local ok, recipe = pcall(function()
 			return react.RegisterPluginRecipe(vehicle_eow.VehicleEowExtensionPoint, "RunAroundHelperVehiclePlugin", function(params)
-				return VehiclePanel(params)
+				-- A plugin's own child must be a layout ("Recipe child must be a
+				-- layout", seen live), so the panel component goes inside one.
+				return Column({ VehiclePanel(params) })
 			end)
 		end)
 		if ok then RunAroundHelperVehiclePlugin = recipe else print("[RunAroundHelper] vehicle window plugin failed:", recipe) end

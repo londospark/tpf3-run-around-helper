@@ -279,30 +279,27 @@ local function sameEdge(x, y)
 	return x ~= nil and y ~= nil and x.entity == y.entity and x.index == y.index
 end
 
--- Edges to drive from waypoint a (leaving in direction dA) to waypoint b
--- (entering in direction dB), both endpoints included. nil + message if no route.
-local function legPath(a, dA, b, dB)
-	local ea, eb = getTnEdge(a.entity, a.index), getTnEdge(b.entity, b.index)
-	if ea == nil or eb == nil then return nil, "a clicked track piece no longer exists" end
-	local startNode = dA and ea.conns[2] or ea.conns[1]
-	local destNode = dB and eb.conns[1] or eb.conns[2]
+local function sameNode(x, y)
+	return x.entity == y.entity and x.index == y.index
+end
 
-	local path = {}
-	if not (startNode.entity == destNode.entity and startNode.index == destNode.index) then
-		local ok, res = pcall(api.engine.util.pathfinding.findPathNodeToNode, { startNode }, { destNode }, { api.type.enum.TransportMode.TRAIN })
-		if not ok then return nil, "pathfinder error: " .. tostring(res) end
-		path = res
-		if #path == 0 then return nil, "no track route" end
-	end
-
-	local raw = { { entity = a.entity, index = a.index, forward = dA } }
-	for i = 1, #path do
-		local eid, dir = unpackPathPair(path[i])
+-- Track pieces strictly between two nodes (empty if they are the same node),
+-- as {entity,index,forward}; nil + message if there is no route.
+local function pathBetweenNodes(startNode, destNode)
+	if sameNode(startNode, destNode) then return {} end
+	local ok, res = pcall(api.engine.util.pathfinding.findPathNodeToNode, { startNode }, { destNode }, { api.type.enum.TransportMode.TRAIN })
+	if not ok then return nil, "pathfinder error: " .. tostring(res) end
+	if #res == 0 then return nil, "no track route" end
+	local out = {}
+	for i = 1, #res do
+		local eid, dir = unpackPathPair(res[i])
 		if eid == nil then return nil, "unreadable pathfinder entry " .. i end
-		raw[#raw + 1] = { entity = eid.entity, index = eid.index, forward = dir }
+		out[#out + 1] = { entity = eid.entity, index = eid.index, forward = dir }
 	end
-	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
+	return out
+end
 
+local function dedupeEdges(raw)
 	local out = {}
 	for _, e in ipairs(raw) do
 		local last = out[#out]
@@ -313,9 +310,48 @@ local function legPath(a, dA, b, dB)
 	return out
 end
 
--- Best route through all waypoints, or nil + message.
+-- Edges to drive from waypoint a (leaving in direction dA) to waypoint b
+-- (entering in direction dB), both endpoints included. nil + message if no route.
+local function legPath(a, dA, b, dB)
+	local ea, eb = getTnEdge(a.entity, a.index), getTnEdge(b.entity, b.index)
+	if ea == nil or eb == nil then return nil, "a clicked track piece no longer exists" end
+	local startNode = dA and ea.conns[2] or ea.conns[1]
+	local destNode = dB and eb.conns[1] or eb.conns[2]
+	local mid, err = pathBetweenNodes(startNode, destNode)
+	if mid == nil then return nil, err end
+	local raw = { { entity = a.entity, index = a.index, forward = dA } }
+	for _, e in ipairs(mid) do raw[#raw + 1] = e end
+	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
+	return dedupeEdges(raw)
+end
+
+-- Same, but starting from a track NODE (the station stop) rather than from a
+-- clicked piece: the loco simply sets off from where it is standing.
+local function legFromNode(startNode, b, dB)
+	local eb = getTnEdge(b.entity, b.index)
+	if eb == nil then return nil, "a clicked track piece no longer exists" end
+	local destNode = dB and eb.conns[1] or eb.conns[2]
+	local mid, err = pathBetweenNodes(startNode, destNode)
+	if mid == nil then return nil, err end
+	local raw = {}
+	for _, e in ipairs(mid) do raw[#raw + 1] = e end
+	raw[#raw + 1] = { entity = b.entity, index = b.index, forward = dB }
+	return dedupeEdges(raw)
+end
+
+local function edgesCost(edges)
+	local cost = 0
+	for _, e in ipairs(edges) do
+		cost = cost + estimateEdgeLength(getEdgeGeometry(e))
+	end
+	return cost
+end
+
+-- Best route through all waypoints, or nil + message. If startNode is given
+-- the route begins there (the stop the train is standing at), so the first
+-- waypoint can be the reversing point itself.
 -- Returns route (list of {entity,index,forward[,reversal]}), info {length, reversals}.
-local function planRoute(waypoints)
+local function planRoute(waypoints, startNode)
 	local n = #waypoints
 	if n < 2 then return nil, "need at least 2 points" end
 
@@ -325,14 +361,17 @@ local function planRoute(waypoints)
 		local m = memo[key]
 		if m == nil then
 			local edges, err = legPath(waypoints[i], d, waypoints[i + 1], a)
-			local cost = math.huge
-			if edges ~= nil then
-				cost = 0
-				for _, e in ipairs(edges) do
-					cost = cost + estimateEdgeLength(getEdgeGeometry(e))
-				end
-			end
-			m = { edges = edges, cost = cost, err = err }
+			m = { edges = edges, cost = edges and edgesCost(edges) or math.huge, err = err }
+			memo[key] = m
+		end
+		return m
+	end
+	local function leg0(a)
+		local key = "0:" .. tostring(a)
+		local m = memo[key]
+		if m == nil then
+			local edges, err = legFromNode(startNode, waypoints[1], a)
+			m = { edges = edges, cost = edges and edgesCost(edges) or math.huge, err = err }
 			memo[key] = m
 		end
 		return m
@@ -340,7 +379,13 @@ local function planRoute(waypoints)
 
 	local best, from = { {} }, {}
 	for s, st in ipairs(STATES) do
-		best[1][s] = (st[1] == st[2]) and 0 or math.huge -- no arrival at the first point
+		local a, d = st[1], st[2]
+		if startNode ~= nil then
+			local l = leg0(a)
+			best[1][s] = (l.cost < math.huge) and (l.cost + ((a ~= d) and REVERSAL_PENALTY or 0)) or math.huge
+		else
+			best[1][s] = (a == d) and 0 or math.huge -- no arrival at the first point
+		end
 	end
 	for i = 2, n do
 		best[i], from[i] = {}, {}
@@ -371,9 +416,16 @@ local function planRoute(waypoints)
 	end
 	if endState == nil then
 		-- Say which pair of points cannot be joined, to make the message useful.
+		if startNode ~= nil then
+			local any, lastErr = false, "no track route"
+			for _, as in ipairs({ true, false }) do
+				local l = leg0(as)
+				if l.cost < math.huge then any = true else lastErr = l.err or lastErr end
+			end
+			if not any then return nil, "from the station stop to point 1: " .. lastErr end
+		end
 		for i = 1, n - 1 do
-			local any = false
-			local lastErr = "no track route"
+			local any, lastErr = false, "no track route"
 			for _, ds in ipairs({ true, false }) do
 				for _, as in ipairs({ true, false }) do
 					local l = leg(i, ds, as)
@@ -390,10 +442,9 @@ local function planRoute(waypoints)
 	local chosen = { [n] = endState }
 	for i = n, 2, -1 do chosen[i - 1] = from[i][chosen[i]] end
 
-	local route, reversals, length = {}, 0, 0
-	for i = 1, n - 1 do
-		local l = leg(i, STATES[chosen[i]][2], STATES[chosen[i + 1]][1])
-		for _, e in ipairs(l.edges) do
+	local route, reversals = {}, 0
+	local function append(edges)
+		for _, e in ipairs(edges) do
 			local last = route[#route]
 			if sameEdge(last, e) then
 				if last.forward ~= e.forward then
@@ -406,7 +457,29 @@ local function planRoute(waypoints)
 			end
 		end
 	end
+	if startNode ~= nil then
+		append(leg0(STATES[chosen[1]][1]).edges)
+	end
+	for i = 1, n - 1 do
+		append(leg(i, STATES[chosen[i]][2], STATES[chosen[i + 1]][1]).edges)
+	end
 	return route, { length = endCost, reversals = reversals }
+end
+
+-- The track node where trains stop at a line's stop, or nil. Resolved the way
+-- the base game's line_util.tl does: line -> stop -> station group -> station
+-- -> terminal.vehicleNodeId (raw Line component indices are zero-based).
+local function getStopNode(lineEntity, stopIndex)
+	if lineEntity == nil or stopIndex == nil then return nil end
+	local line = api.engine.getComponent(lineEntity, api.type.ComponentType.LINE)
+	local stop = line and line.stops[stopIndex + 1]
+	if stop == nil then return nil end
+	local group = api.engine.getComponent(stop.stationGroup, api.type.ComponentType.STATION_GROUP)
+	local stationEntity = group and group.stations[stop.station + 1]
+	if stationEntity == nil then return nil end
+	local station = api.engine.getComponent(stationEntity, api.type.ComponentType.STATION)
+	local terminal = station and station.terminals[stop.terminal + 1]
+	return terminal and terminal.vehicleNodeId or nil
 end
 
 -- Rebuilds loop.loopEdges from loop.waypoints and records a one-line status
@@ -415,10 +488,15 @@ local function recomputeLoopRoute(loop)
 	loop.waypoints = loop.waypoints or {}
 	if #loop.waypoints < 2 then
 		loop.loopEdges = {}
-		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more"
+		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more (the reversing point, then the loop)"
 		return
 	end
-	local ok, route, info = pcall(planRoute, loop.waypoints)
+	local okNode, startNode = pcall(getStopNode, loop.lineEntity, loop.stopIndex)
+	if not okNode or startNode == nil then
+		logInfo("could not find the stop's track node for loop", loopLabel(loop), "- planning from the first point instead:", tostring(startNode))
+		startNode = nil
+	end
+	local ok, route, info = pcall(planRoute, loop.waypoints, startNode)
 	if not ok then
 		loop.loopEdges = {}
 		loop.pathStatus = "route error: " .. tostring(route)

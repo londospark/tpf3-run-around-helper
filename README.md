@@ -21,21 +21,22 @@ Everything is configured in game - no editing Lua.
    locomotive. **Cycle loco candidate** steps through the consist's parts until
    the right locomotive model is selected.
 3. Give the loop its route by clicking a few points - you do not click every
-   track piece. Turn on **Pick route points on map**, then click track in the
-   order the loco travels:
-   1. the track in front of the station,
-   2. the track beyond the points, where the loco stops and reverses,
-   3. a piece of the loop,
-   4. the track at the far end of the train.
+   track piece, and you do not click the station: the route starts at the stop
+   the loop was created from. Turn on **Pick route points on map**, then click
+   track in the order the loco travels:
+   1. the track beyond the points, where the loco stops and reverses,
+   2. a piece of the loop,
+   3. the track at the far end of the train.
 
    Add extra clicks if the layout needs them (a wye, for example). The mod uses
-   the game's pathfinder to work out the track between consecutive clicks,
-   chooses the direction of travel itself, and treats a click where the route
-   doubles back as a reversal (the loco pauses and sets back). The panel shows
-   the result on the **Route:** line (points, track pieces, reversals, length),
-   or says which pair of clicks it couldn't join. **Add point at this train**
-   does the same using the track piece a train is sitting on. **Undo last point**
-   removes the last click and re-plans.
+   the game's pathfinder to work out the track from the stop to your first click
+   and between the following clicks, chooses the direction of travel itself,
+   and treats a click where the route doubles back as a reversal (the loco
+   pauses and sets back). The panel shows the result on the **Route:** line
+   (points, track pieces, reversals, length), or says which pair of points it
+   couldn't join. **Add point at this train** does the same using the track
+   piece a train is sitting on. **Undo last point** removes the last click and
+   re-plans.
 4. **Loco end** and **Flip on recouple** control which end of the consist the
    loco rejoins and whether its facing flips; **Speed** bumps the ghost loco's
    speed. If the loco comes back on the wrong end or facing the wrong way,
@@ -70,9 +71,10 @@ through earlier versions of this mod is fine.
   far end) but not yet on real track. Direction of travel at each click is chosen
   automatically (shortest total, reversals cost extra), since a click carries no
   direction. Reversals can only happen at a click, so click the track where the
-  loco should stop and set back. The loco starts moving from where it stood and
-  jumps to the start of the first clicked piece, so click close to the platform
-  end.
+  loco should stop and set back. The route starts at the stop's track node (found
+  via line, stop, station group, station and terminal) and the ghost loco jumps
+  there from where the real loco stood, a short hop along the platform. If the
+  stop's node can't be found, the route starts at the first click instead.
 - **The first real run-around crashed the game** (`!m_betweenChanges`): commands
   were being sent from inside the arrival-event handler, which the engine
   forbids. Starts are now queued by the handler and sent from the next

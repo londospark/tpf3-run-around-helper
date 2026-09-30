@@ -1,5 +1,5 @@
 --[[
-	Run Around Helper - GUI
+	Runaround Railways - GUI
 
 	  * A "Run-around" card in the train window (VehicleEowExtensionPoint): set up
 	    a run-around at the stop the train is at, see the route and a live run,

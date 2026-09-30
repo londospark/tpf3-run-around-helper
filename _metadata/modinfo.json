@@ -1,12 +1,12 @@
 {
     "authors": [
         {
-            "name": "ridecar2",
+            "name": "LondoSpark",
             "role": "CREATOR"
         }
     ],
     "description": "Makes the locomotive run around its train at a chosen terminus instead of the game's instant flip. Pick a few points on the map in game; the loco runs round with its own sound, smoke, wheels and paint, reversing where needed, and couples on at the other end facing the right way.",
-    "name": "Run Around Helper",
+    "name": "Runaround Railways",
     "summary": "Your locomotive runs round its train at the terminus instead of the instant flip. Click a few points on the track; it uncouples, runs round with its own sound, smoke and paint, and couples on at the other end.",
     "tags": [
         "Script Mod"

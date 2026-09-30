@@ -1,4 +1,4 @@
-# Run Around Helper
+# Runaround Railways
 
 **Your locomotive runs round its train at the terminus, instead of the game's
 instant flip.**
@@ -30,7 +30,7 @@ engine that arrived bunker-first leaves chimney-first, as it would for real.
 1. Put the `runaround_helper` folder in your Transport Fever 3 local mods
    folder: `.../Steam/userdata/<your id>/3493540/local/staging_area/`. If you
    subscribed on mod.io, the game does this for you.
-2. Activate **Run Around Helper** in the in-game Mod Hub.
+2. Activate **Runaround Railways** in the in-game Mod Hub.
 3. Restart the game fully. Script mods are only loaded at start-up, not when a
    save is loaded.
 
@@ -250,5 +250,5 @@ Learned while building this. The full write-up is in the modding guide.
 
 ## Credits
 
-Made by ridecar2 (londospark). Built by reading the game's own scripts. Thanks to
+Made by LondoSpark. Built by reading the game's own scripts. Thanks to
 Urban Games for shipping them readable.

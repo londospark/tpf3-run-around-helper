@@ -1,5 +1,5 @@
 --[[
-	Run Around Helper - game script (TpF3)
+	Runaround Railways - game script (TpF3)
 
 	At a terminus configured in game (a "loop": line + stop + a few clicked route
 	points), an arriving train's locomotive runs round its train instead of the

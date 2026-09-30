@@ -9,10 +9,10 @@
 
   <rect width="1920" height="1080" fill="url(#bg)"/>
 
-  <rect x="760" y="565" width="400" height="6" rx="3" fill="#e8a33d"/>
+  <rect x="710" y="568" width="500" height="6" rx="3" fill="#e8a33d"/>
 
   <g font-family="Georgia, 'Times New Roman', serif" text-anchor="middle" fill="#ffffff">
-    <text x="960" y="540" font-size="130" font-weight="600">Run Around Helper</text>
-    <text x="960" y="640" font-size="44" fill="#c3d0de" font-style="italic">A Transport Fever 3 script mod</text>
+    <text x="960" y="540" font-size="130" font-weight="600">Runaround Railways</text>
+    <text x="960" y="640" font-size="46" fill="#c3d0de" font-style="italic">Your loco runs round its train. No more magic flip.</text>
   </g>
 </svg>

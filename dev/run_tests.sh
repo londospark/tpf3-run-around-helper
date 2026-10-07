@@ -23,6 +23,17 @@ for t in "$ROOT"/dev/tests/plan/test_*.lua; do
 done
 run test_hide.lua "$ROOT/dev/tests/ghost_real" "$S/ghost_real.script.lua"
 run test_gui.lua "$ROOT/dev/tests/gui" "$S/runaround_gui.script.lua"
+run test_build.lua "$ROOT/dev/tests/build" "$ROOT/ghost_build.script.lua"
+
+# Every "<mod id>::" path the mod ships must use mod.json's modId: the wrapped
+# transformators and sound sets can't look it up (see ghost_build.script.lua).
+modid=$(sed -n 's/.*"modId": *"\([^"]*\)".*/\1/p' "$ROOT/mod.json")
+bad=$(grep -rhoE '"[A-Za-z0-9_]+::' "$ROOT/res" "$ROOT/ghost_build.script.lua" "$ROOT/mod.json" | sort -u | grep -vxF "\"$modid::")
+if [ -n "$bad" ]; then echo "FAIL  mod ID: expected $modid, found: $bad"; fail=1; else echo "ok    mod ID $modid used throughout"; fi
+grep -q "MOD_ID = \"$modid\"" "$ROOT/ghost_build.script.lua" || { echo "FAIL  ghost_build MOD_ID is not $modid"; fail=1; }
+
+# _content.json lists every shipped file (see dev/tools/gen_content.py).
+if python3 "$ROOT/dev/tools/gen_content.py" --check; then echo "ok    _content.json up to date"; else echo "FAIL  _content.json out of date: run dev/tools/gen_content.py"; fail=1; fi
 
 # Every script must parse, and read no globals beyond the expected ones (a
 # global read is usually a local used before it is defined - that crashed live).

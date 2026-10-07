@@ -22,3 +22,10 @@
   train stays held and the mod keeps trying, with **Stuck** on the card. A run
   that stalls is given up after a time limit, and the train is put back. The
   copies are always cleared away, also when a train is sold mid-run.
+- The run-around card says what the train is doing: turning, drawing forward,
+  uncoupling, running around, coupling on, or stuck.
+- A light engine (a loco on its own) is left alone.
+- Safe if installed under an unexpected mod ID: trains are then left untouched,
+  and the run-around uses plain copies of the loco.
+- The invisible stand-ins have their icons registered and carry the mod's
+  current name.

@@ -9,9 +9,9 @@ api={engine={util={transport={calcPosition=function(g,u) return {x=g.x0+u*100,y=
  cmd={makeCustomEntityUpdateTransformationCmd=function(e,t) return t end,sendCommand=function() end,makeCustomEntityUpdateStateCmd=function() return {} end},
  type={ComponentType={TRANSPORT_NETWORK="TN",CARRIAGE_LIST="CL",MODEL_INSTANCE_LIST="MIL"},Vec3f={distance=function() return 0 end,new=function(x,y,z) return {x=x,y=y,z=z} end},Mat4f={rotZTransl=function(yaw,p) return {yaw=yaw,x=p.x,y=p.y} end}}}
 local M=assert(load(io.open(arg[1]):read("*a").."\nreturn {adv=advanceGhost,CONFIG=CONFIG}","s"))()
-M.CONFIG.reverseBeforeRecouple=true; M.CONFIG.tailStandIn=false
+M.CONFIG.reverseBeforeRecouple=true
 local loop={speed=20,accel=100,loopEdges={{entity=1,index=0,forward=true},{entity=2,index=0,forward=true},{entity=2,index=0,forward=false,reversal=true},{entity=1,index=0,forward=false}}}
-local run={hasTail=false,loop=loop,edgeCursor=1,speed=0,ghost=1,locoYaw=0,vehicleEntity=5}
+local run={loop=loop,edgeCursor=1,speed=0,ghost=1,locoYaw=0,vehicleEntity=5}
 local phases, last = {}, nil
 for i=1,3000 do
   local done = M.adv(run,0.1)

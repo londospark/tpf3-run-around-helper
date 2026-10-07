@@ -126,8 +126,11 @@ A train is never left stuck or broken by a run-around:
 
 ## Tips and limitations
 
+- **The card shows what's happening:** turning the train, drawing forward,
+  uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
+  be coupled back on.
 - **One loco plus coaches or wagons.** Multiple units and double-heading are not
-  handled.
+  handled. A light engine (a loco with nothing behind it) is left alone.
 - **The loco should be at the front of the train when it arrives**, which it is
   at a terminus. A loco chosen elsewhere in the train still runs around, but the
   coaches jump at the end instead of the train drawing forward.
@@ -200,6 +203,7 @@ Useful log lines:
 | `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |
 | `watchdog: ...` | a run stalled, or its train went, and was given up |
 | `train put back as it was ...` | a run couldn't start and the train was restored |
+| `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID, so no vehicle was patched; the run-around still works, with plain copies. Please report it |
 
 ## Advanced settings
 

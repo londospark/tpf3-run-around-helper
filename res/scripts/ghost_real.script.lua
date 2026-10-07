@@ -39,8 +39,8 @@ end
 local WHEEL_RADIUS = 0.9
 local WHEEL_ANIMATION_MS = 5000
 
--- A real carriage whose paint is this flag colour is drawn as nothing (its root
--- node scaled to zero, as the base game's fireworks vanish): the run-around hides
+-- A real carriage whose paint is this flag colour is drawn as nothing (every node
+-- scaled to zero, as the base game's fireworks vanish): the run-around hides
 -- the real coaches this way while their ghost copies are shown, so the coaches -
 -- and their passengers and goods - never leave the train.
 local HIDE = { 0.1234567, 0.7654321, 0.3141593 }
@@ -85,6 +85,18 @@ local function hide(params, transfsOutput)
 			if not pcall(transfsOutput.setUserTransf, transfsOutput, i, zero) then break end
 		end
 	end
+end
+
+-- A real carriage: hidden when it is painted the flag colour (true), otherwise
+-- left to the stock code (false). One drawn again forgets its hidden load; that
+-- is only looked up while something is hidden, so other trains pay nothing.
+local function hideIfFlagged(params, transfsOutput)
+	if isHidden(params.currentInfo.vehicle) then
+		hide(params, transfsOutput)
+		return true
+	end
+	if next(hiddenLoads) ~= nil then hiddenLoads[carriageOf(params)] = nil end
+	return false
 end
 
 local function stateOf(currentInfo)
@@ -158,7 +170,7 @@ end
 
 local function trainUpdateFn(_captureParams, params, transfsOutput)
 	if params.currentInfo.landVehicle ~= nil then
-		if isHidden(params.currentInfo.vehicle) then return hide(params, transfsOutput) end
+		if hideIfFlagged(params, transfsOutput) then return end
 		return stockTrainUpdate(params, transfsOutput)
 	end
 	return ghostUpdate(params, transfsOutput)
@@ -169,7 +181,7 @@ local function tiltingTrainUpdateFn(_captureParams, params, transfsOutput)
 	if params.currentInfo.landVehicle == nil then
 		return ghostUpdate(params, transfsOutput)
 	end
-	if isHidden(params.currentInfo.vehicle) then return hide(params, transfsOutput) end
+	if hideIfFlagged(params, transfsOutput) then return end
 	stockTrainUpdate(params, transfsOutput)
 	local ci = params.currentInfo
 	local tilt = transformator_util.calculateTilt(params.landVehicleApi, ci.vehicle.speed, 80.0, ci.landVehicle.reversed)

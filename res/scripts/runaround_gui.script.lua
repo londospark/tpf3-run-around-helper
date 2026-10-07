@@ -178,11 +178,6 @@ function data()
 	end
 	local function vec4(c) return api.type.Vec4f.new(c[1], c[2], c[3], c[4]) end
 
-	local function edgeGeometry(e)
-		local tn = api.engine.getComponent(e.entity, api.type.ComponentType.TRANSPORT_NETWORK)
-		return tn.edges[e.index + 1].geometry
-	end
-
 	-- NodeViewer config: every route piece coloured along the start-to-end
 	-- gradient, reversing pieces in their own colour and wider.
 	local function routeNodeConfig(loop)
@@ -367,6 +362,14 @@ function data()
 		stuck = "Stuck: the loco could not be coupled back on. The train is held while it keeps trying.",
 	}
 
+	-- Before the loco sets off (ghost rake): what the train is doing.
+	local RAKE_STAGES = {
+		flip = "Turning the train",
+		settle = "Turning the train",
+		pull = "Drawing forward",
+		uncouple = "Uncoupling",
+	}
+
 	local function routeLine(loop)
 		local points = loop.waypoints and #loop.waypoints or 0
 		if points == 0 then return "No route yet: click a few points on the track.", ICON.warn end
@@ -380,6 +383,7 @@ function data()
 		for _, run in ipairs(runs) do
 			if run.loop ~= nil and run.loop.id == loop.id and (vehicleEntity == nil or run.vehicleEntity == vehicleEntity) then
 				local text = PHASES[run.phase or ""] or "Running around"
+				if run.phase == nil and run.rake ~= nil and RAKE_STAGES[run.rake.stage] then text = RAKE_STAGES[run.rake.stage] end
 				local progress = 0.0
 				if run.phase == nil and (loop.routeLength or 0) > 0 then
 					progress = math.min((run.gdist or 0) / loop.routeLength, 1.0)

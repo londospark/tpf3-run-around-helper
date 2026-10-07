@@ -8,7 +8,7 @@ api={engine={util={transport={calcPosition=function(g,u) return {x=g.x0+u*100,y=
 local M=assert(load(io.open(arg[1]):read("*a").."\nreturn {adv=advanceGhost,CONFIG=CONFIG}","s"))()
 M.CONFIG.reverseBeforeRecouple=true
 local loop={speed=20,accel=100,loopEdges={{entity=1,index=0,forward=true},{entity=2,index=0,forward=true},{entity=2,index=0,forward=false,reversal=true},{entity=1,index=0,forward=false}}}
-local run={hasTail=true,loop=loop,edgeCursor=1,speed=0,ghost=1,locoYaw=math.pi}  -- loco faces -x while travel is +x
+local run={loop=loop,edgeCursor=1,speed=0,ghost=1,locoYaw=math.pi}  -- loco faces -x while travel is +x
 local n=0
 local minx,maxx=1e9,-1e9
 while true do

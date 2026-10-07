@@ -29,6 +29,11 @@
 
 local mod = {}
 
+-- This mod's ID, as in mod.json. The wrapped transformators and sound sets
+-- (res/models/runaround_ghost/*.trf.lua, res/audio/ghostwrap/*.snd.lua) name
+-- res/scripts/ghost_real.script with it, the way the game's own DLC names its
+-- files: they are plain data files and cannot look the ID up. If the game loads
+-- the mod under another ID, nothing is patched (see postRunFn).
 local MOD_ID = "runaround_helper_1"
 -- false = leave the game's locos untouched (then only the ghost copies are used)
 local PATCH_LOCOS = true
@@ -73,12 +78,12 @@ local function isRailVehicle(meta)
 end
 
 -- The wrapped copy of a sound set, as a resource name, or nil if there is none.
-local function wrappedSoundSet(modId, soundSetName)
+local function wrappedSoundSet(soundSetName)
 	if type(soundSetName) ~= "string" then return nil end
 	local key = soundSetName
 	if string.sub(key, 1, 3) == "::/" then key = string.sub(key, 3) end
 	local file = WRAPPED_SOUND_SETS[key]
-	return file and (modId .. "::/res/audio/ghostwrap/" .. file .. ".snd") or nil
+	return file and (MOD_ID .. "::/res/audio/ghostwrap/" .. file .. ".snd") or nil
 end
 
 -- The game's stock train transformators and their wrapped versions.
@@ -88,12 +93,12 @@ local WRAPPED_TRANSFORMATORS = {
 }
 
 -- The wrapped version of a loco's transformator, as a resource name, or nil.
-local function wrappedTransformator(modId, meta)
+local function wrappedTransformator(meta)
 	local name = meta.transformatorConfig and meta.transformatorConfig.transformator and meta.transformatorConfig.transformator.name
 	if type(name) ~= "string" then return nil end
 	local file = WRAPPED_TRANSFORMATORS[string.match(name, "([^/]+)$") or ""]
 	if file == nil or not string.find(name, "vehicle/train/shared/", 1, true) then return nil end
-	return modId .. "::/res/models/runaround_ghost/" .. file
+	return MOD_ID .. "::/res/models/runaround_ghost/" .. file
 end
 
 local stats = { locos = 0, patched = 0, partly = 0, failed = 0, copies = 0 }
@@ -105,11 +110,11 @@ end
 
 -- Points a loco's own model at the wrappers. Returns true when the loco can be its
 -- own ghost (transformator wrapped, and its sound set wrapped or it has none).
-local function patchLoco(modId, modelId, modelName, src)
+local function patchLoco(modelId, modelName, src)
 	local md = src.metadata
-	local wrappedTrf = wrappedTransformator(modId, md)
+	local wrappedTrf = wrappedTransformator(md)
 	local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
-	local wrappedSound = wrappedSoundSet(modId, soundName)
+	local wrappedSound = wrappedSoundSet(soundName)
 	local trfOk = wrappedTrf ~= nil
 	if not trfOk then note(modelName, "has its own transformator, left alone") end
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end
@@ -128,19 +133,19 @@ local function patchLoco(modId, modelId, modelName, src)
 end
 
 -- A ghost copy of a loco's model (its meshes via modelPath), or a marker.
-local function addGhostModel(modId, name, src, modelName, withEffects)
+local function addGhostModel(name, src, modelName, withEffects)
 	if api.res.modelRep.find(name) >= 0 then return true end
 	local meta = src.metadata
 	local md = {
 		transformatorConfig = {
 			skipFromLod = -1,
-			transformator = { name = wrappedTransformator(modId, meta) or (modId .. "::/res/models/runaround_ghost/real.trf") },
+			transformator = { name = wrappedTransformator(meta) or (MOD_ID .. "::/res/models/runaround_ghost/real.trf") },
 		},
 	}
 	if withEffects then
 		if meta.particleSystem ~= nil then md.particleSystem = clone(meta.particleSystem) end
 		local soundName = meta.soundConfig and meta.soundConfig.soundSet and meta.soundConfig.soundSet.name
-		local wrapped = wrappedSoundSet(modId, soundName)
+		local wrapped = wrappedSoundSet(soundName)
 		if wrapped ~= nil then md.soundConfig = { soundSet = { name = wrapped } } end
 	end
 	local ok, res = pcall(api.res.modelRep.addAsTable, name, {
@@ -154,10 +159,15 @@ local function addGhostModel(modId, name, src, modelName, withEffects)
 end
 
 mod.postRunFn = function(_configDict, _allModParams)
-	local modId = MOD_ID
-	if getCurrentModId ~= nil then
-		local okId, id = pcall(getCurrentModId)
-		if okId and id then modId = id end
+	-- Under another ID (a mod.io install that renamed it, say) the wrappers' paths
+	-- would not resolve, and every patched train would lose its animation and
+	-- sound. So then nothing is touched: the run-around still works, with the plain
+	-- ghost copies shipped in res/models/runaround_ghost/ and the creep.
+	local okId, modId = pcall(getCurrentModId)
+	if okId and modId ~= nil and modId ~= MOD_ID then
+		log("loco setup: SKIPPED - the mod is loaded as", modId, "but its wrapped files name it", MOD_ID,
+			"- trains are left untouched; the run-around uses plain ghost copies. Please report this.")
+		return
 	end
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then
@@ -171,16 +181,16 @@ mod.postRunFn = function(_configDict, _allModParams)
 			if ok and type(src) == "table" and file ~= nil and isRailVehicle(src.metadata) then
 				stats.locos = stats.locos + 1
 				-- the copy is built from the unchanged metadata, before patching
-				if addGhostModel(modId, "runaround_ghost_dyn/" .. file .. ".mdl", src, name, true) then
+				if addGhostModel("runaround_ghost_dyn/" .. file .. ".mdl", src, name, true) then
 					stats.copies = stats.copies + 1
 				end
 				local ready = false
 				if PATCH_LOCOS then
-					local okP, res = pcall(patchLoco, modId, id, name, clone(src))
+					local okP, res = pcall(patchLoco, id, name, clone(src))
 					ready = okP and res == true
 					if not okP then note(name, "error:", tostring(res)) end
 				end
-				if ready then addGhostModel(modId, "runaround_ghost_real/" .. file .. ".mdl", src, name, false) end
+				if ready then addGhostModel("runaround_ghost_real/" .. file .. ".mdl", src, name, false) end
 			end
 		end
 	end

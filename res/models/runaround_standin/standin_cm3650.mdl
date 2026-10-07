@@ -1,4 +1,4 @@
--- Invisible stand-in locomotive for Run Around Helper.
+-- Invisible stand-in locomotive for Runaround Railways.
 --
 -- While the real loco is away as a ghost, the wagons need a powered part in
 -- their consist: a train with no power cannot be drawn (the game asserts
@@ -43,7 +43,7 @@ return {
 			priceScale = 0.01,
 		},
 		description = {
-			description = "Invisible stand-in used by Run Around Helper while the locomotive is away.",
+			description = "Invisible stand-in used by Runaround Railways while the locomotive is away.",
 			name = "Run-around stand-in",
 		},
 		emissions = {

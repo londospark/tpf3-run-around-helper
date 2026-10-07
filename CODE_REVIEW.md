@@ -9,8 +9,8 @@ Each finding says how it was established: **reproduced** (shown with the offline
 mock), **checked** (against game files), or **by reading** (traced through the
 code, not yet run).
 
-H1-H4 are fixed (see each one; tests in `dev/tests/plan/test_failures.lua`).
-Nothing else has been fixed yet. The run-around works end to end live; most of
+H1-H4, M3, the `hiddenLoads` part of M6 and most of the low items are fixed
+(each says how; tests in `dev/tests/`). The rest is still open. The run-around works end to end live; most of
 the findings are about what happens when something goes wrong.
 
 ---
@@ -142,6 +142,25 @@ transformator and sound script fails to resolve, which would affect every train.
 `ghost_build` already works out its own ID with `getCurrentModId()`, but these
 files can't. Check this on the first mod.io install, before announcing it.
 
+**Fixed (made safe):** the game takes a mod's ID from its `mod.json`, which
+ships with it. The staging folder is `runaround_helper` and the ID
+`runaround_helper_1` resolves live, and Urban Games' own DLC hard-codes its ID
+the same way (`urbangames_deluxe_upgrade_pack::/...`). So the hard-coded ID is
+kept. `resolve()` would avoid it, but the base game only calls it in GUI and
+construction resources, never in a `.trf` or `.snd`, so relying on it there
+untested could break every train. Instead:
+
+- `ghost_build` compares `getCurrentModId()` with `MOD_ID`. If they differ, it
+  patches nothing, logs `loco setup: SKIPPED ...` and returns. The run-around
+  then uses the plain shipped copies, which don't reference the wrappers, and
+  the creep. A mismatched install loses a feature but can't break the game's
+  trains.
+- `dev/run_tests.sh` fails if any `<id>::` path in the shipped files, or
+  `MOD_ID`, differs from `mod.json`'s `modId`. `gen_snd.py` reads it from
+  `mod.json`. `dev/tests/build/test_build.lua` covers both IDs.
+
+Still worth checking the first mod.io install's log for `SKIPPED`.
+
 ### M4. Coach copies don't turn on curves — by reading
 
 The copies are placed with `rotZTransl(c.start.yaw, ...)` throughout
@@ -172,6 +191,10 @@ loading a wagon's load onto the wrong copy.
 works live (coach bodies did vanish), but it could disappear in a game update.
 `hiddenLoads` is also never cleared, which is small but grows over a long session.
 
+**Fixed (`hiddenLoads`):** a real carriage drawn normally again forgets its
+entry. The lookup only runs while something is hidden. The undocumented
+`color` field is still relied on.
+
 ### M7. Saving, or removing the mod, mid-run — by reading
 
 Runs are kept in the script state, so they continue after a reload. Whether the
@@ -184,7 +207,8 @@ Untested.
 
 The ghost rake and the creep both require `locoIdx == 1`. A loco elsewhere (for
 example, propelling from the rear, or chosen manually) falls back to the old
-method, where the coaches jump at the flip. The README doesn't say this.
+method, where the coaches jump at the flip. (The README now says so, under
+"Tips and limitations".)
 
 ---
 
@@ -193,24 +217,34 @@ method, where the coaches jump at the flip. The README doesn't say this.
 - **Leftover code.** `AddLoopFromVehicle`, `AddLoopEdgeFromVehicle` and
   `readVehicleCurrentEdge` (lines 2235-2307, 2313-2339, 2389-2404) are never sent
   by the current GUI. `noDepartNow` (line 1404) is never set any more.
-  `buildConfigWithStandIn`'s `addTail` is always false.
-- **Out-of-date comments.**
+  `buildConfigWithStandIn`'s `addTail` is always false. **Fixed:** all removed,
+  along with `noFlip` (set, never read), `hasTail`, and `edgeGeometry` in the GUI
+  (unused).
+- **Out-of-date comments.** **Fixed.**
   - The header (steps 3-4) describes the old glide.
   - `creepLayout` says "1 m steps"; the step is 0.25 m.
   - `carriageLength` says metadata can't be read here; `modelLength` now reads
     it.
 - **`isStandIn`** scans all 176 stand-in IDs on every call, and it's called in
-  loops. Invert the map once.
+  loops. Invert the map once. **Fixed:** `standInLength` (id to length);
+  `readStandInPosition` uses it too.
 - **Route planning cost.** A click with no direct route can mean up to
   100 candidates × 2 pathfinder calls, per leg and direction pair, with
   `estimateEdgeLength` recomputed each time. On a dense network this may cause a
   hitch on click. Cache the edge lengths.
 - **Run-around card.** The pull and uncouple stages show as "Running around",
-  and the progress bar counts the pull distance as route distance.
+  and the progress bar counts the pull distance as route distance. **Fixed:** the
+  card says "Turning the train", "Drawing forward" and "Uncoupling". The pull
+  runs along the route's first piece, so counting it as route distance is right.
 - **`LOG_TRACES = true`** by default is useful during the alpha but noisy;
   turn it off for a non-alpha release.
 - **Light engine.** A train that's only a loco "runs around" nothing, through the
-  plain path. Harmless, but pointless: skip it.
+  plain path. Harmless, but pointless: skip it. **Fixed:** skipped, with a log line.
+- **Found while tidying.** `_content.json`, the file list the game reads (the DLCs
+  ship one too), was missing the 176 stand-in icons, which may be why the icon
+  warnings persisted. It is now generated (`dev/tools/gen_content.py`), and the
+  tests fail when it's out of date. The stand-ins' player-visible description
+  still said "Run Around Helper". `gen_snd.py` also used the old name.
 
 ---
 
@@ -232,8 +266,8 @@ method, where the coaches jump at the flip. The README doesn't say this.
 
 ## Suggested order
 
-1. H1-H4. These are all failure handling and can share one helper, "put the real
-   train back and clear every copy".
-2. M3, before publishing on mod.io.
+1. ~~H1-H4~~ (done).
+2. ~~M3~~ (done; check the first mod.io install's log).
 3. M1 and M4.
-4. The low items as tidying.
+4. Remaining low items: route-planning cost, `LOG_TRACES` off for a non-alpha
+   release.

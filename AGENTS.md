@@ -70,6 +70,11 @@ by `dev/sync_staging.sh`. Exclude them from the mod.io upload as well.
   - Stock scripts are zipped: `base/content/scripts.zip`, `game_mechanics.zip`,
     and so on.
   - Models are in `base/content/vehicle/{train,waggon}/*.zip`.
+- **The mod ID** lives in `mod.json`. `ghost_build.script.lua`'s `MOD_ID`, the
+  `.trf.lua` files and the generated sound sets must match it; the tests check.
+- **`_content.json`** is the list of shipped files the game reads. After adding or
+  removing a file, run `python3 dev/tools/gen_content.py`; the tests fail until
+  you do.
 - **Regenerating the sound wrappers** after a game update: `dev/tools/gen_snd.py`.
   Its input is `sndsrc/`, the game's 15 rail `.snd.lua` files unzipped from the
   vehicle zips, plus `_index.txt` (`<file> <resource dir>` per line). It writes
@@ -163,14 +168,17 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Failure handling (H1-H4)**, tested offline only (`test_failures.lua`): the
   restore after a failed start, recouple retries and "Stuck" on the card, the
   watchdog. None of these paths has been hit live.
+- **`_content.json` now lists the stand-in icons.** If the
+  "Could not find texture ... _icon20.tga" warnings came from the stale list,
+  they should be gone now.
 
 ### Bugs found in review
 
-H1-H4 in `CODE_REVIEW.md` (failure paths) are fixed. Still open:
+H1-H4, M3 and most low items in `CODE_REVIEW.md` are fixed. Still open: M1, M2,
+M4, M5, M6 (the undocumented `color` field), M7, M8, route-planning cost.
 
-- The hard-coded mod ID in the generated files may break a mod.io install (M3).
-  Check this before publishing.
-- The medium and low items in `CODE_REVIEW.md`.
+On the first mod.io install, check the log for `loco setup: SKIPPED`. If it's
+there, the game loaded the mod under a different ID from `mod.json`'s (see M3).
 
 ### Limitations
 
@@ -191,7 +199,7 @@ These are documented in the README:
 
 1. **The owner's next live test** of the above. Read their `stdout.txt` lines
    before changing anything.
-2. Check review item M3.
+2. Check the first mod.io install's log for `loco setup: SKIPPED` (M3).
 3. Tag `v0.1.0-alpha` on GitHub. Help the owner publish using `MODIO.md`; they
    upload to mod.io themselves and will add a video link later.
 4. Add a chapter on the hidden-coach technique to the modding guide (new source

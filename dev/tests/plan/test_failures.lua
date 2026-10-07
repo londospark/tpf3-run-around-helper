@@ -231,4 +231,11 @@ assert(lastHold() == false, "H4b: a late flip callback does not hold the release
 api.cmd.sendCommand = sc
 say("H4 late callback after the watchdog: train stays released\n")
 
+-- A light engine (no coaches): nothing to run around, nothing sent.
+fresh()
+train.parts = { train.parts[1] }
+start()
+assert(#saved.runs == 0 and #sent == 0, "light engine: left alone")
+say("light engine: left alone\n")
+
 say("failures ok\n")

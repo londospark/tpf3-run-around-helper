@@ -2,20 +2,27 @@
 	Runaround Railways - game script (TpF3)
 
 	At a terminus configured in game (a "loop": line + stop + a few clicked route
-	points), an arriving train's locomotive runs round its train instead of the
-	game's instant flip:
+	points), an arriving train's locomotive runs around its train instead of the
+	game's instant flip. With the ghost rake (CONFIG.ghostRake, the usual case):
 
-	  1. detach: the loco part is swapped for an invisible stand-in of the same
-	     length (a train with no powered part crashes the game), and a "ghost" -
-	     a free entity drawn from the loco's own model where possible - appears
-	     where the loco stood;
-	  2. the ghost drives the planned route (reversing where the planner chose),
-	     keeping its facing, with its own sound, smoke, wheels and paint (see
-	     ghost_real.script.lua and ghost_build.script.lua);
-	  3. the train is flipped with the game's own reverse command, so its head
-	     faces the way out and the stand-in is at that end;
-	  4. the ghost glides to the stand-in and the real loco replaces it, facing
-	     the way the ghost faces; the train leaves.
+	  1. every coach is shown as a "ghost" (a free entity drawn from its own
+	     model) exactly where it stands;
+	  2. detach: the loco part is swapped for an invisible stand-in of the same
+	     length (a train with no powered part crashes the game) and the real
+	     coaches are hidden, still in the train with their passengers and goods;
+	     the loco's ghost appears where the loco stood;
+	  3. out of sight, the hidden train is turned with the game's reverse command;
+	  4. the pull: the loco ghost draws the coach ghosts forward a loco length,
+	     to where the turned train's coaches now are, then uncouples;
+	  5. the loco ghost drives the planned route (reversing where the planner
+	     chose), keeping its facing, with its own sound, smoke, wheels and paint
+	     (see ghost_real.script.lua and ghost_build.script.lua);
+	  6. it brakes against the far coach; the real loco replaces the stand-in,
+	     the coaches get their paint back, the ghosts go, and the train leaves.
+
+	A coach that can't be hidden makes the run use the creep instead (see
+	CONFIG.creepLayout). Whatever fails, finishRun puts the real train back (see
+	recoupleFailed and watchdog): a train is never left stuck or broken.
 
 	Things learned from the engine, which the code relies on:
 	  - no commands from the OnArriveAtStop handler (mid-modification assert) and
@@ -53,7 +60,7 @@ local CONFIG = {
 	-- and the flip mirrors the train about that middle, so nothing but driving can
 	-- move the middle. A real run-around moves the train's middle by a loco length
 	-- (the loco ends up beyond the far coach), so the coaches have to shift by one
-	-- loco length at some point. Here they creep there in 1 m steps: the stand-in
+	-- loco length at some point. Here they creep there in creepStep steps: the stand-in
 	-- in front of them shrinks while a second one behind them grows (same total
 	-- length), the train is flipped when it is symmetrical (so the flip moves
 	-- nothing), and the creep finishes on the other side. Only when the loco is
@@ -287,16 +294,20 @@ end
 -- The invisible stand-in locos (res/models/runaround_standin/standin_cm<centimetres>.mdl,
 -- 0.25 to 44 m in 0.25 m steps); the one nearest wantLength. Found by name
 -- because a mod's resource prefix is not known in advance.
-local standInIds = nil -- length in metres -> model id
+local standInIds = nil    -- length in metres -> model id
+local standInLength = nil -- model id -> length in metres
 local function findStandInModelId(wantLength)
 	if standInIds == nil then
-		standInIds = {}
+		standInIds, standInLength = {}, {}
 		local ok, all = pcall(api.res.modelRep.getAll, true)
 		if ok and all ~= nil then
 			for id, name in pairs(all) do
 				if type(name) == "string" then
 					local cm = string.match(name, "runaround_standin/standin_cm(%d+)%.mdl")
-					if cm then standInIds[tonumber(cm) / 100] = id end
+					if cm then
+						standInIds[tonumber(cm) / 100] = id
+						standInLength[id] = tonumber(cm) / 100
+					end
 				end
 			end
 		end
@@ -312,11 +323,8 @@ end
 
 -- True for any of the stand-in models.
 local function isStandIn(modelId)
-	if standInIds == nil then findStandInModelId(12) end
-	for _, id in pairs(standInIds or {}) do
-		if id == modelId then return true end
-	end
-	return false
+	if standInLength == nil then findStandInModelId(12) end
+	return standInLength[modelId] ~= nil
 end
 
 local function carriagePos(carriageEntity)
@@ -325,8 +333,8 @@ local function carriagePos(carriageEntity)
 end
 
 -- A carriage's length, from the spacing of the carriages' centres (neighbouring
--- centres are half of one plus half of the other apart): model metadata is not
--- readable here. nil when the train is too short to tell.
+-- centres are half of one plus half of the other apart). Only the fallback when
+-- modelLength can't read the model's extent. nil when the train is too short to tell.
 local function carriageLength(vehicleEntity, idx)
 	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 	local n = #cl.carriages
@@ -499,7 +507,7 @@ end
 -- Config with the locomotive swapped for the stand-in, in the same place, and
 -- the wagons untouched. NOT with the loco simply removed: a consist with no
 -- powered part cannot be drawn and crashes the game.
-local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
+local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
 	for i, part in ipairs(config.vehicles) do
@@ -509,7 +517,6 @@ local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap, addTail)
 			parts[#parts + 1] = part
 		end
 	end
-	if addTail then parts[#parts + 1] = makeStandInPart(standId, locoSnap) end -- see balanceWithTail
 	return finishConfig(config, parts)
 end
 
@@ -1059,8 +1066,6 @@ local function readStandInPosition(vehicleEntity, awayFrom)
 	-- their length-weighted centre.
 	local found = {}
 	pcall(function()
-		local lengthOf = {}
-		for len, id in pairs(standInIds or {}) do lengthOf[id] = len end
 		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
 		for _, c in ipairs(cl.carriages) do
 			local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
@@ -1068,7 +1073,7 @@ local function readStandInPosition(vehicleEntity, awayFrom)
 			if isStandIn(inst.modelId) then
 				local p = inst.transf:cols(3)
 				local d = awayFrom and math.sqrt((p.x - awayFrom.x) ^ 2 + (p.y - awayFrom.y) ^ 2) or 0
-				found[#found + 1] = { x = p.x, y = p.y, z = p.z, d = d, len = lengthOf[inst.modelId] or 1 }
+				found[#found + 1] = { x = p.x, y = p.y, z = p.z, d = d, len = standInLength[inst.modelId] or 1 }
 			end
 		end
 	end)
@@ -1458,7 +1463,7 @@ end
 local function finalizeRun(run)
 	if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 	releaseTrain(run.vehicleEntity)
-	if not run.noDepartNow then api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end
+	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
 	if run.restore then
 		logInfo("train put back as it was for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "- no run-around this time")
 	else
@@ -1670,7 +1675,7 @@ end
 local function flipRun(state, vehicleEntity)
 	local function fail(reason)
 		logInfo("flip failed (", reason, ") - the loco will be put back without flipping")
-		updateRun(state, vehicleEntity, function(r) r.phase = "done"; r.noFlip = true end)
+		updateRun(state, vehicleEntity, function(r) r.phase = "done" end)
 	end
 	local okRev, revCmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
 	if not okRev then return fail("reverse command rejected: " .. tostring(revCmd)) end
@@ -2035,6 +2040,10 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 	local tvc = tv.transportVehicleConfig
+	if #tvc.vehicles < 2 then
+		logInfo("vehicle", vehicleEntity, "is a light engine: nothing to run around")
+		return
+	end
 	local locoIdx = nil
 	if loop.locoManual then
 		locoIdx = findLocoIndex(tvc, loop)
@@ -2118,7 +2127,6 @@ local function startRunAround(state, vehicleEntity, loop)
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
 	end
-	local addTail = false
 	local creep = CONFIG.creepLayout and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
 	if creep then
 		-- a multiple of 0.5 m, so it splits into two equal stand-ins (in 0.25 m
@@ -2166,7 +2174,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	elseif creep then
 		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap, locoIdx)
 	else
-		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap, addTail)
+		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
 	end
 	if not okBuild then
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
@@ -2217,7 +2225,6 @@ local function startRunAround(state, vehicleEntity, loop)
 			partCount = #tvc.vehicles,
 			standInModelId = standId,
 			standInLength = standLength,
-			hasTail = addTail,
 			layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
 			rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
 			locoLength = locoLength,
@@ -2326,9 +2333,9 @@ local function vehicleBusy(data, vehicleEntity)
 	return false
 end
 
--- Reads a vehicle's consist and current line/stop, for the GUI's
--- "add loop from this vehicle" action. Returns nil if the entity isn't a
--- live transport vehicle right now.
+-- Reads a vehicle's consist and current line/stop, for the GUI's "add a
+-- run-around" and loco choice. Returns nil if the entity isn't a live
+-- transport vehicle right now.
 local function readVehicleSnapshot(vehicleEntity)
 	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
@@ -2341,101 +2348,11 @@ local function readVehicleSnapshot(vehicleEntity)
 	}
 end
 
--- Reads the edge a vehicle currently occupies, from its MOVE_PATH component,
--- for the GUI's "capture edge from this vehicle" action. NOT VERIFIED beyond
--- static type analysis - MOVE_PATH.path.edges[i] is {EdgeId, bool} per
--- api/tealdef/api/type.d.tl's Path record, and dyn.pathPos.edgeIndex is
--- documented as the current 0-based index into that list.
--- No real shipped script anywhere in the base game actually destructures a
--- {EdgeId, boolean} pair out of Path.edges[i] - this shape is declared in
--- the .d.tl types but never exercised in any example we could find, so the
--- runtime representation of that pair is genuinely unconfirmed. A live test
--- showed plain [1]/[2] positional indexing fails ("attempt to index local
--- 'edgeId' (a nil value)"), so this tries several plausible alternate
--- shapes in order and logs which one (if any) actually worked, rather than
--- guess again blind.
-local function readVehicleCurrentEdge(vehicleEntity)
-	local mp = api.engine.getComponent(vehicleEntity, api.type.ComponentType.MOVE_PATH)
-	if mp == nil or mp.path == nil or mp.dyn == nil then
-		return nil
-	end
-	local idx = mp.dyn.pathPos.edgeIndex
-	local edgeAndDir = mp.path.edges[idx + 1] -- 0-based -> 1-based
-	if edgeAndDir == nil then
-		logInfo("readVehicleCurrentEdge: mp.path.edges[", idx + 1, "] is nil (edgeIndex=", idx, ", #edges=", #mp.path.edges, ")")
-		return nil
-	end
-
-	local function tryShape(label, fn)
-		local ok, edgeId, forward = pcall(fn)
-		if ok and edgeId ~= nil and edgeId.entity ~= nil and edgeId.index ~= nil then
-			logInfo("readVehicleCurrentEdge: shape '" .. label .. "' worked")
-			return { entity = edgeId.entity, index = edgeId.index, forward = forward }
-		end
-		return nil
-	end
-
-	local result =
-		tryShape("positional [1]/[2]", function() return edgeAndDir[1], edgeAndDir[2] end)
-		or tryShape("named .edgeId/.forward", function() return edgeAndDir.edgeId, edgeAndDir.forward end)
-		or tryShape("named .edgeId/.dir", function() return edgeAndDir.edgeId, edgeAndDir.dir end)
-		or tryShape("named .first/.second", function() return edgeAndDir.first, edgeAndDir.second end)
-		or tryShape("bare edgeAndDir as EdgeId itself", function() return edgeAndDir, true end)
-
-	if result ~= nil then
-		return result
-	end
-
-	-- Nothing worked - log everything we can safely see about the real shape
-	-- so the next attempt has actual evidence instead of another guess.
-	local okType, tyMsg = pcall(function() return type(edgeAndDir) end)
-	logInfo("readVehicleCurrentEdge: all known shapes failed. type(edgeAndDir)=", okType and tyMsg or "?")
-	local okLen, lenMsg = pcall(function() return #edgeAndDir end)
-	logInfo("readVehicleCurrentEdge: #edgeAndDir=", okLen and lenMsg or "(not measurable)")
-	local okKeys, keysMsg = pcall(function()
-		local parts = {}
-		for k, v in pairs(edgeAndDir) do
-			parts[#parts + 1] = tostring(k) .. "=" .. tostring(v)
-		end
-		return table.concat(parts, ", ")
-	end)
-	logInfo("readVehicleCurrentEdge: pairs(edgeAndDir)=", okKeys and keysMsg or "(pairs() failed - likely a userdata, not a table)")
-	return nil
-end
-
 -- Handles one "RunAroundGuiCmd" event from runaround_gui.lua. All mutation
 -- of persistent loop config happens here (not in the GUI file) so there is
 -- a single source of truth and the GUI can stay a thin layer.
 local function handleGuiCmd(data, name, param)
-	if name == "AddLoopFromVehicle" then
-		local snap = readVehicleSnapshot(param.vehicleEntity)
-		if snap == nil then
-			logInfo("AddLoopFromVehicle: entity", param.vehicleEntity, "is not a live transport vehicle")
-			return
-		end
-		if snap.lineEntity == nil or snap.lineEntity < 0 then
-			logInfo("AddLoopFromVehicle: vehicle", param.vehicleEntity, "isn't assigned to a line yet")
-			return
-		end
-		local loop = {
-			id = newLoopId(data),
-			name = "Loop " .. tostring(#data.loops + 1),
-			lineEntity = snap.lineEntity,
-			stopIndex = snap.stopIndex,
-			locoModelId = snap.vehicles[1] and snap.vehicles[1].part.modelId or nil,
-			locoManual = false, -- automatic: the part nearest the first route point
-			locoCandidateIndex = 0,
-			locoPartCount = #snap.vehicles,
-			waypoints = {},
-			loopEdges = {},
-			pathStatus = "no points yet",
-			speed = CONFIG.defaultSpeed,
-			accel = CONFIG.defaultAccel,
-		}
-		data.loops[#data.loops + 1] = loop
-		logInfo("GUI: added loop", loopLabel(loop), "from vehicle", param.vehicleEntity)
-
-	elseif name == "AddLoopAtStop" then
+	if name == "AddLoopAtStop" then
 		-- From the panel's "Add a run-around at <station>": any stop of the line,
 		-- named after its station.
 		if param.lineEntity == nil or param.stopIndex == nil then return end
@@ -2481,23 +2398,6 @@ local function handleGuiCmd(data, name, param)
 				loop.locoModelName = okName and tostring(name2):gsub("^.*/", ""):gsub("%.mdl$", "") or nil
 				logInfo("GUI: loop", loopLabel(loop), "loco is now part", idx, "of", n, "- model", loop.locoModelId, loop.locoModelName or "")
 			end
-		end
-
-	elseif name == "AddLoopEdgeFromVehicle" then
-		-- The edge a train is currently on becomes a route point (its own
-		-- direction is ignored - the planner chooses directions).
-		local loop = findLoopById(data.loops, param.loopId)
-		local edge = loop and readVehicleCurrentEdge(param.vehicleEntity)
-		if loop ~= nil and edge ~= nil then
-			loop.waypoints = loop.waypoints or {}
-			local last = loop.waypoints[#loop.waypoints]
-			if not sameEdge(last, edge) then
-				loop.waypoints[#loop.waypoints + 1] = { entity = edge.entity, index = edge.index }
-				logInfo("GUI: loop", loopLabel(loop), "added route point from train position", edge.entity, edge.index)
-				recomputeLoopRoute(loop)
-			end
-		else
-			logInfo("AddLoopEdgeFromVehicle: could not read current edge for vehicle", param.vehicleEntity)
 		end
 
 	elseif name == "AddLoopEdgeFromWorldClick" then

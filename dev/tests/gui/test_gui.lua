@@ -105,6 +105,15 @@ local tree2 = exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {}
 local add = findButton(tree2, "Name55  (this stop)"); assert(add, "add-at-this-stop button")
 add.p.onClick(); assert(sent[#sent].id == "AddLoopAtStop" and sent[#sent].p.name == "Name55" and sent[#sent].p.stopIndex == 0)
 loops[1].stopIndex = 0
+-- run status: the ghost rake's stages before the loco sets off, and a stuck recouple
+assert(findText(render(), "Running around"), "running around")
+runs[1].rake = { stage = "pull" }
+assert(findText(render(), "Drawing forward"), "drawing forward")
+runs[1].rake.stage = "uncouple"
+assert(findText(render(), "Uncoupling"), "uncoupling")
+runs[1].rake, runs[1].phase = nil, "stuck"
+assert(findText(render(), "Stuck: the loco could not be coupled back on. The train is held while it keeps trying."), "stuck")
+runs[1].phase = nil
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

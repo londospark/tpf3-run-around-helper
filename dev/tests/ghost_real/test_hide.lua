@@ -32,6 +32,11 @@ fns.train.updateFn(nil, { entityId = 500, currentInfo = { world = { gameTime = 0
 local sawLoads = false
 for _, c in ipairs(calls) do if c[1] == "loads" then sawLoads = c[2][1] == 1 and c[2][2] == 0 and c[2][3] == 1 end end
 assert(sawLoads, "ghost copies the hidden wagon's load nodes")
+-- the wagon drawn again (its paint back): the remembered load is forgotten
+fns.train.updateFn(nil, real({ x = 0.5, y = 0.5, z = 0.5 }, { 1, 0, 1 }), out)
+calls = {}
+fns.train.updateFn(nil, { entityId = 500, currentInfo = { world = { gameTime = 0 }, customState = { state = { color = { 1, 0, 0 }, mirror = 77, dir = 1 } } } }, out)
+for _, c in ipairs(calls) do assert(c[1] ~= "loads", "a wagon shown again no longer lends its load") end
 -- smoke off for a hidden real vehicle
 local freq = {}
 fns.train.updateParticleSystemFn(nil, real({ x = 0.1234567, y = 0.7654321, z = 0.3141593 }, {}), { getSize = function() return 2 end, setFrequencyScale = function(_, i, f) freq[i] = f end })

@@ -18,9 +18,9 @@
 --    copies are shipped as files, generated from the game's own.)
 --
 -- A loco for which both went through is marked with a marker model,
--- "runaround_ghost_real/<file>.mdl", which the run-around script looks for (a game
+-- "runaround_ghost_real/<key>.mdl", which the run-around script looks for (a game
 -- script cannot read model metadata). For every loco a ghost COPY is also built,
--- "runaround_ghost_dyn/<file>.mdl" (its meshes, particles, the wrapped sound set if
+-- "runaround_ghost_dyn/<key>.mdl" (its meshes, particles, the wrapped sound set if
 -- there is one, and the wrapped transformator), used when the loco's own model
 -- cannot be: e.g. a modded loco with its own sound set or transformator script.
 --
@@ -62,6 +62,15 @@ local function log(...)
 	local parts = {}
 	for i = 1, select("#", ...) do parts[i] = tostring(select(i, ...)) end
 	print("[RunAroundHelper] " .. table.concat(parts, " "))
+end
+
+-- The name a loco's marker and ghost copy are filed under: its full model name
+-- (folders and mod prefix included, so two mods' "loco.mdl" don't collide), with
+-- every character but letters and digits written as _xx (hex), which keeps it
+-- unique and a plain file name. ghost_build.script.lua and runaround.script.lua
+-- each have this function; they must stay the same (dev/tests check).
+local function modelKey(modelName)
+	return (string.gsub(modelName, "[^%w]", function(ch) return string.format("_%02x", string.byte(ch)) end))
 end
 
 local function clone(v)
@@ -177,11 +186,11 @@ mod.postRunFn = function(_configDict, _allModParams)
 	for id, name in pairs(all) do
 		if type(name) == "string" and not string.find(name, "runaround_", 1, true) then
 			local ok, src = pcall(api.res.modelRep.getAsTable, id)
-			local file = string.match(name, "([^/]+)%.mdl$")
-			if ok and type(src) == "table" and file ~= nil and isRailVehicle(src.metadata) then
+			if ok and type(src) == "table" and string.find(name, "%.mdl$") and isRailVehicle(src.metadata) then
+				local key = modelKey(name)
 				stats.locos = stats.locos + 1
 				-- the copy is built from the unchanged metadata, before patching
-				if addGhostModel("runaround_ghost_dyn/" .. file .. ".mdl", src, name, true) then
+				if addGhostModel("runaround_ghost_dyn/" .. key .. ".mdl", src, name, true) then
 					stats.copies = stats.copies + 1
 				end
 				local ready = false
@@ -190,7 +199,7 @@ mod.postRunFn = function(_configDict, _allModParams)
 					ready = okP and res == true
 					if not okP then note(name, "error:", tostring(res)) end
 				end
-				if ready then addGhostModel("runaround_ghost_real/" .. file .. ".mdl", src, name, false) end
+				if ready then addGhostModel("runaround_ghost_real/" .. key .. ".mdl", src, name, false) end
 			end
 		end
 	end

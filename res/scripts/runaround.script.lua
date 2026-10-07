@@ -369,12 +369,21 @@ local function modelLength(modelId)
 	return len
 end
 
+-- The name a loco's marker and ghost copy are filed under: its full model name
+-- (folders and mod prefix included, so two mods' "loco.mdl" don't collide), with
+-- every character but letters and digits written as _xx (hex), which keeps it
+-- unique and a plain file name. ghost_build.script.lua and runaround.script.lua
+-- each have this function; they must stay the same (dev/tests check).
+local function modelKey(modelName)
+	return (string.gsub(modelName, "[^%w]", function(ch) return string.format("_%02x", string.byte(ch)) end))
+end
+
 -- Ghost copies, used when the loco's own model cannot be: first the copy built at
 -- load time from the loco itself (runaround_ghost_dyn/, with its smoke and sound),
 -- then the plain silent copy of a base-game loco shipped with the mod
 -- (runaround_ghost/), then a base-game loco of the same engine type.
-local ghostIdsByFile = nil
-local dynGhostIdsByFile = nil
+local ghostIdsByFile = nil    -- plain shipped copies, by base-game file name
+local dynGhostIdsByKey = nil  -- copies built at load, by modelKey of the loco's name
 local GHOST_FALLBACK = { STEAM = "mogul_2_6_0.mdl", ELECTRIC = "br_e94.mdl", DIESEL = "alco_hh600.mdl" }
 -- Returns the ghost's model id and whether it is an effects ghost (smoke and
 -- sound driven by the ghost's state, built at load time from the loco's own
@@ -383,11 +392,12 @@ local function findGhostModelId(locoModelId)
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then return nil end
 	if ghostIdsByFile == nil then
-		ghostIdsByFile, dynGhostIdsByFile = {}, {}
+		ghostIdsByFile, dynGhostIdsByKey = {}, {}
 		for id, name in pairs(all) do
 			if type(name) == "string" then
-				if string.find(name, "runaround_ghost_dyn/", 1, true) then
-					dynGhostIdsByFile[string.match(name, "([^/]+)%.mdl$") or name] = id
+				local key = string.match(name, "runaround_ghost_dyn/([%w_]+)%.mdl$")
+				if key ~= nil then
+					dynGhostIdsByKey[key] = id
 				elseif string.find(name, "runaround_ghost/", 1, true) then
 					ghostIdsByFile[string.match(name, "([^/]+)$")] = id
 				end
@@ -396,10 +406,10 @@ local function findGhostModelId(locoModelId)
 	end
 	local locoName = all[locoModelId]
 	local file = type(locoName) == "string" and string.match(locoName, "([^/]+)$") or nil
-	local base = file and string.match(file, "^(.*)%.mdl$") or nil
-	if CONFIG.useEffectGhosts and base ~= nil and dynGhostIdsByFile[base] ~= nil then
+	local key = type(locoName) == "string" and modelKey(locoName) or nil
+	if CONFIG.useEffectGhosts and key ~= nil and dynGhostIdsByKey[key] ~= nil then
 		logInfo("ghost model: effects ghost (smoke and sound) for", locoName)
-		return dynGhostIdsByFile[base], true
+		return dynGhostIdsByKey[key], true
 	end
 	if file ~= nil and ghostIdsByFile[file] ~= nil then
 		logInfo("ghost model: plain ghost (no effects) for", locoName)
@@ -416,24 +426,23 @@ end
 -- transformator must already point at the wrappers (ghost_build.script.lua does
 -- that at load). If not, using it would raise Lua errors every frame ("attempt to
 -- index local 'vehicleInfo'").
-local realMarkers = nil -- set of model file names with a marker (the models do not change once loaded)
+local realMarkers = nil -- set of modelKeys with a marker (the models do not change once loaded)
 local function realModelReady(locoModelId)
 	-- Model metadata cannot be read from a game script, so ghost_build.script.lua
-	-- leaves a marker model, "runaround_ghost_real/<file>.mdl", for every loco whose
+	-- leaves a marker model, "runaround_ghost_real/<key>.mdl", for every loco whose
 	-- sound set and transformator it has wrapped.
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then return false, "models not listable" end
 	local locoName = all[locoModelId]
-	local base = type(locoName) == "string" and string.match(locoName, "([^/]+)%.mdl$") or nil
-	if base == nil then return false, "model name unknown" end
+	if type(locoName) ~= "string" then return false, "model name unknown" end
 	if realMarkers == nil then
 		realMarkers = {}
 		for _, name in pairs(all) do
-			local marked = type(name) == "string" and string.match(name, "runaround_ghost_real/(.+)%.mdl$")
+			local marked = type(name) == "string" and string.match(name, "runaround_ghost_real/([%w_]+)%.mdl$")
 			if marked then realMarkers[marked] = true end
 		end
 	end
-	if realMarkers[base] then return true end
+	if realMarkers[modelKey(locoName)] then return true end
 	return false, "its sound set or transformator was not wrapped at load"
 end
 
@@ -1885,6 +1894,43 @@ local function pushCoachState(coach, speed, seg)
 	end)
 end
 
+-- Where a coach ghost is, a fraction f of the way through the pull, and its yaw.
+-- It moves along a cubic Hermite curve that leaves its start along the track (the
+-- start's axis) and arrives along it (the target's axis): close to the track on a
+-- curved platform, and exactly the straight line on a straight one. It turns with
+-- the curve and keeps its own facing. Only the target's axis is used (the hidden
+-- coach beneath it may face either way); an axis more than 45 degrees off the
+-- chord is not trusted, and the chord's direction is used instead.
+local function pullFrame(c, f)
+	local s, t = c.start, c.target
+	local dx, dy = t.x - s.x, t.y - s.y
+	local L = math.sqrt(dx * dx + dy * dy)
+	local z = s.z + (t.z - s.z) * f
+	if L < 0.01 then return s.x + dx * f, s.y + dy * f, z, s.yaw end
+	local ux, uy = dx / L, dy / L
+	-- a tangent along the direction of travel, scaled by the chord length
+	local function tangent(yaw)
+		local tx, ty = math.cos(yaw), math.sin(yaw)
+		local dot = tx * ux + ty * uy
+		if math.abs(dot) < 0.7071 then tx, ty, dot = ux, uy, 1 end
+		if dot < 0 then tx, ty = -tx, -ty end
+		return tx * L, ty * L
+	end
+	local t0x, t0y = tangent(s.yaw)
+	local t1x, t1y = tangent(t.yaw)
+	local f2, f3 = f * f, f * f * f
+	local h00, h10, h01, h11 = 2 * f3 - 3 * f2 + 1, f3 - 2 * f2 + f, -2 * f3 + 3 * f2, f3 - f2
+	local d00, d10, d01, d11 = 6 * f2 - 6 * f, 3 * f2 - 4 * f + 1, -6 * f2 + 6 * f, 3 * f2 - 2 * f
+	local x = h00 * s.x + h10 * t0x + h01 * t.x + h11 * t1x
+	local y = h00 * s.y + h10 * t0y + h01 * t.y + h11 * t1y
+	local vx = d00 * s.x + d10 * t0x + d01 * t.x + d11 * t1x
+	local vy = d00 * s.y + d10 * t0y + d01 * t.y + d11 * t1y
+	-- facing: the direction of travel, or half a turn from it for a coach that
+	-- faced against the travel at the start
+	local backwards = math.cos(s.yaw) * t0x + math.sin(s.yaw) * t0y < 0
+	return x, y, z, math.atan2(vy, vx) + (backwards and math.pi or 0.0)
+end
+
 -- Moves the ghost rake on. Returns true when the invisible train needs flipping.
 local function advanceRake(run, dt)
 	local R = run.rake
@@ -1918,17 +1964,22 @@ local function advanceRake(run, dt)
 		run.target = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z }
 		-- The pull: the loco ghost draws forward along its route by as far as the
 		-- coaches have to go (a loco length), and the coach ghosts go with it.
-		local far = 0
+		local far, turn = 0, 0
 		for _, c in ipairs(R.coaches) do
 			c.slide = math.sqrt((c.target.x - c.start.x) ^ 2 + (c.target.y - c.start.y) ^ 2)
 			c.dist0 = c.dist or 0.0
 			if c.slide > far then far = c.slide end
+			-- the angle between the start and target axes (pullFrame turns the ghost through it)
+			local a = math.abs(math.atan2(math.sin(c.target.yaw - c.start.yaw), math.cos(c.target.yaw - c.start.yaw)))
+			if a > math.pi / 2 then a = math.pi - a end
+			if a > turn then turn = a end
 		end
 		R.pullLen = math.max(far, 0.01)
 		R.gdist0 = run.gdist or 0.0
 		R.pullTo = R.gdist0 + R.pullLen
 		R.stage = "pull"
-		logInfo(string.format("ghost rake: the train draws forward %.1f m, then the loco uncouples", R.pullLen))
+		logInfo(string.format("ghost rake: the train draws forward %.1f m (coaches turn up to %.1f degrees), then the loco uncouples",
+			R.pullLen, math.deg(turn)))
 		return false
 	end
 	if R.stage == "pull" then
@@ -1940,12 +1991,10 @@ local function advanceRake(run, dt)
 		local newSeg = segKey ~= R.segKey
 		R.segKey = segKey
 		for _, c in ipairs(R.coaches) do
-			local x = c.start.x + (c.target.x - c.start.x) * f
-			local y = c.start.y + (c.target.y - c.start.y) * f
-			local z = c.start.z + (c.target.z - c.start.z) * f
+			local x, y, z, yaw = pullFrame(c, f)
 			pcall(function()
 				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(c.ghost,
-					api.type.Mat4f.rotZTransl(c.start.yaw, api.type.Vec3f.new(x, y, z))))
+					api.type.Mat4f.rotZTransl(yaw, api.type.Vec3f.new(x, y, z))))
 			end)
 			if newSeg and seg ~= nil then
 				local k = c.slide / R.pullLen

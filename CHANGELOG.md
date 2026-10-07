@@ -25,6 +25,10 @@
 - The run-around card says what the train is doing: turning, drawing forward,
   uncoupling, running around, coupling on, or stuck.
 - A light engine (a loco on its own) is left alone.
+- On a curved platform, the coaches follow the curve as the train draws
+  forward, instead of sliding straight.
+- Two mods with a loco of the same file name no longer get in each other's way:
+  each loco is prepared under its full name.
 - Safe if installed under an unexpected mod ID: trains are then left untouched,
   and the run-around uses plain copies of the loco.
 - The invisible stand-ins have their icons registered and carry the mod's

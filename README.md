@@ -197,7 +197,7 @@ Useful log lines:
 | `stand-in: ... m; loco ... m long (from its model)` | the loco's length, from its model or, failing that, from the carriage spacing |
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
-| `ghost rake: ...` | the coaches shown as copies, the pull forward (the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
+| `ghost rake: ...` | the coaches shown as copies, the pull forward (how far, and how much the coaches turn on a curved platform; the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
 | `creep: ...` | the fallback: the real coaches creeping and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
 | `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |

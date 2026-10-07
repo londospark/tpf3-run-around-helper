@@ -168,14 +168,22 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Failure handling (H1-H4)**, tested offline only (`test_failures.lua`): the
   restore after a failed start, recouple retries and "Stuck" on the card, the
   watchdog. None of these paths has been hit live.
+- **Markers and copies by full model name (M1).** If `getAll` gave different
+  names at load and in the game script, every loco would fall back to the plain
+  copies. The log would show `ghost model: the loco's own model cannot be used`
+  for base-game locos.
+- **Coach copies follow a curved platform (M4)** during the pull. The log line
+  `ghost rake: the train draws forward ... (coaches turn up to N degrees)` gives
+  the turn. On a curve, check the copies line up with the hidden coaches when
+  they reappear.
 - **`_content.json` now lists the stand-in icons.** If the
   "Could not find texture ... _icon20.tga" warnings came from the stale list,
   they should be gone now.
 
 ### Bugs found in review
 
-H1-H4, M3 and most low items in `CODE_REVIEW.md` are fixed. Still open: M1, M2,
-M4, M5, M6 (the undocumented `color` field), M7, M8, route-planning cost.
+H1-H4, M1, M3, M4 and most low items in `CODE_REVIEW.md` are fixed. Still open:
+M2, M5, M6 (the undocumented `color` field), M7, M8, route-planning cost.
 
 On the first mod.io install, check the log for `loco setup: SKIPPED`. If it's
 there, the game loaded the mod under a different ID from `mod.json`'s (see M3).
@@ -193,7 +201,6 @@ These are documented in the README:
 - Modded vehicles with their own transformator or sound set can't be hidden or
   driven as themselves. They use copies, and the coaches use the creep.
 - The smooth sequence needs the loco to be part 1 of the train.
-- Coach copies don't turn on curved platforms (`CODE_REVIEW.md` M4).
 
 ## Next steps
 

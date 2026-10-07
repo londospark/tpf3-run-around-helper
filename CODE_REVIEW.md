@@ -9,7 +9,7 @@ Each finding says how it was established: **reproduced** (shown with the offline
 mock), **checked** (against game files), or **by reading** (traced through the
 code, not yet run).
 
-H1-H4, M3, the `hiddenLoads` part of M6 and most of the low items are fixed
+H1-H4, M1, M3, M4, the `hiddenLoads` part of M6 and most of the low items are fixed
 (each says how; tests in `dev/tests/`). The rest is still open. The run-around works end to end live; most of
 the findings are about what happens when something goes wrong.
 
@@ -118,6 +118,17 @@ only happens with mods.
 **Fix:** key the markers and copies by the full model path (escaped), or by a
 hash of it.
 
+**Fixed:** both scripts file a loco's marker and copy under `modelKey(name)`:
+the full model name from `modelRep.getAll`, with every character but letters
+and digits written as `_xx` (hex). That keeps the key unique and a plain file
+name. `dev/tests/build/test_build.lua` checks that two mods' `loco.mdl` get one
+each, and that both scripts compute the same key. This relies on `getAll`
+giving the same name at load and in the game script. It's the same call in the
+same session, but waiting for a live test. The plain shipped copies
+(`runaround_ghost/<file>.mdl`, base-game locos only) are still found by file
+name. They are a last-resort look-alike, so a match by file name is what they
+are for.
+
 ### M2. The mod replaces every rail vehicle's scripts — by reading
 
 At load, every loco, coach and wagon is pointed at the mod's transformator and
@@ -175,6 +186,16 @@ separates a little during the pull.
 
 **Fix:** interpolate the angle from `c.start.yaw` to `c.target.yaw` (the shortest
 way round) together with the position.
+
+**Fixed (both parts):** `pullFrame` moves each copy along a cubic Hermite curve.
+The curve leaves the start along the start's axis and arrives along the
+target's, with tangents scaled by the chord. The copy's yaw is the curve's
+direction, plus half a turn for a coach that faced backwards. On a 150 m radius
+curve the copy stays within 5 mm of the arc and 0.2 degrees of its direction
+(`test_curve.lua`). On straight track it's exactly the old straight line. Only
+the target's axis is used, since the hidden coach may face either way. An axis
+more than 45 degrees off the chord is ignored. The pull's log line gives the
+largest turn.
 
 ### M5. Copies aren't checked against the coaches they're matched to — by reading
 
@@ -268,6 +289,6 @@ method, where the coaches jump at the flip. (The README now says so, under
 
 1. ~~H1-H4~~ (done).
 2. ~~M3~~ (done; check the first mod.io install's log).
-3. M1 and M4.
+3. ~~M1 and M4~~ (done; waiting for a live test).
 4. Remaining low items: route-planning cost, `LOG_TRACES` off for a non-alpha
    release.

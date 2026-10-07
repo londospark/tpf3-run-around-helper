@@ -7,6 +7,8 @@ for cm = 25, 4400, 25 do names[id] = "m::/res/models/runaround_standin/standin_c
 local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
 local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
 local train = { mid = 0.0, dir = -1, parts = {} } -- dir: head points to -x
+-- the route's first piece: along the platform from under the coaches, out past the loco (-x)
+TRACK = { x0 = -20, dx = -100 }
 local function layout()
   local L = 0 for _, p in ipairs(train.parts) do L = L + lenOf(p.part.modelId) end
   local out, cur = {}, train.mid + train.dir * L / 2 -- head end
@@ -20,12 +22,15 @@ api = {
   engine = { getComponent = function(e, c)
       if c == "CL" then local l = layout(); local cs = {} for i = 1, #l do cs[i] = i end; return { carriages = cs } end
       if c == "MIL" then local p = layout()[e]; return { fatInstances = { { modelId = p.m, transf = { cols = function(_, k) if k == 3 then return { x = p.x, y = 0, z = 0 } end return { x = 1, y = 0 } end } } } } end
-      if c == "GT" then return { gameTime = 0 } end end,
-    util = { getWorld = function() return 1 end } },
-  type = { ComponentType = { CARRIAGE_LIST = "CL", MODEL_INSTANCE_LIST = "MIL", GAME_TIME = "GT" },
+      if c == "GT" then return { gameTime = 0 } end
+      if c == "TN" then return { edges = { { geometry = TRACK } } } end end,
+    util = { getWorld = function() return 1 end,
+      transport = { calcPosition = function(g, u) return { x = g.x0 + u * g.dx, y = g.y0 or 0, z = 0 } end } } },
+  type = { ComponentType = { CARRIAGE_LIST = "CL", MODEL_INSTANCE_LIST = "MIL", GAME_TIME = "GT", TRANSPORT_NETWORK = "TN" },
     TransportVehicleConfig = { new = function(t) local c = { vehicles = {} } for i, p in ipairs(t.vehicles) do c.vehicles[i] = p end return c end },
     TransportVehiclePart = { new = function() return { part = {} } end }, LoadConfig = { new = function() return {} end },
-    Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end }, Mat4f = { rotZTransl = function() return {} end } },
+    Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end,
+      distance = function(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) end }, Mat4f = { rotZTransl = function() return {} end } },
   cmd = { sendCommand = function() end, makeCustomEntityUpdateStateCmd = function() return {} end, makeCustomEntityUpdateTransformationCmd = function() return {} end },
 }
 -- Drives startRunAround through the ghost-rake path with the mock above.
@@ -63,7 +68,7 @@ local function run(markers)
   local op = print
   print = function(...) local t = {} for i = 1, select("#", ...) do t[i] = tostring(select(i, ...)) end log[#log + 1] = table.concat(t, " ") end
   M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround}", "s"))() -- fresh: the marker set is cached
-  local ok, err = pcall(M.start, state, 1, { loopEdges = { { entity = 1, index = 0 } }, waypoints = {}, name = "Test" })
+  local ok, err = pcall(M.start, state, 1, { id = 1, loopEdges = { { entity = 1, index = 0, forward = true } }, waypoints = {}, name = "Test" })
   print = op
   if not ok then print(table.concat(log, "\n")); error(err) end
   return saved, created, order, log

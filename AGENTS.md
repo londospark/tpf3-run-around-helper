@@ -153,6 +153,12 @@ So that nobody repeats them:
 
 These were just changed and pass offline, but haven't been seen in game:
 
+- **The start check (N1, N2):** the log should say
+  `ghost starts on route piece N, M m along it (0.x m from the route)`. A
+  normal arrival must NOT log `run-around NOT started`. If it does, the reason
+  says which check fired; read the distance it gives before changing
+  `ON_ROUTE_M`.
+
 - **Bogies hidden.** All nodes are now scaled to zero, not just the root. The
   owner's last test showed bogies still visible with root-only scaling.
 - **The pull and uncouple sequence** (steps 5-6).
@@ -189,6 +195,7 @@ review (at `4230bc1`) adds N1-N4: alternative platforms, a route that starts
 backwards, the card under another mod ID, and a missing stock sound function. It
 also recommends splitting `runaround.script.lua` into modules, but only after a
 live probe of how a mod `ug_require`s its own files (see "Structure" there).
+N1 and N2 (the owner rated them high) and N4 are fixed. N3 is made explicit.
 
 On the first mod.io install, check the log for `loco setup: SKIPPED`. If it's
 there, the game loaded the mod under a different ID from `mod.json`'s (see M3).

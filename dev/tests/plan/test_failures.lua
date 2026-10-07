@@ -15,6 +15,8 @@ local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
 local HIDE = 0.1234567
 local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
 local train = { mid = 0.0, dir = -1, parts = {}, gone = false }
+-- the route's first piece: along the platform from under the coaches, out past the loco (the head is at -x)
+TRACK = { x0 = -20, dx = -100 }
 local function layout()
   local L = 0 for _, p in ipairs(train.parts) do L = L + lenOf(p.part.modelId) end
   local out, cur = {}, train.mid + train.dir * L / 2
@@ -41,8 +43,8 @@ api = {
       if c == "CL" then local l = layout(); local cs = {} for i = 1, #l do cs[i] = i end; return { carriages = cs } end
       if c == "MIL" then local p = layout()[e]; return { fatInstances = { { modelId = p.m, transf = { cols = function(_, k) if k == 3 then return { x = p.x, y = 0, z = 0 } end return { x = 1, y = 0 } end } } } } end
       if c == "GT" then return { gameTime = 0 } end
-      if c == "TN" then return { edges = { { geometry = {} } } } end end,
-    util = { getWorld = function() return 1 end, transport = { calcPosition = function(_, u) return { x = u * 100, y = 0, z = 0 } end } } },
+      if c == "TN" then return { edges = { { geometry = TRACK } } } end end,
+    util = { getWorld = function() return 1 end, transport = { calcPosition = function(g, u) return { x = g.x0 + u * g.dx, y = g.y0 or 0, z = 0 } end } } },
   type = { ComponentType = { CARRIAGE_LIST = "CL", MODEL_INSTANCE_LIST = "MIL", GAME_TIME = "GT", TRANSPORT_VEHICLE = "TV", TRANSPORT_NETWORK = "TN" },
     TransportVehicleConfig = { new = function(t) local c = { vehicles = {} } for i, p in ipairs(t.vehicles) do c.vehicles[i] = p end return c end },
     TransportVehiclePart = { new = function() return { part = {} } end }, LoadConfig = { new = function() return {} end },
@@ -99,6 +101,8 @@ local function fresh()
   local pt = 0
   local function part(m, rev) pt = pt + 1; return { part = { modelId = m, reversed = rev, compartment2loadConfig = { {} }, color = { x = 0.1 * pt, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1000 + pt } end
   train.mid, train.dir, train.gone = 0.0, -1, false
+  TRACK.x0, TRACK.dx, TRACK.y0 = -20, -100, nil
+  loop.lastProblem = nil
   train.parts = { part(4225, false), part(7, false), part(8, true), part(7, false) }
   refuse.replace, refuse.reverse, refuse.createModel, stall.reverse = false, false, nil, false
   sent, live, held, log = {}, {}, false, {}
@@ -237,5 +241,34 @@ train.parts = { train.parts[1] }
 start()
 assert(#saved.runs == 0 and #sent == 0, "light engine: left alone")
 say("light engine: left alone\n")
+
+-- N1: the train is at another platform (the next track, 5 m away): nothing is
+-- touched, the train leaves the normal way, and the card says why.
+fresh()
+TRACK.y0 = 5
+start()
+assert(#saved.runs == 0 and #sent == 0, "N1: not started, nothing sent")
+assert(loop.lastProblem and loop.lastProblem:find("not at the platform the route starts from", 1, true), "N1: the card says why: " .. tostring(loop.lastProblem))
+say("N1 other platform: " .. loop.lastProblem .. "\n")
+-- ... but a loco a little off the track's centre line (2 m) is still on it.
+fresh()
+TRACK.y0 = 2
+start()
+assert(#saved.runs == 1, "N1: 2 m off the centre line still runs")
+say("N1 2 m off the centre line: runs\n")
+
+-- N2: the route sets off along the platform towards the coaches: not started.
+fresh()
+TRACK.x0, TRACK.dx = -60, 100 -- under the loco, but heading +x, into the train
+start()
+assert(#saved.runs == 0 and #sent == 0, "N2: not started, nothing sent")
+assert(loop.lastProblem and loop.lastProblem:find("towards the coaches", 1, true), "N2: the card says why: " .. tostring(loop.lastProblem))
+say("N2 route into the train: " .. loop.lastProblem .. "\n")
+-- the next run that does start clears the note
+TRACK.x0, TRACK.dx = -20, -100
+sent, saved.runs = {}, {}
+start()
+assert(#saved.runs == 1 and loop.lastProblem == nil, "a started run clears the note")
+say("N2 then a good start: note cleared\n")
 
 say("failures ok\n")

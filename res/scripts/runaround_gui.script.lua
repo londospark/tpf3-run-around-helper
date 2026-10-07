@@ -408,6 +408,7 @@ function data()
 		local children = {
 			Text(loopPlace(loop), "font-scale-annotation"),
 			Row({ Icon(icon), Text(text, "font-scale-body") }),
+			loop.lastProblem ~= nil and Row({ Icon(ICON.warn), Text("Last arrival didn't run around: " .. loop.lastProblem, "font-scale-body") }) or nil,
 			RunStatus(loop, param.runs, param.vehicleEntity),
 			Buttons({
 				IconButton(ICON.edit, editing and "Done" or "Edit route on map",

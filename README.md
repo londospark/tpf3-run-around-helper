@@ -136,6 +136,11 @@ A train is never left stuck or broken by a run-around:
   coaches jump at the end instead of the train drawing forward.
 - **The running loco ignores signals** and doesn't reserve track. Use a loop
   that other trains won't be on at the same time.
+- **The train must stop at the platform the route starts from.** A line can
+  send trains to other platforms. Then there's no run-around that time: the
+  train leaves the normal way, and the card says why. The same happens if the
+  route would set off towards the train's own coaches (check the first
+  points).
 - **Run-arounds belong to a line and a stop, not to a train.** Every train on
   the line does it there, clones included. A train moved to another line only
   does it where that line has its own run-around.
@@ -203,7 +208,9 @@ Useful log lines:
 | `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |
 | `watchdog: ...` | a run stalled, or its train went, and was given up |
 | `train put back as it was ...` | a run couldn't start and the train was restored |
-| `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID, so no vehicle was patched; the run-around still works, with plain copies. Please report it |
+| `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID: no vehicle was patched, and the run-around card won't appear (run-arounds already in a save still run, with plain copies). Please report it |
+| `GUI registered` | the train-window card loaded; if it's missing from the log, the card failed to load |
+| `run-around NOT started ...` | the train didn't run around this time, and why (also shown on the card): it's at another platform than the route starts from, or the route sets off towards the coaches |
 
 ## Advanced settings
 

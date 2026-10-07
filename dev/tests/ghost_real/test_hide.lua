@@ -41,4 +41,16 @@ for _, c in ipairs(calls) do assert(c[1] ~= "loads", "a wagon shown again no lon
 local freq = {}
 fns.train.updateParticleSystemFn(nil, real({ x = 0.1234567, y = 0.7654321, z = 0.3141593 }, {}), { getSize = function() return 2 end, setFrequencyScale = function(_, i, f) freq[i] = f end })
 assert(freq[0] == 0 and freq[1] == 0)
+-- N4: the game's sound script missing: no error, ever, for real trains or ghosts
+local printed = {}
+local env2 = setmetatable({ ug_require = function(p)
+    if p:find("transformator_util") then return tu end
+    if p:find("soundset_default") then error("not found") end
+    return {} -- util.tl without useFn
+  end, print = function(m) printed[#printed + 1] = m end }, { __index = _G })
+assert(load(io.open(arg[1]):read("*a"), "g2", "t", env2))()
+local snd = env2.data().sound.updateSoundSet
+snd(nil, { currentInfo = { vehicle = { speed = 3 } } }, {})
+snd(nil, { currentInfo = { customState = { state = { speed = 3 } } } }, {})
+assert(#printed == 1 and printed[1]:find("not found", 1, true), "said once at load")
 print("hide ok")

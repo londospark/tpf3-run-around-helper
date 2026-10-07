@@ -2074,6 +2074,70 @@ recoupleRake = function(state, run)
 	end)
 end
 
+-- How far the loco may stand from the planned route and still count as on it:
+-- half the game's spacing between parallel tracks (trackDistance = 5 m for every
+-- track type). On the planned platform the loco stands on the route (about 0 m);
+-- on any other platform it is a whole track spacing away.
+local ON_ROUTE_M = 2.5
+
+-- Unit direction of travel along the route at piece k, s metres into it.
+local function routeDirectionAt(loop, k, s)
+	local edgeDef = loop.loopEdges[k]
+	local geometry = getEdgeGeometry(edgeDef)
+	local len = estimateEdgeLength(geometry)
+	local t = len > 0 and math.min(math.max(s / len, 0.0), 1.0) or 0.0
+	local u = edgeDef.forward and t or (1.0 - t)
+	local calc = api.engine.util.transport.calcPosition
+	local pa, pb = calc(geometry, math.max(0.0, u - 0.02)), calc(geometry, math.min(1.0, u + 0.02))
+	local dx, dy = pb.x - pa.x, pb.y - pa.y
+	if not edgeDef.forward then dx, dy = -dx, -dy end
+	local d = math.sqrt(dx * dx + dy * dy)
+	if d < 1e-9 then return nil end
+	return dx / d, dy / d
+end
+
+-- Records why the last arrival at a loop did not run around (nil: it did), for
+-- the run-around card.
+local function setLoopProblem(state, loopId, text)
+	local data = state:get()
+	local loop = data and findLoopById(data.loops or {}, loopId)
+	if loop ~= nil and loop.lastProblem ~= text then
+		loop.lastProblem = text
+		state:set(data)
+	end
+end
+
+-- Whether this train can run around on this loop's route, from where it stands:
+-- it must be on the route's first leg, at the platform the route was planned
+-- from (a line stop can send trains to alternative platforms), and the route
+-- must leave away from the coaches (a loco cannot drive through its own train).
+-- Returns the piece and metres along it where the loco stands, or nil and why.
+local function checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, partCount)
+	if locoTransf == nil then return nil, nil, "the loco's position could not be read" end
+	local c = locoTransf:cols(3)
+	local okL, k, off, dist = pcall(locateOnRoute, loop, { x = c.x, y = c.y })
+	if not okL or k == nil then return nil, nil, "the route could not be read: " .. tostring(k) end
+	if dist > ON_ROUTE_M then
+		return nil, nil, string.format("the train is not at the platform the route starts from (the loco is %d m from the route)", math.floor(dist + 0.5))
+	end
+	-- away from the coaches: from the neighbouring carriage to the loco
+	local nb = (locoIdx == 1) and 2 or ((locoIdx == partCount) and partCount - 1 or nil)
+	if nb ~= nil then
+		local okD, ok2 = pcall(function()
+			local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+			local n = carriagePos(cl.carriages[nb])
+			local ax, ay = c.x - n.x, c.y - n.y
+			local dx, dy = routeDirectionAt(loop, k, off)
+			if dx == nil then return true end
+			return ax * dx + ay * dy >= 0
+		end)
+		if okD and not ok2 then
+			return nil, nil, "the route sets off towards the coaches, not away from them: check the route's first points"
+		end
+	end
+	return k, off, string.format("%.1f m from the route", dist)
+end
+
 local function startRunAround(state, vehicleEntity, loop)
 	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
@@ -2121,10 +2185,14 @@ local function startRunAround(state, vehicleEntity, loop)
 		return
 	end
 	local okT, locoTransf = pcall(captureLocoTransform, vehicleEntity, locoIdx)
-	if not okT then
-		logInfo("startRunAround: could not read the loco's position (", tostring(locoTransf), ") - the ghost will appear on the route instead")
-		locoTransf = nil
+	if not okT then locoTransf = nil end
+	local startCursor, startOffset, where = checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, #tvc.vehicles)
+	if startCursor == nil then
+		logInfo("run-around NOT started for vehicle", vehicleEntity, "loop", loopLabel(loop), "-", where, "- the train leaves the normal way")
+		setLoopProblem(state, loop.id, where)
+		return
 	end
+	logInfo(string.format("ghost starts on route piece %d, %d m along it (%s)", startCursor, math.floor(startOffset), where))
 	local locoLength = modelLength(tvc.vehicles[locoIdx].part.modelId)
 	local lengthFrom = "its model"
 	if locoLength == nil then
@@ -2156,7 +2224,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	local startHead, startSign = nil, nil
 	do
 		local okH, hx, hy = pcall(headDirection, vehicleEntity)
-		if okH and hx ~= nil and locoTransf ~= nil then
+		if okH and hx ~= nil then
 			local c0 = locoTransf:cols(0)
 			startHead = { x = hx, y = hy }
 			startSign = (c0.x * hx + c0.y * hy) >= 0 and 1 or -1
@@ -2308,31 +2376,15 @@ local function startRunAround(state, vehicleEntity, loop)
 				return
 			end
 			local ghost = createRes.resultEntity
-			if locoTransf ~= nil then
-				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(ghost, locoTransf))
-			end
+			api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(ghost, locoTransf))
 
-			local startCursor, startOffset = 1, nil
-			local locoYaw = nil
-			if locoTransf ~= nil then
-				local c0 = locoTransf:cols(0)
-				locoYaw = math.atan2(c0.y, c0.x)
-			end
-			if locoTransf ~= nil then
-				local c = locoTransf:cols(3)
-				local okL, k, off, dist = pcall(locateOnRoute, loop, { x = c.x, y = c.y })
-				if okL and k ~= nil and dist < 40 then
-					startCursor, startOffset = k, off
-					logInfo(string.format("ghost starts on route piece %d, %d m along it (%d m from the loco's position)", k, math.floor(off), math.floor(dist)))
-				else
-					logInfo("the loco is not on the first pieces of the route (", tostring(okL and dist or k), ") - the ghost starts at the route's first piece")
-				end
-			end
+			local c0 = locoTransf:cols(0)
+			local locoYaw = math.atan2(c0.y, c0.x)
 			local run = newRun(ghost)
 			run.edgeCursor = startCursor
 			run.startOffset = startOffset
 			run.locoYaw = locoYaw
-			run.locoPos = locoTransf ~= nil and { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y } or nil
+			run.locoPos = { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y }
 			local data = state:get()
 			data.runs[#data.runs + 1] = run
 			state:set(data)
@@ -2342,6 +2394,7 @@ local function startRunAround(state, vehicleEntity, loop)
 				pushGhostState(run, 0.0, 0.0, 0.0, 0.0)
 				state:set(data)
 			end
+			setLoopProblem(state, loop.id, nil)
 			logInfo("run-around started for vehicle", vehicleEntity, "loop", loopLabel(loop))
 		end)
 	end) end

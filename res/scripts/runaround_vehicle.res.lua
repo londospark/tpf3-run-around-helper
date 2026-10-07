@@ -1,12 +1,9 @@
--- react-plugin resource descriptor - see runaround_button.res.lua for the
--- full explanation of this mechanism. This one is the least-confirmed of
--- the three: VehicleEowExtensionPoint itself is not proven by either real
--- example mod found so far (unlike MainModButtonAreaExtension and
--- ModEntryPointExtension, which both are). If this one doesn't render,
--- the other two mounts still work for rename/tune/delete - only "add loop"
--- and "capture edge" (which need a concrete vehicle) would be unavailable,
--- with the dev-console fallback in runaround_gui.script.lua's header
--- comment as the workaround.
+-- The train window's "Run-around" card: a react-plugin on the vehicle window's
+-- extension point (works live). filePath names the mod ID, as every plugin
+-- descriptor in the game names its owner ("::/" for the base game); no relative
+-- form is known to work here. If the game ever loads the mod under another ID,
+-- this card does not load: the log then lacks "[RunAroundHelper] GUI registered"
+-- and ghost_build logs "loco setup: SKIPPED" (see CODE_REVIEW.md N3).
 function data()
 	return {
 		type = "react-plugin ::VehicleEowExtensionPoint",

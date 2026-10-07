@@ -114,6 +114,11 @@ assert(findText(render(), "Uncoupling"), "uncoupling")
 runs[1].rake, runs[1].phase = nil, "stuck"
 assert(findText(render(), "Stuck: the loco could not be coupled back on. The train is held while it keeps trying."), "stuck")
 runs[1].phase = nil
+-- why the last arrival didn't run around
+loops[1].lastProblem = "the route sets off towards the coaches, not away from them: check the route's first points"
+assert(findText(render(), "Last arrival didn't run around: the route sets off towards the coaches, not away from them: check the route's first points"), "last problem shown")
+loops[1].lastProblem = nil
+assert(not findText(render(), "Last arrival didn't run around: the route sets off towards the coaches, not away from them: check the route's first points"), "and gone once cleared")
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

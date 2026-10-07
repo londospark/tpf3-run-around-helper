@@ -169,12 +169,16 @@ end
 mod.postRunFn = function(_configDict, _allModParams)
 	-- Under another ID (a mod.io install that renamed it, say) the wrappers' paths
 	-- would not resolve, and every patched train would lose its animation and
-	-- sound. So then nothing is touched: the run-around still works, with the plain
-	-- ghost copies shipped in res/models/runaround_ghost/ and the creep.
+	-- sound. So then nothing is touched. The train-window card's descriptor
+	-- (runaround_vehicle.res.lua) names the mod ID too, and no relative form is
+	-- known to work there, so the card will not load either: run-arounds already
+	-- in a save still run (with plain ghost copies and the creep), but none can be
+	-- set up. The log says so plainly.
 	local okId, modId = pcall(getCurrentModId)
 	if okId and modId ~= nil and modId ~= MOD_ID then
-		log("loco setup: SKIPPED - the mod is loaded as", modId, "but its wrapped files name it", MOD_ID,
-			"- trains are left untouched; the run-around uses plain ghost copies. Please report this.")
+		log("loco setup: SKIPPED - the mod is loaded as", modId, "but its files name it", MOD_ID,
+			"- trains are left untouched, and the run-around card will not appear in the train window",
+			"(run-arounds already in a save still run, with plain ghost copies). Please report this.")
 		return
 	end
 	local okAll, all = pcall(api.res.modelRep.getAll, true)

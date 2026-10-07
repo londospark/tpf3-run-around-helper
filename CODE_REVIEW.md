@@ -14,8 +14,9 @@ Each finding says how it was established: **reproduced** (offline mock),
 **checked** (against the game's files or type definitions), or **by reading**
 (traced through the code, not run).
 
-The run-around works end to end live. The second review found no high-severity
-problems. Its findings are about unusual set-ups (alternative platforms, routes
+The run-around works end to end live. The second review found no problems
+that break a train. The owner rated N1 and N2 high, since they make a run look
+broken in ordinary set-ups. N1-N4 are fixed or made explicit (see each). Its findings are about unusual set-ups (alternative platforms, routes
 that start backwards, a mismatched mod ID), robustness against game updates,
 and tidiness. It also answers whether the mod should be split up (see
 [Structure](#structure-one-file-or-several)).
@@ -45,9 +46,9 @@ and tidiness. It also answers whether the mod should be split up (see
 
 ## Second review: new findings
 
-### Medium
+### High (raised by the owner: N1, N2) and medium (N3, N4)
 
-#### N1. A train at an alternative platform runs the route from the wrong platform — checked (types), by reading
+#### N1 (high). A train at an alternative platform runs the route from the wrong platform — checked (types), by reading
 
 Line stops can have `alternativeTerminals` (`api/engine.d.tl:533`), and the
 game may send a train to any of them. `getStopNode` (line 960) plans the route
@@ -70,7 +71,19 @@ the other preparation does. If the loco isn't on the route, skip the run with a
 log line ("not at the platform the route was planned from"). Optionally, plan
 one route per terminal later.
 
-#### N2. The pull assumes the route leaves forwards, away from the coaches — by reading
+**Fixed:** `checkStartOnRoute` runs in `startRunAround` before the train is
+held. The loco must stand within `ON_ROUTE_M` = 2.5 m of the route's first leg,
+which is half the game's track spacing (**checked**: `trackDistance = 5` for
+all 13 track types in the base game and DLC). On the planned platform it's
+about 0 m; on any other platform it's 5 m or more. Otherwise the run is skipped
+and the train leaves the normal way. The reason is logged
+(`run-around NOT started ...`) and shown on the card ("Last arrival didn't run
+around: ..."); the note clears at the next start. This deliberately uses only
+position facts already seen live (the `ghost starts on route piece ... m from
+...` line), not the untested `arrivalStationTerminal` or `vehicleEdges`.
+`test_failures.lua`: 5 m off is refused, 2 m off runs.
+
+#### N2 (high). The pull assumes the route leaves forwards, away from the coaches — by reading
 
 The ghost rake's pull (`advanceGhost` lines 1242-1256 and 1302-1313, `advanceRake` settle)
 moves the coach copies towards their targets. The engine fixes that direction:
@@ -87,6 +100,15 @@ would make the loco copy drive into the coach copies during the pull. The
 (`target - start`). If they point opposite ways, skip the pull: set stage
 `"done"`, and the copies take their places at the uncouple, the old jump. Log
 it.
+
+**Fixed, more broadly than suggested:** the same check also compares the route's
+direction where the loco stands (`routeDirectionAt`) with "away from the
+coaches" (from the neighbouring carriage to the loco). If the route heads into
+the train, the run is skipped, as for N1, with "the route sets off towards the
+coaches". This covers every mode, not just the ghost rake's pull: in any mode,
+the loco copy would otherwise drive through the coaches. A loco in the middle of
+the train (manual choice) has no single "away", so it isn't checked.
+`test_failures.lua` covers it.
 
 #### N3. Under another mod ID, the train-window card doesn't load — by reading
 
@@ -110,6 +132,15 @@ won't appear". Whether a `.res.lua` `filePath` can be written relatively (like
 `runaround.gs.lua`'s `res/scripts/...`) is untested. Try it in a live test
 before relying on it.
 
+**Made explicit (can't be fixed without an untested assumption):** every
+react-plugin descriptor in the game (44, all base-game, **checked**) names its
+owner, and none shows a mod-relative form working. So the card's `filePath`
+keeps the ID. The `SKIPPED` log line now says the card won't appear. The README
+explains it and lists the GUI's `GUI registered` line as the check that the card
+loaded. The stale comment in `runaround_vehicle.res.lua` is rewritten. The real
+answer comes from the first mod.io install: subscribe to the upload and look for
+`SKIPPED` and `GUI registered`.
+
 #### N4. A missing stock sound function would raise errors on every train — by reading
 
 `ghost_real.script.lua:24-34` looks up the game's `soundset_default.script.tl`,
@@ -123,6 +154,12 @@ update moves or renames it. That is exactly M2's risk, but louder.
 and print one line at load. Better still, `ghost_build` could check it too and
 not patch sound sets at all, but it runs in another scope, so the check would
 have to be repeated there.
+
+**Fixed:** the `util.useFn` fallback is used only if `useFn` exists, and if
+neither is found, `updateSoundSet` returns at once (silent trains, no errors).
+One line is printed at load. `test_hide.lua` loads the script with both
+missing; the old script fails it with `attempt to call a nil value (field
+'useFn')`.
 
 ### Low
 
@@ -287,11 +324,9 @@ little as possible.
 
 ## Suggested order
 
-1. **N1 and N2.** Both are cheap guards on the start of a run, and both
-   unusual set-ups are likely to come up in alpha feedback.
-2. **N4 and the `releaseTrain` guard.** Small robustness fixes.
-3. **N3.** Update the `SKIPPED` message and the README now; try a relative
-   `filePath` in a live test.
+1. ~~N1-N4~~ (done; N3 made explicit, answered by the first mod.io install).
+2. **The `releaseTrain`/`holdTrain` guard.** A small robustness fix.
+3. A relative `filePath` for the card, only if a live test shows it works.
 4. **M5.** Check copies against their coaches' models.
 5. The low items as tidying.
 6. The module split, after the live probe and the alpha feedback.

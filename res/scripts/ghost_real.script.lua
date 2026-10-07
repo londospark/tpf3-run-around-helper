@@ -26,11 +26,17 @@ local baseUpdateSoundSet = okSound and type(soundModule) == "table" and soundMod
 if baseUpdateSoundSet == nil then
 	-- The sound scope does have a working util.useFn (the game's own sound script uses it).
 	local okUtil, util = pcall(ug_require, "::/scripts/util.tl")
-	if okUtil and type(util) == "table" then
+	if okUtil and type(util) == "table" and type(util.useFn) == "function" then
 		baseUpdateSoundSet = function(...)
 			return util.useFn("::/scripts/soundset_default.script@updateSoundSet")(...)
 		end
 	end
+end
+-- Neither found (a game update moved the stock sound script): every wrapped
+-- sound set calls updateSoundSet every frame, so it must not raise an error
+-- there. Trains are then silent rather than spamming the log; said once here.
+if baseUpdateSoundSet == nil then
+	print("[RunAroundHelper] the game's sound script (soundset_default.script.tl) was not found: wrapped train sounds are silent. Please report this.")
 end
 
 -- Wheel animation ("wheels", steam locos): one revolution is 5000 ms of animation
@@ -229,6 +235,7 @@ end
 -- Sound: the game's own function; for a free entity it gets vehicle data built
 -- from the ghost's state, so the loco sounds as a real one moving that way would.
 local function updateSoundSet(captureParams, params, soundTransfOutput)
+	if baseUpdateSoundSet == nil then return end
 	local ci = params.currentInfo
 	if ci.vehicle ~= nil then
 		return baseUpdateSoundSet(captureParams, params, soundTransfOutput)

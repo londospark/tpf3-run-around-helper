@@ -30,7 +30,12 @@
 - Two mods with a loco of the same file name no longer get in each other's way:
   such locos are left untouched and run around as a generic copy, rather than
   one taking the other's place.
-- Safe if installed under an unexpected mod ID: trains are then left untouched,
-  and the run-around uses plain copies of the loco.
+- Safe if installed under an unexpected mod ID: trains are then left untouched.
+  The run-around card won't appear in that case, and the log says so.
+- A train that stops at another platform than the route starts from, or whose
+  route would set off towards its own coaches, doesn't run around that time. It
+  leaves the normal way, and the card says why.
+- If a game update ever moves the game's train sound script, trains go quiet
+  instead of filling the log with errors.
 - The invisible stand-ins have their icons registered and carry the mod's
   current name.

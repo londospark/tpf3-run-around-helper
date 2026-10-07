@@ -371,6 +371,24 @@ local function withInfo(params, extra)
 	}
 end
 
+-- The output, for a vehicle that must be silent. The game asserts that every
+-- frame adds exactly one track per track of the sound set (simply not calling
+-- the sound function crashed the game, live: AudioEmitterBackend "trackSrcs.size()
+-- == soundTransfOutput.tracks.size()"). So the game's own function runs as usual
+-- and this passes its tracks and continuous events on at zero gain, and drops its
+-- one-off events (horn, doors).
+local function silenced(out)
+	return setmetatable({
+		addTrack = function(_, _gain, pitch) return out:addTrack(0.0, pitch) end,
+		addEvent = function(_, key, _gain, pitch) return out:addEvent(key, 0.0, pitch) end,
+		triggerEvent = function() end,
+	}, { __index = function(_, k)
+		local v = out[k]
+		if type(v) == "function" then return function(_, ...) return v(out, ...) end end
+		return v
+	end })
+end
+
 -- Sound: the game's own function; for a free entity it gets vehicle data built
 -- from the ghost's state, so the loco sounds as a real one moving that way would.
 local function updateSoundSet(captureParams, params, soundTransfOutput)
@@ -379,7 +397,9 @@ local function updateSoundSet(captureParams, params, soundTransfOutput)
 	if ci.vehicle ~= nil then
 		-- a hidden real loco (its copy is running around): silent, or its engine
 		-- would be heard idling at the platform as well as the copy's
-		if isHidden(ci.vehicle) then return end
+		if isHidden(ci.vehicle) then
+			return baseUpdateSoundSet(captureParams, params, silenced(soundTransfOutput))
+		end
 		return baseUpdateSoundSet(captureParams, params, soundTransfOutput)
 	end
 	local cs = ci.customState

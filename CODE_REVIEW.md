@@ -208,7 +208,13 @@ real loco is kept silent. `test_rake.lua` now shows the geometry exact (0.00 m,
 not the stand-ins' 0.25 m steps), and every failure path in `test_failures.lua`
 checks the train ends as the very same parts. The `applyPurchaseCost` attempt
 and the money log lines stay as a second line of defence and evidence.
-**Not yet seen live.**
+Live: the detach logged `changed the balance by 0`. Then the game **crashed**:
+silencing the hidden loco by returning from `updateSoundSet` gave the game no
+tracks, and it asserts one per track of the sound set
+(`AudioEmitterBackend.cpp:208`). Fixed: the game's own function runs on a
+`silenced()` output, which passes tracks and continuous events on at zero gain
+and drops one-off events. `test_sound.lua` fails on the crashing version
+("got 0").
 
 #### Also learned from the smoke test
 

@@ -23,6 +23,7 @@ for t in "$ROOT"/dev/tests/plan/test_*.lua; do
 done
 run test_hide.lua "$ROOT/dev/tests/ghost_real" "$S/ghost_real.script.lua"
 run test_chain.lua "$ROOT/dev/tests/ghost_real" "$S/ghost_real.script.lua"
+run test_sound.lua "$ROOT/dev/tests/ghost_real" "$S/ghost_real.script.lua"
 run test_gui.lua "$ROOT/dev/tests/gui" "$S/runaround_gui.script.lua"
 run test_build.lua "$ROOT/dev/tests/build" "$ROOT/ghost_build.script.lua"
 run test_resolve.lua "$ROOT/dev/tests/build" "$ROOT/ghost_build.script.lua" "$S/ghost_real.script.lua"

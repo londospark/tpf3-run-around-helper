@@ -165,7 +165,9 @@ These were just changed and pass offline, but haven't been seen in game:
   at - ignored`, and no second run. `loco chosen automatically` must name a loco.
 - **No buying or selling (N7):** the loco now stays on the train, hidden. No money
   should float up in the world at the detach or recouple, and the loco should
-  be silent while its copy is away. `money: ... changed the balance by 0`. (The
+  be silent while its copy is away. (The first try crashed the game: a sound
+  function must add one track per track every frame. See README, engine
+  findings.) `money: ... changed the balance by 0`. (The
   purchase-cost flag can't be set; the log says so, and that's fine.)
 - **Chaining is checked at load:** `ghost_build` loads the original transformator
   with `ug_require` and chains it only if it has nothing but update/particle

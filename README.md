@@ -306,6 +306,10 @@ Learned while building this. The full write-up is in the modding guide.
   - After a run-around, the game reports the train arriving at the same stop
     again, in the same second, without it having moved. The mod ignores that
     repeat.
+- **Sound sets.** Every frame, a sound set's update function must add exactly
+  one track per track of the set. Adding none (to silence a vehicle) crashes the
+  game (`AudioEmitterBackend.cpp`, `trackSrcs.size() == tracks.size()`). Add
+  them at zero gain instead.
 - **Vehicle replace costs money.** `makeVehicleReplaceCmd` is the game's
   "replace vehicles": it buys what it puts in and refunds what it takes out, with
   the amounts shown in the world. Its command data has `applyPurchaseCost`; the

@@ -113,6 +113,9 @@ While editing or showing:
 
 - **One loco plus coaches or wagons.** Multiple units and double-heading are not
   handled.
+- **The loco should be at the front of the train when it arrives**, which it is
+  at a terminus. A loco chosen elsewhere in the train still runs around, but the
+  coaches jump at the end instead of the train drawing forward.
 - **The running loco ignores signals** and doesn't reserve track. Use a loop
   that other trains won't be on at the same time.
 - **Run-arounds belong to a line and a stop, not to a train.** Every train on
@@ -217,6 +220,7 @@ untouched. Only the copies are then used.
 | `res/models/runaround_ghost/` | `real*.trf.lua` (the stock train and tilting-train transformators, wrapped), plus plain silent copies of the base locos as a last fallback |
 | `res/models/runaround_standin/` | the invisible 1 kW stand-ins, 0.25 to 44 m in 0.25 m steps, with blank icons for the train window |
 | `res/scripts/runaround_gui.script.lua`, `runaround_vehicle.res.lua` | the train window card and the route tool |
+| `dev/` (not shipped) | offline tests (`dev/run_tests.sh`), the staging install script and generators; see `AGENTS.md` |
 
 More detail:
 

@@ -1,0 +1,101 @@
+math.atan2 = math.atan2 or math.atan
+-- A 1-D train on the x axis with the rules seen live: a replace keeps the middle, a flip mirrors about it.
+local STAND = {}  -- stand-in model id -> length
+local names = {}
+local id = 5000
+for cm = 25, 4400, 25 do names[id] = "m::/res/models/runaround_standin/standin_cm" .. cm .. ".mdl"; STAND[id] = cm / 100; id = id + 1 end
+local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
+local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
+local train = { mid = 0.0, dir = -1, parts = {} } -- dir: head points to -x
+local function layout()
+  local L = 0 for _, p in ipairs(train.parts) do L = L + lenOf(p.part.modelId) end
+  local out, cur = {}, train.mid + train.dir * L / 2 -- head end
+  for i, p in ipairs(train.parts) do local l = lenOf(p.part.modelId); out[i] = { x = cur - train.dir * l / 2, m = p.part.modelId }; cur = cur - train.dir * l end
+  return out
+end
+local function setParts(parts) train.parts = parts end
+api = {
+  res = { modelRep = { getAll = function() return names end,
+    get = function() return { metadata = { transportVehicle = { compartments = { { loadConfigs = { {} } } } } } } end } },
+  engine = { getComponent = function(e, c)
+      if c == "CL" then local l = layout(); local cs = {} for i = 1, #l do cs[i] = i end; return { carriages = cs } end
+      if c == "MIL" then local p = layout()[e]; return { fatInstances = { { modelId = p.m, transf = { cols = function(_, k) if k == 3 then return { x = p.x, y = 0, z = 0 } end return { x = 1, y = 0 } end } } } } end
+      if c == "GT" then return { gameTime = 0 } end end,
+    util = { getWorld = function() return 1 end } },
+  type = { ComponentType = { CARRIAGE_LIST = "CL", MODEL_INSTANCE_LIST = "MIL", GAME_TIME = "GT" },
+    TransportVehicleConfig = { new = function(t) local c = { vehicles = {} } for i, p in ipairs(t.vehicles) do c.vehicles[i] = p end return c end },
+    TransportVehiclePart = { new = function() return { part = {} } end }, LoadConfig = { new = function() return {} end },
+    Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end }, Mat4f = { rotZTransl = function() return {} end } },
+  cmd = { sendCommand = function() end, makeCustomEntityUpdateStateCmd = function() return {} end, makeCustomEntityUpdateTransformationCmd = function() return {} end },
+}
+-- Drives startRunAround through the ghost-rake path with the mock above.
+local function run(markers)
+  for k in pairs(names) do if string.find(names[k], "runaround_ghost_real/", 1, true) then names[k] = nil end end
+  names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; names[8] = "vehicle/waggon/boxcar.mdl"
+  local mid = 9000
+  for _, f in ipairs(markers) do names[mid] = "m::/res/models/runaround_ghost_real/" .. f .. ".mdl"; mid = mid + 1 end
+  local pt = 0
+  local function part(m) pt = pt + 1; return { part = { modelId = m, reversed = false, compartment2loadConfig = { {} }, color = { x = 0.1 * pt, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1000 + pt } end
+  train.mid, train.dir = 0.0, -1
+  setParts({ part(4225), part(7), part(8), part(7) })
+  local log, created, order = {}, {}, {}
+  local nextEnt = 100
+  local gc = api.engine.getComponent
+  api.engine.getComponent = function(e, c)
+    if c == "TV" then return { transportVehicleConfig = { vehicles = train.parts } } end
+    return gc(e, c)
+  end
+  api.type.ComponentType.TRANSPORT_VEHICLE = "TV"
+  api.type.Mat4f.rotZTransl = function() return {} end
+  api.cmd.makeVehicleReplaceCmd = function(_, cfg) return { kind = "replace", cfg = cfg } end
+  api.cmd.makeCustomEntityCreateCmd = function(m) return { kind = "create", model = m } end
+  api.cmd.makeCustomEntityDestroyCmd = function(e) return { kind = "destroy", e = e } end
+  api.cmd.makeVehicleSetManualDepartureCmd = function() return { kind = "hold" } end
+  api.cmd.makeVehicleSetStoppedByUserCmd = function() return { kind = "hold" } end
+  api.cmd.sendCommand = function(cmd, cb)
+    if type(cmd) == "table" and cmd.kind then order[#order + 1] = cmd.kind end
+    if type(cmd) == "table" and cmd.kind == "create" then created[#created + 1] = cmd.model; nextEnt = nextEnt + 1; if cb then cb({ resultEntity = nextEnt }, true) end return end
+    if type(cmd) == "table" and cmd.kind == "replace" then setParts(cmd.cfg.vehicles) end
+    if cb then cb({}, true) end
+  end
+  local saved = { runs = {}, loops = {} }
+  local state = { get = function() return saved end, set = function(_, d) saved = d end }
+  local op = print
+  print = function(...) local t = {} for i = 1, select("#", ...) do t[i] = tostring(select(i, ...)) end log[#log + 1] = table.concat(t, " ") end
+  M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround}", "s"))() -- fresh: the marker set is cached
+  local ok, err = pcall(M.start, state, 1, { loopEdges = { { entity = 1, index = 0 } }, waypoints = {}, name = "Test" })
+  print = op
+  if not ok then print(table.concat(log, "\n")); error(err) end
+  return saved, created, order, log
+end
+api.res.modelRep.get = function(m)
+  local L = MODEL_LEN[m]
+  return { metadata = { transportVehicle = { compartments = { { loadConfigs = { {} } } } },
+    extent = L and { bbMin = { x = -L / 2 }, bbMax = { x = L / 2 } } or nil } }
+end
+M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround}", "s"))()
+
+-- every vehicle wrapped: a ghost rake, a ghost per coach from the coach's own model, the replace after them
+local saved, created, order, lg = run({ "loco", "coach", "boxcar" })
+local sawLen = false for _, l in ipairs(lg) do if l:find("12.80 m long (from its model)", 1, true) then sawLen = true end end
+assert(sawLen, "loco length from its model extent")
+local r = saved.runs[1]
+assert(r ~= nil, "run started")
+assert(r.rake ~= nil and r.layout == nil, "ghost rake, not creep")
+assert(#r.rake.coaches == 3)
+assert(created[1] == 7 and created[2] == 8 and created[3] == 7 and created[4] == 4225, "coach ghosts (own models) then the loco: " .. table.concat(created, ","))
+local firstReplace
+for i, k in ipairs(order) do if k == "replace" then firstReplace = i break end end
+local creates = 0 for i = 1, firstReplace do if order[i] == "create" then creates = creates + 1 end end
+assert(creates == 3, "all coach ghosts shown before the replace")
+local hidden = 0
+for _, p in ipairs(train.parts) do if p.part.color and math.abs(p.part.color.x - 0.1234567) < 1e-6 then hidden = hidden + 1 end end
+assert(#train.parts == 4 and hidden == 3, "the three real coaches are still in the train, hidden")
+print("start (all wrapped): ghost rake, coaches hidden in the train, ghosts from their own models")
+
+-- a coach whose model was not wrapped: no rake (it could not be hidden) - creep instead
+saved = run({ "loco", "coach" })
+r = saved.runs[1]
+assert(r ~= nil and r.rake == nil and r.layout ~= nil, "falls back to the creep")
+print("start (a wagon not wrapped): creep fallback")
+print("start ok")

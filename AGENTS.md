@@ -43,7 +43,6 @@ instead of the game's instant flip.
 | `res/scripts/ghost_real.script.lua` | transformator and sound wrappers: stock behaviour for real trains; drives free-entity copies; hides carriages painted the flag colour |
 | `ghost_build.script.lua` | load-time `postRunScript`: patches every rail vehicle to use the wrappers, builds `runaround_ghost_dyn/` copies and `runaround_ghost_real/` markers |
 | `res/audio/ghostwrap/` | 15 generated copies of the game's rail sound sets (absolute paths, wrapped update script) |
-| `res/models/runaround_standin/` | 176 invisible stand-ins from older versions; only so a run started under one can finish. Remove in a later release |
 | `res/models/runaround_ghost/` | `real.trf.lua`, `real_tilting.trf.lua`, plus 55 static plain loco copies (last fallback) |
 | `_metadata/` | `modinfo.json`, `0.png` logo (rendered from `logo_source.svg` with `rsvg-convert`) |
 | `MODIO.md` | text for the mod.io page (the owner uploads it themselves) |
@@ -119,8 +118,7 @@ allowed inside `update()`.
 the coaches stay in view and move at the flip. **If the loco can't be hidden**
 (no `runaround_ghost_hide/` marker): no run-around, and the card says why. The
 creep (0.25 m stand-in steps) and the loco-for-a-stand-in swap are gone. Both
-bought and sold vehicles (live: money in the world). Stand-in models and
-`isStandIn` remain only so a run started under an older version can finish.
+bought and sold vehicles (live: money in the world). The stand-in models are gone (nothing uses them).
 
 ### Engine facts the design rests on (traced live)
 
@@ -156,65 +154,35 @@ So that nobody repeats them:
 
 ## Known issues
 
-### Waiting for a live test
+### Seen working live (2026-10-07, owner's save with the *devers* mod)
 
-These were just changed and pass offline, but haven't been seen in game:
+- One run per arrival; the game's repeat arrival is ignored (N5); the loco, not
+  a coach, is chosen (N6).
+- The loco stays on the train, hidden: `money: the detach/recouple changed the
+  balance by 0`, no money in the world (N7). No crash after the sound fix.
+- Chaining *devers*' transformator: `368 through another mod's transformator`,
+  and the ghost rake ran (`train drawn up 23.8 m; loco ghost 0.35 m from where it
+  would be coupled`).
+- The start check on a normal arrival: `0.3 m from the route`.
 
-- **Repeat arrival and loco choice (N5, N6, seen in the first smoke test):**
-  after a run, the log should show `reported at the stop it has just run around
-  at - ignored`, and no second run. `loco chosen automatically` must name a loco.
-- **No buying or selling (N7):** the loco now stays on the train, hidden. No money
-  should float up in the world at the detach or recouple, and the loco should
-  be silent while its copy is away. (The first try crashed the game: a sound
-  function must add one track per track every frame. See README, engine
-  findings.) `money: ... changed the balance by 0`. (The
-  purchase-cost flag can't be set; the log says so, and that's fine.)
-- **Chaining is checked at load:** `ghost_build` loads the original transformator
-  with `ug_require` and chains it only if it has nothing but update/particle
-  scripts and its update function is found. Look for
-  `left alone: <trf> - <why>` lines. If every devers vehicle says "can't load
-  other scripts here", `ug_require` isn't available at load, and nothing is
-  chained (no ghost rake; and a loco that can't be hidden doesn't run around).
-- **Chaining another mod's transformator** (*devers* is in the owner's game):
-  the load line should say `N through another mod's transformator` with N about
-  the number of rail vehicles, a run should log `ghost rake`, there should be no `chained transformator not found`, and trains not
-  running around should still lean on curves (devers' roll). If the roll goes,
-  the original isn't being called: check `ug_require` of a `.trf.lua` in the
-  transformator scope (a `.trf` already required elsewhere in that scope
-  wouldn't redefine `data()`).
-- **The start check (N1, N2):** the log should say
-  `ghost starts on route piece N, M m along it (0.x m from the route)`. A
-  normal arrival must NOT log `run-around NOT started`. If it does, the reason
-  says which check fired; read the distance it gives before changing
-  `ON_ROUTE_M`.
+### Still to check before the public alpha
 
-- **Bogies hidden.** All nodes are now scaled to zero, not just the root. The
-  owner's last test showed bogies still visible with root-only scaling.
-- **The pull and uncouple sequence** (steps 5-6).
-  - `ghost rake: train drawn up ... loco ghost N m from where it would be coupled`
-    should be about 0.
-  - It assumes the route leaves the platform forwards.
-- **Wagon loads on copies**, now keyed by `vehicleStaticInfo.carriageEntity`.
-- **Loco length from `metadata.extent`.**
-  - The log should say `(from its model)`.
-  - Trains with a single coach, or mixed wagons, now use the ghost rake too.
-- **Blank stand-in icons:** no more "Could not find texture ... _icon20.tga"
-  warnings.
-- **Failure handling (H1-H4)**, tested offline only (`test_failures.lua`): the
-  restore after a failed start, recouple retries and "Stuck" on the card, the
-  watchdog. None of these paths has been hit live.
-- **Shared file names (M1):** the load summary now ends with
-  `N left alone (file name shared)`. It should be 0 with no other mods. Markers
-  and copies are still named by file name: that's proven live, while full names
-  are not shown to match between load and game script, so don't switch to them
-  without a live check.
-- **Coach copies follow a curved platform (M4)** during the pull. The log line
-  `ghost rake: the train draws forward ... (coaches turn up to N degrees)` gives
-  the turn. On a curve, check the copies line up with the hidden coaches when
-  they reappear.
-- **`_content.json` now lists the stand-in icons.** If the
-  "Could not find texture ... _icon20.tga" warnings came from the stale list,
-  they should be gone now.
+Offline-tested only:
+
+- **Save and load mid-run (M7)**, and autosave landing mid-run. Do free entities
+  (the copies) survive a reload? Does the run finish?
+- **A steam loco:** its sound set has chuff tracks; the hidden loco's silenced
+  output must keep the track count (else the AudioEmitterBackend crash).
+- **Goods wagons with loads:** the copies should show the loads
+  (`vehicleStaticInfo.carriageEntity`).
+- **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line
+  up with the hidden coaches when they reappear.
+- **Without *devers*:** one run on the stock-wrapped path.
+- **The refusals:** a route whose first points head back into the train (N2), a
+  train at an alternative platform (N1). Each should show the card's message and
+  a normal departure.
+- **Failure handling (H1-H4)** and the M5 mismatch check: offline only.
+- **Bogies hidden**, and no `Could not find texture` warnings.
 
 ### Bugs found in review
 
@@ -246,11 +214,12 @@ These are documented in the README:
 
 ## Next steps
 
-1. **The owner's next live test** of the above. Read their `stdout.txt` lines
-   before changing anything.
-2. Check the first mod.io install's log for `loco setup: SKIPPED` (M3).
-3. Tag `v0.1.0-alpha` on GitHub. Help the owner publish using `MODIO.md`; they
-   upload to mod.io themselves and will add a video link later.
+1. **The owner's checks** in "Still to check before the public alpha" above. Read
+   their `stdout.txt` lines before changing anything.
+2. Then tag `v0.1.0-alpha` on GitHub. The owner uploads to mod.io themselves
+   (from the staging install, which leaves out `dev/`, `AGENTS.md`,
+   `CODE_REVIEW.md` and `MODIO.md`), pastes `MODIO.md` into the page, and adds
+   their video.
 4. Add a chapter on the hidden-coach technique to the modding guide (new source
    needed, see above).
 5. Later: loops keyed by station rather than stop index; multiple units.

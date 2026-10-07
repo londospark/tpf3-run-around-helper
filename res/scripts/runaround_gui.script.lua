@@ -385,8 +385,9 @@ function data()
 				local text = PHASES[run.phase or ""] or "Running around"
 				if run.phase == nil and run.rake ~= nil and RAKE_STAGES[run.rake.stage] then text = RAKE_STAGES[run.rake.stage] end
 				local progress = 0.0
-				if run.phase == nil and (loop.routeLength or 0) > 0 then
-					progress = math.min((run.gdist or 0) / loop.routeLength, 1.0)
+				local total = run.driveTotal or loop.routeLength or 0
+				if run.phase == nil and total > 0 then
+					progress = math.min((run.gdist or 0) / total, 1.0)
 				elseif run.phase ~= nil then
 					progress = 1.0
 				end

@@ -35,7 +35,7 @@ and tidiness. It also answers whether the mod should be split up (see
 | M2 | Every rail vehicle's scripts are replaced | Open (design). The copied transformators were **checked** identical to the game's current `transformator_train.script.tl` and `transformator_tiltingTrain.script.tl` |
 | M3 | Mod ID hard-coded in generated files | Made safe for trains: `ghost_build` patches nothing under another ID. See N3: the GUI isn't covered |
 | M4 | Coach copies don't turn on curves | Fixed: `pullFrame`, Hermite curve (`test_curve.lua`) |
-| M5 | Copies not checked against the coaches they're matched to | Open |
+| M5 | Copies not checked against the coaches they're matched to | Fixed: a model mismatch fails the rake and the real train is put back (`test_rake.lua`) |
 | M6 | Hiding relies on the undocumented `vehicle.color` | `hiddenLoads` leak fixed; the field is still relied on |
 | M7 | Saving or removing the mod mid-run | Open, untested |
 | M8 | Only a loco at the front gets the smooth sequence | Open, documented in the README |
@@ -254,12 +254,12 @@ and drops one-off events. `test_sound.lua` fails on the crashing version
 
 ### Low
 
-- **`releaseTrain` isn't guarded** (line 1379). Its first command is sent
+- **Fixed:** `releaseTrain` and `holdTrain` now guard both commands. Was: **`releaseTrain` isn't guarded** (line 1379). Its first command is sent
   outside `pcall`, unlike the second. In `verifyRun` → `finalizeRun`, a train
   deleted during the four verify ticks would make the command maker throw
   inside a callback. `holdTrain` has the same shape. Wrap both like the
   stopped-by-user line.
-- **The progress bar stops short on routes with reversals.** `routeLength`
+- **Fixed** (`routeDriveLength`, checked against the drive in `test_flow.lua`): **The progress bar stops short on routes with reversals.** `routeLength`
   (line 1012) counts every route piece in full, so a reversal piece counts
   twice. The ghost only drives `CLEAR_M` (10 m) into a reversal piece, and
   starts part-way along the route (`locateOnRoute`). The card's bar
@@ -267,11 +267,11 @@ and drops one-off events. `test_sound.lua` fails on the crashing version
   100% at "Coupling on". The watchdog limit also uses `routeLength`, where
   overestimating is harmless. **Fix:** record the length actually driven while
   planning (reversal pieces as `2 × CLEAR_M`), and use that for the bar.
-- **The GUI's numbers are trusted.** `SetLoopNumberField` stores `speed` and
+- **Fixed** (clamped to the sliders' ranges; `test_failures.lua`): **The GUI's numbers are trusted.** `SetLoopNumberField` stores `speed` and
   `accel` unchecked. The sliders bound them (10-100 km/h, 0.5-4 m/s²), but a
   command from the console or another mod could set 0, and the ghost would
   never move until the watchdog stepped in. Clamp them in the handler.
-- **Stale comments.**
+- **Fixed:** **Stale comments.**
   - Line 1423, "Puts the real loco back. attachAtRear/why say where", is a
     leftover above `traceNow`.
   - `runaround_vehicle.res.lua` mentions `runaround_button.res.lua`, a "capture
@@ -285,11 +285,11 @@ and drops one-off events. `test_sound.lua` fails on the crashing version
   `carriageTransf(c)` helper would do. There are also three copies of the
   `[RunAroundHelper]` log function, one per script, which is unavoidable while
   they run in separate scopes (see below).
-- **A run strategy reachable only by settings.** `reverseBeforeRecouple = false`
+- **Still open:** **A run strategy reachable only by settings.** `reverseBeforeRecouple = false`
   leads to `chooseAttachEnd` and the no-flip recouple. It isn't the default, was
   last used live before the flip was added, and no test covers it. Either test
   it or remove it, together with the setting.
-- **Speed and acceleration in the run's own copy.** A run keeps the loop as it
+- **Documented in the README:** **Speed and acceleration in the run's own copy.** A run keeps the loop as it
   was at the start (`run.loop`), so changing the speed or route mid-run has no
   effect until the next arrival. That's reasonable, but worth one line in the
   README.
@@ -416,9 +416,8 @@ little as possible.
 ## Suggested order
 
 1. ~~N1-N6~~ (done; N5 and N6 seen in the smoke test).
-2. **The `releaseTrain`/`holdTrain` guard.** A small robustness fix.
+2. ~~The `releaseTrain`/`holdTrain` guard, M5, the stand-in models~~ (done).
 3. A relative `filePath` for the card, only if a live test shows it works.
-4. **M5.** Check copies against their coaches' models.
 5. The low items as tidying.
 6. The module split, after the live probe and the alpha feedback.
 7. Later: route-planning cost, `LOG_TRACES` off for a non-alpha release, M7

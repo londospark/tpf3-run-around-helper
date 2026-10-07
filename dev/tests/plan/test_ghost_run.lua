@@ -21,28 +21,27 @@ print("max x on piece 2:",maxx)
 assert(maxx<2012 and maxx>2009 and run.phase=="flip")
 -- facing: loco faces -x (pi); travel +x, one reversal flips: final yaw = pi + pi = 2pi -> facing +x
 print("yaw",run.gyaw, run.yawOffset)
--- wagon restore: [S w1 w2 w3 w4 S] flipped -> [loco w4 w3 w2 w1] with flags toggled
+-- the recouple after a flip: the hidden loco shown again at the head, the wagons
+-- re-listed in the opposite order with their flags toggled
 api.type.TransportVehicleConfig={new=function(t) local c={vehicles={}} for i,p in ipairs(t.vehicles) do c.vehicles[i]=p end return c end}
 api.type.TransportVehiclePart={new=function() return {part={}} end}
 api.type.LoadConfig={new=function() return {} end}
-api.res={modelRep={getAll=function() return {[9]="m::/res/models/runaround_standin/standin_cm1200.mdl"} end,get=function() return {metadata={transportVehicle={compartments={{loadConfigs={{}}}}}}} end}}
+api.res={modelRep={getAll=function() return {} end,get=function() return {metadata={transportVehicle={compartments={{loadConfigs={{}}}}}}} end}}
 local M2=assert(load(io.open(arg[1]):read("*a").."\nreturn {b=buildConfigWithLocoReattached}","s2"))()
-local cur={vehicles={{part={modelId=9,reversed=false}},{part={modelId=1,reversed=false,tag="w1"}},{part={modelId=2,reversed=true,tag="w2"}},{part={modelId=3,reversed=false,tag="w3"}},{part={modelId=9,reversed=false}}}}
-local snap={modelId=5,reversed=false,loads={{loadConfigIndex=0}},autos={true},purchaseTime=1,maintenanceChange=0}
--- a run from an older version: stand-ins (9) in the train, the loco rebuilt
-local cfg=M2.b(cur,snap,false,true,{false,true,false})
-local order={} for i,p in ipairs(cfg.vehicles) do order[i]=(p.part.tag or "L")..(p.part.reversed and "r" or "-") end
-print(table.concat(order," "))
-assert(table.concat(order," ")=="Lr w3r w2- w1r")
-print("wagon restore ok (stand-in run from an older version)")
 -- now: the hidden loco itself is in the train; the SAME part comes back, painted again
 api.type.Vec3f={new=function(x,y,z) return {x=x,y=y,z=z} end}
 local loco={part={modelId=5,reversed=false,color={x=0.1234567,y=0.7654321,z=0.3141593}},purchaseTime=1,tag="loco"}
 local cur2={vehicles={loco,{part={modelId=1,reversed=false,tag="w1"}},{part={modelId=2,reversed=true,tag="w2"}},{part={modelId=3,reversed=false,tag="w3"}}}}
-snap.color={x=0.5,y=0.6,z=0.7}
+local snap={modelId=5,reversed=false,loads={{loadConfigIndex=0}},autos={true},purchaseTime=1,maintenanceChange=0,color={x=0.5,y=0.6,z=0.7}}
 local cfg2=M2.b(cur2,snap,false,true,{false,true,false})
 assert(cfg2.vehicles[1]==loco and #cfg2.vehicles==4, "the train's own loco part, nothing added")
 assert(loco.part.reversed==true and math.abs(loco.part.color.x-0.5)<1e-9, "facing set, own paint back")
 local order2={} for i,p in ipairs(cfg2.vehicles) do order2[i]=(p.part.tag or "?")..(p.part.reversed and "r" or "-") end
 assert(table.concat(order2," ")=="?r w3r w2- w1r", table.concat(order2," "))
 print("hidden loco back on: same part, own paint, wagons restored")
+-- the loco is no longer on the train (rebuilt by hand mid-run): nothing is added
+-- (a new loco would be bought), the wagons are left as they are
+local cur3={vehicles={{part={modelId=1,reversed=false,tag="w1"}},{part={modelId=2,reversed=true,tag="w2"}}}}
+local cfg3=M2.b(cur3,snap,false,true,nil)
+assert(#cfg3.vehicles==2 and cfg3.vehicles[1].part.tag=="w1" and cfg3.vehicles[2].part.tag=="w2", "nothing added, nothing bought")
+print("loco gone: nothing added")

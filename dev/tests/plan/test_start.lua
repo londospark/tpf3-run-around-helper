@@ -1,11 +1,8 @@
 math.atan2 = math.atan2 or math.atan
 -- A 1-D train on the x axis with the rules seen live: a replace keeps the middle, a flip mirrors about it.
-local STAND = {}  -- stand-in model id -> length
 local names = {}
-local id = 5000
-for cm = 25, 4400, 25 do names[id] = "m::/res/models/runaround_standin/standin_cm" .. cm .. ".mdl"; STAND[id] = cm / 100; id = id + 1 end
 local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
-local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
+local function lenOf(mid) return MODEL_LEN[mid] end
 local train = { mid = 0.0, dir = -1, parts = {} } -- dir: head points to -x
 -- the route's first piece: along the platform from under the coaches, out past the loco (-x)
 TRACK = { x0 = -20, dx = -100 }

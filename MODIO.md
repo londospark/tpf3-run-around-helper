@@ -63,11 +63,15 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <li><strong>One loco plus coaches or wagons.</strong> Multiple units and double-heading are not handled yet.</li>
 <li><strong>The running loco ignores signals.</strong> Use a loop that other trains won't be on at the same time.</li>
 <li><strong>The train draws forward one loco length before the loco uncouples.</strong> A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so the train pulls up first, with the loco still coupled, and then stays put.</li>
-<li><strong>Passengers and goods stay aboard.</strong> The coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>
-<li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets.</li>
+<li><strong>Nothing is bought or sold, and passengers and goods stay aboard.</strong> The loco, coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>
+<li><strong>The loco must be at one end of the train.</strong> For the smooth sequence (the train drawing forward, then the loco uncoupling) it should be at the front when the train arrives, as it is at a terminus.</li>
+<li><strong>The card tells you when an arrival didn't run around, and why:</strong> the train stopped at a different platform from the one the route starts at, the route's first points head back into the train, or there's no loco at either end. The train then simply leaves as normal.</li>
+<li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets. A loco this mod can't hide doesn't run around (the card says so).</li>
+<li><strong>Works alongside mods that change trains' animation</strong>, such as Real Track Cant: those trains still lean on curves.</li>
 <li><strong>Nothing is left stuck.</strong> If a run-around can't start or stalls, the train is put back as it was and goes on its way. If the loco can't couple back on, the train waits and the card says so.</li>
 <li>Run-arounds belong to a line and a stop. If you insert or remove stops earlier in the line, check the run-around still points at the right station.</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
+<li><strong>Don't remove the mod while a run-around is happening.</strong> The train is hidden at that moment and would stay hidden (it shows up teal without the mod). Let the run-around finish first.</li>
 </ul>
 
 <h2>Status and feedback</h2>

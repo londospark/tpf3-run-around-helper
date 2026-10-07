@@ -3,10 +3,7 @@ math.atan2 = math.atan2 or math.atan
 -- can fail ends with the real train back as it was (or the ghosts cleared, if the
 -- train has gone), and never with a train released on the invisible stand-in.
 -- Same 1-D train as test_start.lua: a replace keeps the middle, a flip mirrors.
-local STAND = {}
 local names = {}
-local id = 5000
-for cm = 25, 4400, 25 do names[id] = "m::/res/models/runaround_standin/standin_cm" .. cm .. ".mdl"; STAND[id] = cm / 100; id = id + 1 end
 names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; names[8] = "vehicle/waggon/boxcar.mdl"
 names[9000] = "m::/res/models/runaround_ghost_real/loco.mdl"
 names[9001] = "m::/res/models/runaround_ghost_real/coach.mdl"
@@ -16,7 +13,7 @@ names[9011] = "m::/res/models/runaround_ghost_hide/coach.mdl"
 names[9012] = "m::/res/models/runaround_ghost_hide/boxcar.mdl"
 local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
 local HIDE = 0.1234567
-local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
+local function lenOf(mid) return MODEL_LEN[mid] end
 local train = { mid = 0.0, dir = -1, parts = {}, gone = false }
 -- the route's first piece: along the platform from under the coaches, out past the loco (the head is at -x)
 TRACK = { x0 = -20, dx = -100 }
@@ -333,5 +330,18 @@ TRACK.x0, TRACK.dx = 30, -45 -- under the coaches only, stopping 18 m short of t
 start()
 assert(#saved.runs == 0 and loop.lastProblem and loop.lastProblem:find("at the other end of the train", 1, true), tostring(loop.lastProblem))
 say("loco at the wrong end: " .. loop.lastProblem .. "\n")
+
+-- The card's numbers are clamped (a command from elsewhere could send 0, and the
+-- ghost would never move).
+fresh()
+script = M.data()
+script.handleEvent(nil, state, nil, "SetLoopNumberField", "RunAroundGuiCmd", { loopId = 1, field = "speed", value = 0 })
+assert(math.abs(loop.speed - 10 / 3.6) < 1e-9, "speed clamped to the slider's least: " .. loop.speed)
+script.handleEvent(nil, state, nil, "SetLoopNumberField", "RunAroundGuiCmd", { loopId = 1, field = "accel", value = 99 })
+assert(loop.accel == 4.0, "accel clamped to the slider's most")
+script.handleEvent(nil, state, nil, "SetLoopNumberField", "RunAroundGuiCmd", { loopId = 1, field = "routeLength", value = 1 })
+assert(loop.routeLength == 100, "only speed and accel can be set")
+loop.speed, loop.accel = 10, 2
+say("card numbers clamped\n")
 
 say("failures ok\n")

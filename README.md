@@ -144,6 +144,11 @@ A train is never left stuck or broken by a run-around:
   coaches jump at the end instead of the train drawing forward.
 - **The running loco ignores signals** and doesn't reserve track. Use a loop
   that other trains won't be on at the same time.
+- **Don't remove the mod while a run-around is happening.** The loco and coaches
+  are hidden at that moment (painted a flag colour this mod draws as nothing),
+  and without the mod they'd show that colour (teal). Let the run finish first.
+- **Changes during a run** (speed, route) apply from the next arrival: a run
+  keeps the settings it started with.
 - **The train must stop at the platform the route starts from.** A line can
   send trains to other platforms. Then there's no run-around that time: the
   train leaves the normal way, and the card says why. The same happens if the
@@ -257,7 +262,6 @@ untouched. Only the copies are then used.
 | `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions; they also draw a real carriage painted the flag colour as nothing, and give its ghost the same load |
 | `res/audio/ghostwrap/*.snd.lua` | the game's own rail sound sets, generated with absolute sound paths and the update script wrapped |
 | `res/models/runaround_ghost/` | `real*.trf.lua` (the stock train and tilting-train transformators, wrapped), plus plain silent copies of the base locos as a last fallback |
-| `res/models/runaround_standin/` | invisible stand-ins used by older versions (the loco now stays on the train, hidden); kept so a run-around in progress in an older save can finish. Can go in a later release |
 | `res/scripts/runaround_gui.script.lua`, `runaround_vehicle.res.lua` | the train window card and the route tool |
 | `dev/` (not shipped) | offline tests (`dev/run_tests.sh`), the staging install script and generators; see `AGENTS.md` |
 

@@ -35,6 +35,9 @@
 - A train that stops at another platform than the route starts from, or whose
   route would set off towards its own coaches, doesn't run around that time. It
   leaves the normal way, and the card says why.
+- Works alongside mods that give trains their own animation script, such as
+  *devers*: the coaches are hidden and the train draws forward, with no flashing,
+  and the other mod's animation is kept.
 - Fixed: straight after a run-around, the game reports the train arriving
   again, and a second run-around started on the turned train, running a coach
   around as the "loco". Repeat arrivals at the same stop are now ignored.

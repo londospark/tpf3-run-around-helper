@@ -156,9 +156,14 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Repeat arrival and loco choice (N5, N6, seen in the first smoke test):**
   after a run, the log should show `reported at the stop it has just run around
   at - ignored`, and no second run. `loco chosen automatically` must name a loco.
-- **The owner's game has the *devers* mod,** which replaces every train's
-  transformator, so nothing can be its own ghost there. Test the draw-forward
-  step with *devers* off.
+- **Chaining another mod's transformator** (*devers* is in the owner's game):
+  the load line should say `N through another mod's transformator` with N about
+  the number of rail vehicles, a run should log `ghost rake` rather than
+  `creep`, there should be no `chained transformator not found`, and trains not
+  running around should still lean on curves (devers' roll). If the roll goes,
+  the original isn't being called: check `ug_require` of a `.trf.lua` in the
+  transformator scope (a `.trf` already required elsewhere in that scope
+  wouldn't redefine `data()`).
 - **The start check (N1, N2):** the log should say
   `ghost starts on route piece N, M m along it (0.x m from the route)`. A
   normal arrival must NOT log `run-around NOT started`. If it does, the reason

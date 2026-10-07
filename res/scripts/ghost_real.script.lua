@@ -223,6 +223,145 @@ local function particleFn(captureParams, params, particleSystem)
 	end
 end
 
+-- ---------------------------------------------------------------------------
+-- Chaining: a vehicle with another mod's transformator (ghost_build points it at
+-- res/models/runaround_ghost/chain.trf and keeps the original's name in
+-- transformatorConfig.params.runaround_trf, which arrives here as
+-- params.transformatorConfigParams). A hidden carriage is drawn as nothing and a
+-- ghost driven as usual; anything else gets the original transformator, found
+-- once per name and called as the game would. If it can't be found, the game's
+-- own train animation stands in (said once), so a train always animates.
+-- ---------------------------------------------------------------------------
+
+-- The owner prefix of a resource name: devers_1:: for a mod's, :: for the game's.
+local function ownerOf(res)
+	return string.match(res, "^([%w_%-%.]*::)") or "::"
+end
+
+-- The folder of a resource name, with its trailing slash, without the owner.
+local function folderOf(res)
+	local path = string.gsub(res, "^[%w_%-%.]*::", "")
+	return string.match(path, "^(.*/)") or "/"
+end
+
+-- Runs a resource file and returns what it defines: the table it returns, or the
+-- result of the global data() it defines (the form of .trf files). This script's
+-- own data is put back straight away.
+local loaded = {} -- file -> table, or false
+local function loadResource(file)
+	if loaded[file] ~= nil then return loaded[file] or nil end
+	local saved = data
+	local ok, ret = pcall(ug_require, file)
+	local defined = data
+	data = saved
+	local result = nil
+	if ok and type(ret) == "table" then
+		result = ret
+	elseif ok and type(defined) == "function" and defined ~= saved then
+		local okD, d = pcall(defined)
+		if okD and type(d) == "table" then result = d end
+	end
+	loaded[file] = result or false
+	return result
+end
+
+-- The files a ".trf" name can be: in full when it names its owner; "/path" in the
+-- vehicle's mod, then the game; a bare name next to the vehicle's model.
+local function trfFiles(name, modelName)
+	local list
+	if string.find(name, "::", 1, true) then
+		list = { name }
+	elseif string.sub(name, 1, 1) == "/" then
+		list = { ownerOf(modelName) .. name, "::" .. name }
+	else
+		list = { ownerOf(modelName) .. folderOf(modelName) .. name }
+	end
+	for i, f in ipairs(list) do
+		if not string.find(f, "%.lua$") then list[i] = f .. ".lua" end
+	end
+	return list
+end
+
+-- The function a transformator's "file@path.to.fn" names, the file relative to
+-- the .trf's folder unless it names its owner; nil if not found.
+local function scriptFunction(ref, trfFile)
+	if type(ref) ~= "string" then return nil end
+	local file, path = string.match(ref, "^(.-)@(.+)$")
+	if file == nil then return nil end
+	local bases
+	if string.find(file, "::", 1, true) then
+		bases = { file }
+	elseif string.sub(file, 1, 1) == "/" then
+		bases = { ownerOf(trfFile) .. file, "::" .. file }
+	else
+		bases = { ownerOf(trfFile) .. folderOf(trfFile) .. file }
+	end
+	for _, base in ipairs(bases) do
+		for _, ext in ipairs({ ".lua", ".tl" }) do
+			local t = loadResource(base .. ext)
+			if type(t) == "table" then
+				local fn = t
+				for key in string.gmatch(path, "[^%.]+") do fn = type(fn) == "table" and fn[key] or nil end
+				if type(fn) == "function" then return fn end
+			end
+		end
+	end
+	return nil
+end
+
+-- The original transformator of a chained vehicle: { update, capture, particles,
+-- particlesCapture }, or false when it can't be found (then the stock one is used).
+local origins = {}
+local function originOf(params)
+	local okP, name, modelName = pcall(function()
+		local p = params.transformatorConfigParams
+		return p.runaround_trf, p.runaround_mdl
+	end)
+	if not okP or type(name) ~= "string" then return false end
+	local o = origins[name]
+	if o ~= nil then return o end
+	o = false
+	for _, file in ipairs(trfFiles(name, tostring(modelName or ""))) do
+		local cfg = loadResource(file)
+		local us = type(cfg) == "table" and cfg.updateScript
+		if type(us) == "table" then
+			local update = scriptFunction(us.fileName, file)
+			if update ~= nil then
+				local ps = type(cfg.updateParticleSystemScript) == "table" and cfg.updateParticleSystemScript or nil
+				o = {
+					update = update,
+					capture = type(us.params) == "table" and us.params or {},
+					particles = ps and scriptFunction(ps.fileName, file) or nil,
+					particlesCapture = ps and type(ps.params) == "table" and ps.params or {},
+				}
+				break
+			end
+		end
+	end
+	if not o then
+		print("[RunAroundHelper] chained transformator not found: " .. name .. " - the game's own train animation is used for it instead")
+	end
+	origins[name] = o
+	return o
+end
+
+local function chainUpdateFn(_captureParams, params, transfsOutput)
+	if params.currentInfo.landVehicle == nil then return ghostUpdate(params, transfsOutput) end
+	if hideIfFlagged(params, transfsOutput) then return end
+	local o = originOf(params)
+	if o then return o.update(o.capture, params, transfsOutput) end
+	return stockTrainUpdate(params, transfsOutput)
+end
+
+local function chainParticleFn(captureParams, params, particleSystem)
+	local ci = params.currentInfo
+	if ci.vehicle ~= nil and not isHidden(ci.vehicle) then
+		local o = originOf(params)
+		if o and o.particles then return o.particles(o.particlesCapture, params, particleSystem) end
+	end
+	return particleFn(captureParams, params, particleSystem)
+end
+
 -- A stand-in params table: the same currentInfo with vehicle data on top.
 local function withInfo(params, extra)
 	return {
@@ -267,5 +406,6 @@ function data()
 		sound = { updateSoundSet = updateSoundSet },
 		train = { updateFn = trainUpdateFn, updateParticleSystemFn = particleFn },
 		tiltingTrain = { updateFn = tiltingTrainUpdateFn, updateParticleSystemFn = particleFn },
+		chain = { updateFn = chainUpdateFn, updateParticleSystemFn = chainParticleFn },
 	}
 end

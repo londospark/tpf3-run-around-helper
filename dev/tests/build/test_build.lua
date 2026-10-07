@@ -11,6 +11,7 @@ local models = {
   [1] = { "vehicle/train/br_e94.mdl", model("vehicle/train/shared/default_train.trf", "/vehicle/train/shared/sound/train_electric_old.snd") },
   [2] = { "vehicle/waggon/coach.mdl", model("vehicle/train/shared/default_train.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
   [3] = { "mymod/loco.mdl", model("mymod/own.trf", "mymod/own.snd") },
+  [6] = { "devers_1::/vehicle/train/x/caboose.mdl", model("devers_1::/vehicle/train/devers/devers_any.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
 }
 api = { res = { modelRep = {
   getAll = function() local t = {} for id, m in pairs(models) do t[id] = m[1] end return t end,
@@ -36,7 +37,14 @@ build("runaround_helper_1")
 assert(set[1] and set[1].metadata.transformatorConfig.transformator.name == "runaround_helper_1::/res/models/runaround_ghost/real.trf", "loco patched to the wrapped transformator")
 assert(set[1].metadata.soundConfig.soundSet.name == "runaround_helper_1::/res/audio/ghostwrap/train_electric_old.snd", "and the wrapped sound set")
 assert(set[2] ~= nil, "coach patched")
-assert(set[3] == nil, "a loco with its own transformator and sound set is left alone")
+-- another mod's transformator (devers, say): chained, the original named in the params
+assert(set[3] ~= nil and set[3].metadata.transformatorConfig.transformator.name == "runaround_helper_1::/res/models/runaround_ghost/chain.trf", "another transformator is chained")
+assert(set[3].metadata.transformatorConfig.params.runaround_trf == "mymod/own.trf", "the original is named")
+models[6][2].metadata.transformatorConfig.params = { devers_trf = "x.trf", devers_carrier = "RAIL" }
+build("runaround_helper_1")
+local p6 = set[6] and set[6].metadata.transformatorConfig.params
+assert(p6 and p6.runaround_trf == "devers_1::/vehicle/train/devers/devers_any.trf" and p6.devers_trf == "x.trf" and p6.devers_carrier == "RAIL", "the other mod's own params are kept")
+assert(added["runaround_ghost_real/caboose.mdl"] ~= nil, "a chained vehicle with a wrapped sound set is marked ready")
 assert(added["runaround_ghost_real/br_e94.mdl"] and added["runaround_ghost_dyn/br_e94.mdl"], "marker and copy built")
 print("build: own ID - vehicles patched, markers and copies built")
 

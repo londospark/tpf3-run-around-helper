@@ -195,8 +195,22 @@ replay.
 - **`0 can be their own ghost`** at load came from the *devers* mod, which
   replaces every rail vehicle's transformator through
   `addModifier("loadModel", ...)`. That is M2's conflict, seen for real. The run
-  falls back to plain copies and the creep, which is correct but not the smooth
-  sequence. The log now names the transformator it found.
+  fell back to plain copies and the creep, which flashes. **Now chained:**
+  `ghost_build` points a vehicle with another transformator at `chain.trf` and
+  keeps the original's name in `transformatorConfig.params.runaround_trf`, with
+  the other mod's params kept. *devers* itself shows params reaching the
+  transformator as `params.transformatorConfigParams`. `ghost_real`'s chain
+  functions hide or drive ghosts, or call the original. The original is resolved
+  once per name: `ug_require` the `.trf.lua`, read its `data()` (restoring our
+  own), then the `file@path.fn` script relative to it. The live log confirmed
+  the name arrives as `devers_1::/vehicle/train/devers/devers_train.trf`. If the
+  original isn't found, the stock animation is used and logged once.
+  `test_chain.lua` and `test_build.lua` cover it. Not yet seen live.
+- **A mod can `ug_require` its own module:** *devers* loads
+  `devers_1::/vehicle/train/devers/devers_core.lua` that way, and it runs in the
+  owner's game. That answers the "Structure" section's open question. The live
+  probe there is no longer needed, though the form names the mod ID (fine:
+  mod.io keeps it, see above).
 
 ### Low
 

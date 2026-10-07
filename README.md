@@ -127,11 +127,13 @@ A train is never left stuck or broken by a run-around:
 
 ## Tips and limitations
 
-- **Other mods.** A mod that replaces every train's animation script (the
-  transformator) at load, such as *devers*, stops this mod preparing any
-  vehicle. Run-arounds still happen, but with plain copies, and the coaches use
-  the creep instead of drawing forward. The load log then reports
-  `0 can be their own ghost`.
+- **Other mods.** A mod that gives trains its own animation script (the
+  transformator), such as *devers* (Real Track Cant), is chained: this mod hides
+  the coaches and drives the copies, and otherwise calls that mod's script, so
+  both work. The load log counts them ("N through another mod's
+  transformator"). If that script can't be found, the game's own train
+  animation stands in, and the log says so once
+  (`chained transformator not found`).
 - **The card shows what's happening:** turning the train, drawing forward,
   uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
   be coupled back on.

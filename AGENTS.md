@@ -156,6 +156,10 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Repeat arrival and loco choice (N5, N6, seen in the first smoke test):**
   after a run, the log should show `reported at the stop it has just run around
   at - ignored`, and no second run. `loco chosen automatically` must name a loco.
+- **Free replaces (N7):** look for `vehicle replace: purchase cost switched off`
+  and `money: the detach changed the balance by 0` (and the recouple). No money
+  should float up in the world. If the flag didn't take, see CODE_REVIEW N7 for
+  the fallback.
 - **Chaining is checked at load:** `ghost_build` loads the original transformator
   with `ug_require` and chains it only if it has nothing but update/particle
   scripts and its update function is found. Look for

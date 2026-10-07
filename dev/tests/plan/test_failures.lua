@@ -272,6 +272,21 @@ start()
 assert(#saved.runs == 1 and loop.lastProblem == nil, "a started run clears the note")
 say("N2 then a good start: note cleared\n")
 
+-- LIVE: replaces bought and sold the loco (money shown in the world). Every
+-- replace a whole run sends - detach, recouple, the facing check - is free.
+fresh()
+start()
+for _ = 1, 400 do tick(0.5) if #saved.runs == 0 then break end end
+local replaces, paid = 0, 0
+for _, c in ipairs(sent) do
+  if c.kind == "replace" then
+    replaces = replaces + 1
+    if c.applyPurchaseCost ~= false then paid = paid + 1 end
+  end
+end
+assert(replaces >= 2 and paid == 0, string.format("%d of %d replaces would be paid for", paid, replaces))
+say(string.format("money: all %d replaces of a run are free\n", replaces))
+
 -- LIVE: straight after a run-around the game reported the train arriving at the
 -- same stop again; the second run turned a coach into the "loco". Now: the
 -- repeat is ignored, and arriving anywhere else clears it.

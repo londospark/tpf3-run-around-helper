@@ -34,6 +34,10 @@ bad=$(grep -rhoE '"[A-Za-z0-9_]+::' "$ROOT/res" "$ROOT/ghost_build.script.lua" "
 if [ -n "$bad" ]; then echo "FAIL  mod ID: expected $modid, found: $bad"; fail=1; else echo "ok    mod ID $modid used throughout"; fi
 grep -q "MOD_ID = \"$modid\"" "$ROOT/ghost_build.script.lua" || { echo "FAIL  ghost_build MOD_ID is not $modid"; fail=1; }
 
+# Every vehicle replace must go through makeReplaceCmd (no purchase cost).
+n=$(grep -c 'api.cmd.makeVehicleReplaceCmd(' "$S/runaround.script.lua")
+if [ "$n" != 1 ]; then echo "FAIL  makeVehicleReplaceCmd used $n times: use makeReplaceCmd (no purchase cost)"; fail=1; else echo "ok    every replace is free (makeReplaceCmd)"; fi
+
 # _content.json lists every shipped file (see dev/tools/gen_content.py).
 if python3 "$ROOT/dev/tools/gen_content.py" --check; then echo "ok    _content.json up to date"; else echo "FAIL  _content.json out of date: run dev/tools/gen_content.py"; fail=1; fi
 

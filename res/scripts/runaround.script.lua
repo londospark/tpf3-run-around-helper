@@ -273,6 +273,45 @@ local function partFromSnapshot(snap, reversed)
 	return part
 end
 
+-- The player's money, or nil if it can't be read.
+local function playerBalance()
+	local ok, b = pcall(function()
+		return api.engine.getComponent(api.engine.util.getPlayer(), api.type.ComponentType.ACCOUNT).balance
+	end)
+	return ok and b or nil
+end
+
+-- A vehicle replace that costs nothing. The command is the game's own "replace
+-- vehicles", which charges for what it puts in and refunds what it takes out:
+-- every swap of the loco for the stand-in (and back, and each creep step) showed
+-- money changing hands in the world (seen live), and would drain a budget. Its
+-- data has applyPurchaseCost (api/cmd.d.tl, VehicleReplaceCommandData); the
+-- factory doesn't take it, so it is set on the command afterwards. Whether that
+-- took is logged once (read back), and the detach and recouple log the money
+-- change they caused.
+local costFlagLogged = false
+local function makeReplaceCmd(vehicleEntity, config)
+	local cmd = api.cmd.makeVehicleReplaceCmd(vehicleEntity, config)
+	local set = pcall(function() cmd.applyPurchaseCost = false end)
+	local okR, back = pcall(function() return cmd.applyPurchaseCost end)
+	if not (set and okR and back == false) then
+		set = pcall(function() cmd.data.applyPurchaseCost = false end)
+		okR, back = pcall(function() return cmd.data.applyPurchaseCost end)
+	end
+	if not costFlagLogged then
+		costFlagLogged = true
+		logInfo("vehicle replace: purchase cost", (set and okR and back == false) and "switched off" or "COULD NOT be switched off (please report)",
+			"- reads back as", tostring(okR and back))
+	end
+	return cmd
+end
+
+-- Logs how much a replace changed the player's money (should be 0).
+local function logMoneyChange(label, before)
+	local after = playerBalance()
+	if before ~= nil and after ~= nil then logInfo(string.format("money: %s changed the balance by %d", label, after - before)) end
+end
+
 -- Puts a parts list into a config: every vehicle its own group (no multiple
 -- units), no multiple-unit files.
 local function finishConfig(config, parts)
@@ -1499,15 +1538,17 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 	if not okBuild then
 		return recoupleFailed(state, run, "could not build the new consist: " .. tostring(newConfig))
 	end
-	local okCmd, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, newConfig)
+	local okCmd, cmd = pcall(makeReplaceCmd, run.vehicleEntity, newConfig)
 	if not okCmd then
 		return recoupleFailed(state, run, "replace command rejected: " .. tostring(cmd))
 	end
 
+	local moneyBefore = playerBalance()
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then
 			return recoupleFailed(state, run, "replace refused")
 		end
+		logMoneyChange("the recouple", moneyBefore)
 		scheduleTrace(state, "after the recouple (+1 tick)", run.vehicleEntity, 1)
 		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
 		-- The ghost goes at once: the real loco is on the train now, and leaving the
@@ -1658,7 +1699,7 @@ local function layoutStep(state, vehicleEntity)
 	if tv == nil then return fail("the train is gone") end
 	local okB, cfg = pcall(buildCreepConfig, tv.transportVehicleConfig, L.a, L.b, run.locoPart)
 	if not okB then return fail("could not build the layout: " .. tostring(cfg)) end
-	local okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, cfg)
+	local okC, cmd = pcall(makeReplaceCmd, vehicleEntity, cfg)
 	if not okC then return fail("replace rejected: " .. tostring(cmd)) end
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then return fail("replace failed") end
@@ -1725,7 +1766,7 @@ local function verifyRun(state, run)
 		for i, part in ipairs(config.vehicles) do parts[i] = part end
 		local idx = run.locoAtRear and #parts or 1
 		parts[idx].part.reversed = not parts[idx].part.reversed
-		return api.cmd.makeVehicleReplaceCmd(run.vehicleEntity, finishConfig(config, parts))
+		return makeReplaceCmd(run.vehicleEntity, finishConfig(config, parts))
 	end)
 	if not okFix then
 		logInfo("verify: could not turn the loco round:", tostring(cmd))
@@ -2052,14 +2093,16 @@ recoupleRake = function(state, run)
 	if not run.flipped then reversed = run.startReversed end
 	local okB, cfg = pcall(buildRealRakeConfig, tv.transportVehicleConfig, run.locoPart, reversed, run.rake.coaches, run.flipped)
 	local okC, cmd = false, nil
-	if okB then okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, cfg) end
+	if okB then okC, cmd = pcall(makeReplaceCmd, run.vehicleEntity, cfg) end
 	if not okC then
 		return recoupleFailed(state, run, "(ghost rake) " .. tostring(okB and cmd or cfg))
 	end
+	local moneyBefore = playerBalance()
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then
 			return recoupleFailed(state, run, "(ghost rake) replace refused")
 		end
+		logMoneyChange("the recouple", moneyBefore)
 		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
 		if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 		destroyCoachGhosts(run.rake.coaches)
@@ -2313,7 +2356,7 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
 		return
 	end
-	local okCmd, replaceCmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, strippedConfig)
+	local okCmd, replaceCmd = pcall(makeReplaceCmd, vehicleEntity, strippedConfig)
 	if not okCmd then
 		logInfo("startRunAround: stand-in swap command rejected:", tostring(replaceCmd))
 		return
@@ -2378,13 +2421,16 @@ local function startRunAround(state, vehicleEntity, loop)
 		}
 	end
 
-	sendReplace = function() api.cmd.sendCommand(replaceCmd, function(_, success)
+	sendReplace = function()
+		local moneyBefore = playerBalance()
+		api.cmd.sendCommand(replaceCmd, function(_, success)
 		if not success then
 			logInfo("detach replaceVehicle FAILED for vehicle", vehicleEntity, "loop", loopLabel(loop), "- train released")
 			destroyCoachGhosts(rakeInfo and rakeInfo.coaches)
 			releaseTrain(vehicleEntity)
 			return
 		end
+		logMoneyChange("the detach", moneyBefore)
 
 		scheduleTrace(state, "after the detach (+2 ticks)", vehicleEntity, 2)
 		scheduleTrace(state, "after the detach (+30 ticks)", vehicleEntity, 30)

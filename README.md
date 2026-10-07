@@ -220,6 +220,8 @@ Useful log lines:
 | `train put back as it was ...` | a run couldn't start and the train was restored |
 | `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID: no vehicle was patched, and the run-around card won't appear (run-arounds already in a save still run, with plain copies). Please report it |
 | `GUI registered` | the train-window card loaded; if it's missing from the log, the card failed to load |
+| `vehicle replace: purchase cost switched off` | once per session: run-arounds cost nothing. If it says `COULD NOT`, please report it |
+| `money: the detach changed the balance by N` (and `the recouple`) | should be 0 |
 | `... reported at the stop it has just run around at - ignored` | the game's repeat arrival straight after a run-around, ignored (normal) |
 | `loco setup: ... has its own transformator, left alone: <name>` | another mod changed that vehicle's animation script, so it runs around as a copy. If every vehicle says this, a mod is replacing all train transformators (see "Other mods") |
 | `run-around NOT started ...` | the train didn't run around this time, and why (also shown on the card): it's at another platform than the route starts from, or the route sets off towards the coaches |
@@ -310,6 +312,10 @@ Learned while building this. The full write-up is in the modding guide.
   - After a run-around, the game reports the train arriving at the same stop
     again, in the same second, without it having moved. The mod ignores that
     repeat.
+- **Vehicle replace costs money.** `makeVehicleReplaceCmd` is the game's
+  "replace vehicles": it buys what it puts in and refunds what it takes out, with
+  the amounts shown in the world. Its command data has `applyPurchaseCost`; the
+  mod sets it to false on every replace.
 - **Mod IDs.** A mod.io install's folder is the mod.io number, but its mod ID is
   the `modId` from its own `mod.json` (seen on 40 installed mods).
 - **Reversed flag.** A part's `reversed` flag is relative to the train's head.

@@ -187,6 +187,24 @@ other end of the train" when another part of the train is on the route but the
 loco isn't. `test_failures.lua` covers each case; the old script fails the N5
 replay.
 
+#### N7. Every vehicle replace bought and sold — seen live
+
+The owner saw money changing hands in the world at each detach and recouple.
+`makeVehicleReplaceCmd` is the player's "replace vehicles": it charges for what
+it adds and refunds what it removes. A loco bought back at full price after
+being sold at its depreciated value loses money on every run, and the creep's
+replaces repeat it. **Fixed:** every replace goes through `makeReplaceCmd`,
+which sets `applyPurchaseCost = false` on the command (the field is in
+`VehicleReplaceCommandData`, `api/cmd.d.tl`; the factory doesn't take it). It
+reads the field back and logs once whether it took. The detach and recouple log
+the balance change (`ACCOUNT.balance`), which should be 0. `test_failures.lua`
+checks every replace of a run; `run_tests.sh` fails if
+`makeVehicleReplaceCmd` is called anywhere else. **Not yet seen live:** nothing
+in the game or the installed mods sets this field, so whether a write to the
+command reaches the engine is unproven. If the log says `COULD NOT` or the
+balance moves, the fallback is to book the difference back with
+`makeJournalBookAssetCmd`, which still shows the amounts.
+
 #### Also learned from the smoke test
 
 - **The other mods' mod IDs** (`~/mod.io/common/10640/mods/<n>/mod.json`, 40

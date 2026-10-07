@@ -39,9 +39,11 @@
   *devers*: the coaches are hidden and the train draws forward, with no flashing,
   and the other mod's animation is kept. Only scripts that this mod can check at
   start are chained; anything else is left exactly as it was.
-- Fixed: a run-around bought and sold the loco each time it swapped it for the
-  invisible stand-in and back, with the money shown in the world. Run-arounds
-  are now free.
+- Fixed: a run-around sold the loco and bought it back each time (it was taken
+  off the train for an invisible stand-in), with the money shown in the world.
+  The loco now stays on the train, hidden, like the coaches. Nothing is bought
+  or sold. The step-by-step coach creep, which did the same, is gone: coaches
+  that can't be hidden now stay in view and move once.
 - Fixed: straight after a run-around, the game reports the train arriving
   again, and a second run-around started on the turned train, running a coach
   around as the "loco". Repeat arrivals at the same stop are now ignored.

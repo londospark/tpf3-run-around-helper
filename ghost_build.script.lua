@@ -250,8 +250,9 @@ local function note(...)
 	if notes <= 8 then log("loco setup:", ...) end
 end
 
--- Points a loco's own model at the wrappers. Returns true when the loco can be its
--- own ghost (transformator wrapped, and its sound set wrapped or it has none).
+-- Points a loco's own model at the wrappers. Returns whether the loco can be its
+-- own ghost (transformator wrapped, and its sound set wrapped or it has none),
+-- and whether it can be hidden (its transformator wrapped or chained).
 local function patchLoco(modelId, modelName, src)
 	local md = src.metadata
 	local wrappedTrf = wrappedTransformator(md)
@@ -284,7 +285,7 @@ local function patchLoco(modelId, modelName, src)
 	if chained then stats.chained = stats.chained + 1 end
 	local ready = trfOk and (soundName == nil or wrappedSound ~= nil)
 	if ready then stats.patched = stats.patched + 1 else stats.partly = stats.partly + 1 end
-	return ready
+	return ready, trfOk
 end
 
 -- A ghost copy of a loco's model (its meshes via modelPath), or a marker.
@@ -356,13 +357,17 @@ mod.postRunFn = function(_configDict, _allModParams)
 			if addGhostModel("runaround_ghost_dyn/" .. v.file .. ".mdl", v.src, v.name, true) then
 				stats.copies = stats.copies + 1
 			end
-			local ready = false
+			local ready, hideable = false, false
 			if PATCH_LOCOS then
-				local okP, res = pcall(patchLoco, v.id, v.name, clone(v.src))
+				local okP, res, trfOk = pcall(patchLoco, v.id, v.name, clone(v.src))
 				ready = okP and res == true
+				hideable = okP and trfOk == true
 				if not okP then note(v.name, "error:", tostring(res)) end
 			end
 			if ready then addGhostModel("runaround_ghost_real/" .. v.file .. ".mdl", v.src, v.name, false) end
+			-- the run-around keeps the loco on the train, hidden: only possible when
+			-- its transformator is ours (wrapped or chained)
+			if hideable then addGhostModel("runaround_ghost_hide/" .. v.file .. ".mdl", v.src, v.name, false) end
 		end
 	end
 	log(string.format("loco setup: %d rail vehicles; %d can be their own ghost (%d through another mod's transformator), %d partly wrapped, %d could not be changed, %d left alone (file name shared); %d ghost copies built",

@@ -187,23 +187,28 @@ other end of the train" when another part of the train is on the route but the
 loco isn't. `test_failures.lua` covers each case; the old script fails the N5
 replay.
 
-#### N7. Every vehicle replace bought and sold — seen live
+#### N7. Every run-around sold the loco and bought it back — seen live
 
-The owner saw money changing hands in the world at each detach and recouple.
-`makeVehicleReplaceCmd` is the player's "replace vehicles": it charges for what
-it adds and refunds what it removes. A loco bought back at full price after
-being sold at its depreciated value loses money on every run, and the creep's
-replaces repeat it. **Fixed:** every replace goes through `makeReplaceCmd`,
-which sets `applyPurchaseCost = false` on the command (the field is in
-`VehicleReplaceCommandData`, `api/cmd.d.tl`; the factory doesn't take it). It
-reads the field back and logs once whether it took. The detach and recouple log
-the balance change (`ACCOUNT.balance`), which should be 0. `test_failures.lua`
-checks every replace of a run; `run_tests.sh` fails if
-`makeVehicleReplaceCmd` is called anywhere else. **Not yet seen live:** nothing
-in the game or the installed mods sets this field, so whether a write to the
-command reaches the engine is unproven. If the log says `COULD NOT` or the
-balance moves, the fallback is to book the difference back with
-`makeJournalBookAssetCmd`, which still shows the amounts.
+The owner saw money in the world at each detach and recouple. A vehicle replace
+is the game's "replace vehicles". The base replace window prices a part with
+`purchaseTime == 0` as new (model price) and an existing part at its value. The
+detach took the real loco off the train for a stand-in, and the recouple put a
+rebuilt loco back: a sale and a purchase every time (a loss: worn value in,
+full price out, ×3 with this save's `vehiclePurchaseCostScale`). The creep's
+stand-ins added more. **First attempt, failed live:** setting
+`applyPurchaseCost = false` (`VehicleReplaceCommandData`) on the command. The
+write is refused (`COULD NOT be switched off`), and nothing in the game sets it.
+**Fixed at the root:** the loco never leaves the train. It's hidden in place
+with the flag paint, like the coaches, and shown again at the recouple
+(`isLocoPart`: same model and purchase time, the same part object). Every
+replace now only repaints, reorders or turns parts the train has. The stand-in
+swap and the creep are gone. A loco that can't be hidden (no
+`runaround_ghost_hide/` marker from `ghost_build`) doesn't run around. A hidden
+real loco is kept silent. `test_rake.lua` now shows the geometry exact (0.00 m,
+not the stand-ins' 0.25 m steps), and every failure path in `test_failures.lua`
+checks the train ends as the very same parts. The `applyPurchaseCost` attempt
+and the money log lines stay as a second line of defence and evidence.
+**Not yet seen live.**
 
 #### Also learned from the smoke test
 

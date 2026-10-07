@@ -29,8 +29,20 @@ api.res={modelRep={getAll=function() return {[9]="m::/res/models/runaround_stand
 local M2=assert(load(io.open(arg[1]):read("*a").."\nreturn {b=buildConfigWithLocoReattached}","s2"))()
 local cur={vehicles={{part={modelId=9,reversed=false}},{part={modelId=1,reversed=false,tag="w1"}},{part={modelId=2,reversed=true,tag="w2"}},{part={modelId=3,reversed=false,tag="w3"}},{part={modelId=9,reversed=false}}}}
 local snap={modelId=5,reversed=false,loads={{loadConfigIndex=0}},autos={true},purchaseTime=1,maintenanceChange=0}
-local cfg=M2.b(cur,snap,false,9,true,{false,true,false})
+-- a run from an older version: stand-ins (9) in the train, the loco rebuilt
+local cfg=M2.b(cur,snap,false,true,{false,true,false})
 local order={} for i,p in ipairs(cfg.vehicles) do order[i]=(p.part.tag or "L")..(p.part.reversed and "r" or "-") end
 print(table.concat(order," "))
 assert(table.concat(order," ")=="Lr w3r w2- w1r")
-print("wagon restore ok")
+print("wagon restore ok (stand-in run from an older version)")
+-- now: the hidden loco itself is in the train; the SAME part comes back, painted again
+api.type.Vec3f={new=function(x,y,z) return {x=x,y=y,z=z} end}
+local loco={part={modelId=5,reversed=false,color={x=0.1234567,y=0.7654321,z=0.3141593}},purchaseTime=1,tag="loco"}
+local cur2={vehicles={loco,{part={modelId=1,reversed=false,tag="w1"}},{part={modelId=2,reversed=true,tag="w2"}},{part={modelId=3,reversed=false,tag="w3"}}}}
+snap.color={x=0.5,y=0.6,z=0.7}
+local cfg2=M2.b(cur2,snap,false,true,{false,true,false})
+assert(cfg2.vehicles[1]==loco and #cfg2.vehicles==4, "the train's own loco part, nothing added")
+assert(loco.part.reversed==true and math.abs(loco.part.color.x-0.5)<1e-9, "facing set, own paint back")
+local order2={} for i,p in ipairs(cfg2.vehicles) do order2[i]=(p.part.tag or "?")..(p.part.reversed and "r" or "-") end
+assert(table.concat(order2," ")=="?r w3r w2- w1r", table.concat(order2," "))
+print("hidden loco back on: same part, own paint, wagons restored")

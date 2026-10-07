@@ -20,8 +20,10 @@
 	  6. it brakes against the far coach; the real loco replaces the stand-in,
 	     the coaches get their paint back, the ghosts go, and the train leaves.
 
-	A coach that can't be hidden makes the run use the creep instead (see
-	CONFIG.creepLayout). Whatever fails, finishRun puts the real train back (see
+	The loco is never taken off the train (that would sell it and buy it back):
+	it is hidden in place like the coaches. A coach that can't be hidden makes the
+	coaches stay in view and move at the flip. Whatever fails, finishRun puts the
+	real train back (see
 	recoupleFailed and watchdog): a train is never left stuck or broken.
 
 	Things learned from the engine, which the code relies on:
@@ -54,21 +56,8 @@ local CONFIG = {
 	-- Use the ghost copies built at load time (loco's meshes, smoke, sound) rather
 	-- than the plain silent copies shipped in res/models/runaround_ghost/.
 	useEffectGhosts = true,
-	-- Move the coaches along by the loco's length gradually while the loco is away,
-	-- instead of in one jump. A vehicle replace keeps the MIDDLE of the train where
-	-- it was (traced live: adding or removing length moves both ends by half of it),
-	-- and the flip mirrors the train about that middle, so nothing but driving can
-	-- move the middle. A real run-around moves the train's middle by a loco length
-	-- (the loco ends up beyond the far coach), so the coaches have to shift by one
-	-- loco length at some point. Here they creep there in creepStep steps: the stand-in
-	-- in front of them shrinks while a second one behind them grows (same total
-	-- length), the train is flipped when it is symmetrical (so the flip moves
-	-- nothing), and the creep finishes on the other side. Only when the loco is
-	-- the first part of the train.
-	creepLayout = true,
-	-- Better than the creep (and used instead when every coach can be shown): ghost
-	-- copies of the loco AND the coaches are shown in their places, and the real
-	-- coaches are HIDDEN (not removed: they stay in the train with their passengers
+	-- When every coach can be hidden: ghost copies of the loco AND the coaches are
+	-- shown in their places, and the real loco and coaches are HIDDEN (not removed: they stay in the train with their passengers
 	-- and goods - passengers and cargo belong to the train, and taking coaches out
 	-- lowers its capacity). They are hidden by a flag colour that the wrapped
 	-- transformator (ghost_real.script.lua) turns into "draw nothing". Out of sight
@@ -79,13 +68,6 @@ local CONFIG = {
 	ghostRake = true,
 	rakePullSpeed = 2.0,  -- m/s: top speed of the train drawing forward before the uncouple
 	uncouplePause = 2.5,  -- seconds the train stands before the loco uncouples and sets off
-	-- metres per creep step (a multiple of the stand-ins' 0.25 m), seconds between
-	-- steps (0 = as fast as the game confirms them), and how far the loco drives
-	-- before they start. Each step is a replace, so the game's vehicle marker above
-	-- the train jitters while the coaches move; bigger steps mean fewer, larger ones.
-	creepStep = 0.25,
-	creepStepSeconds = 0.0,
-	creepStartDistance = 30.0,
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
@@ -281,14 +263,13 @@ local function playerBalance()
 	return ok and b or nil
 end
 
--- A vehicle replace that costs nothing. The command is the game's own "replace
--- vehicles", which charges for what it puts in and refunds what it takes out:
--- every swap of the loco for the stand-in (and back, and each creep step) showed
--- money changing hands in the world (seen live), and would drain a budget. Its
--- data has applyPurchaseCost (api/cmd.d.tl, VehicleReplaceCommandData); the
--- factory doesn't take it, so it is set on the command afterwards. Whether that
--- took is logged once (read back), and the detach and recouple log the money
--- change they caused.
+-- A vehicle replace. The command is the game's "replace vehicles", which charges
+-- for parts it adds and refunds parts it removes. The run-around never adds or
+-- removes a part (the loco stays on the train, hidden: see isLocoPart), so there
+-- is nothing to charge. Its data also has applyPurchaseCost
+-- (VehicleReplaceCommandData); setting it on the command is tried as a second line
+-- of defence, but the game refused the write live ("COULD NOT be switched off"),
+-- and nothing in the game sets it. The detach and recouple log the money change.
 local costFlagLogged = false
 local function makeReplaceCmd(vehicleEntity, config)
 	local cmd = api.cmd.makeVehicleReplaceCmd(vehicleEntity, config)
@@ -300,8 +281,7 @@ local function makeReplaceCmd(vehicleEntity, config)
 	end
 	if not costFlagLogged then
 		costFlagLogged = true
-		logInfo("vehicle replace: purchase cost", (set and okR and back == false) and "switched off" or "COULD NOT be switched off (please report)",
-			"- reads back as", tostring(okR and back))
+		logInfo("vehicle replace: purchase-cost flag", (set and okR and back == false) and "set" or "not settable (fine: the run-around never adds or removes a part)")
 	end
 	return cmd
 end
@@ -364,21 +344,6 @@ local function carriagePos(carriageEntity)
 	return mil.fatInstances[1].transf:cols(3)
 end
 
--- A carriage's length, from the spacing of the carriages' centres (neighbouring
--- centres are half of one plus half of the other apart). Only the fallback when
--- modelLength can't read the model's extent. nil when the train is too short to tell.
-local function carriageLength(vehicleEntity, idx)
-	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-	local n = #cl.carriages
-	if n < 3 then return nil end
-	local function gap(i, j)
-		local a, b = carriagePos(cl.carriages[i]), carriagePos(cl.carriages[j])
-		return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
-	end
-	if idx == 1 then return 2 * gap(1, 2) - gap(2, 3) end
-	if idx == n then return 2 * gap(n, n - 1) - gap(n - 1, n - 2) end
-	return nil
-end
 
 -- A value from a model's metadata, or nil (modelRep.get works in a game script).
 local function modelMeta(modelId, ...)
@@ -391,15 +356,6 @@ local function modelMeta(modelId, ...)
 	return ok and v or nil
 end
 
--- A vehicle model's length along the track, from its metadata extent (what the
--- game butts vehicles together by: the BR 75's -6.42..6.19 m plus half a 23.39 m
--- coach is the 18.13 m between their centres seen live). nil if unreadable.
-local function modelLength(modelId)
-	local ext = modelMeta(modelId, "extent")
-	local ok, len = pcall(function() return ext.bbMax.x - ext.bbMin.x end)
-	if not ok or type(len) ~= "number" or len < 0.5 or len > 60 then return nil end
-	return len
-end
 
 -- Ghost copies, used when the loco's own model cannot be: first the copy built at
 -- load time from the loco itself (runaround_ghost_dyn/, with its smoke and sound),
@@ -469,10 +425,28 @@ local function realModelReady(locoModelId)
 	return false, "its sound set or transformator was not wrapped at load"
 end
 
+-- Whether a real vehicle can be hidden (drawn as nothing) while its copy runs
+-- around: its transformator was wrapped or chained at load, which ghost_build
+-- marks with "runaround_ghost_hide/<file>.mdl".
+local hideMarkers = nil
+local function canHide(modelId)
+	local okAll, all = pcall(api.res.modelRep.getAll, true)
+	if not okAll or all == nil then return false end
+	if hideMarkers == nil then
+		hideMarkers = {}
+		for _, name in pairs(all) do
+			local marked = type(name) == "string" and string.match(name, "runaround_ghost_hide/(.+)%.mdl$")
+			if marked then hideMarkers[marked] = true end
+		end
+	end
+	local base = type(all[modelId]) == "string" and string.match(all[modelId], "([^/]+)%.mdl$") or nil
+	return base ~= nil and hideMarkers[base] == true
+end
+
 -- The model a coach's ghost is drawn from, or nil if it cannot have one. It is the
 -- coach's own model, and only when its transformator was wrapped at load: the same
 -- wrapper is what hides the real coach while its ghost is shown, so a coach
--- without it could not be hidden either (the run then uses the creep instead).
+-- without it could not be hidden either (the coaches then stay in view).
 local function coachGhostModel(coachModelId)
 	if realModelReady(coachModelId) then return coachModelId end
 	return nil
@@ -522,77 +496,73 @@ local function pushGhostState(run, speed, vx, vy, dt)
 	end
 end
 
--- A real TransportVehiclePart for the stand-in.
-local function makeStandInPart(standId, locoSnap)
-	local part = api.type.TransportVehiclePart.new()
-	part.part.modelId = standId
-	part.part.reversed = false
-	local loads, autos = loadConfigsForModel(standId, locoSnap.loads, locoSnap.autos)
-	part.part.compartment2loadConfig = loads
-	part.autoLoadConfig = autos
-	part.purchaseTime = locoSnap.purchaseTime
-	part.maintenanceChange = locoSnap.maintenanceChange
-	part.maintenanceState = 1
-	return part
+-- The colour that tells the wrapped transformator to draw a real carriage as
+-- nothing (it is unlikely to be anyone's paint; see ghost_real.script.lua).
+local HIDE_COLOUR = { 0.1234567, 0.7654321, 0.3141593 }
+local function hideColour() return api.type.Vec3f.new(HIDE_COLOUR[1], HIDE_COLOUR[2], HIDE_COLOUR[3]) end
+
+-- The loco never leaves the train: it is hidden in its place while its ghost runs
+-- around, and shown again at the recouple. Taking it out (for an invisible
+-- stand-in, as before) made each vehicle replace sell it and buy it back, with
+-- the money shown in the world (seen live): a replace is the game's "replace
+-- vehicles", which charges for parts it adds and refunds parts it removes. Now
+-- every replace only repaints, reorders or turns parts the train already has.
+
+-- The train's own loco part (its model and purchase time).
+local function isLocoPart(part, locoSnap)
+	return part.part.modelId == locoSnap.modelId and part.purchaseTime == locoSnap.purchaseTime
 end
 
--- Config with the locomotive swapped for the stand-in, in the same place, and
--- the wagons untouched. NOT with the loco simply removed: a consist with no
--- powered part cannot be drawn and crashes the game.
-local function buildConfigWithStandIn(tvc, locoIdx, standId, locoSnap)
-	local config = api.type.TransportVehicleConfig.new(tvc)
-	local parts = {}
-	for i, part in ipairs(config.vehicles) do
-		if i == locoIdx then
-			parts[#parts + 1] = makeStandInPart(standId, locoSnap)
-		else
-			parts[#parts + 1] = part
+-- What stands in for the loco while it runs around: the hidden loco itself, or a
+-- stand-in, on a train whose run started under an older version of the mod.
+local function isLocoSlot(part, locoSnap)
+	return isLocoPart(part, locoSnap) or isStandIn(part.part.modelId)
+end
+
+-- The loco for the recouple: the train's own loco part, with its paint back and
+-- the given facing (nothing bought); rebuilt from the snapshot only when it isn't
+-- on the train (a stand-in run from an older version).
+local function locoForRecouple(config, locoSnap, reversed)
+	for _, part in ipairs(config.vehicles) do
+		if isLocoPart(part, locoSnap) then
+			part.part.reversed = reversed
+			if locoSnap.color ~= nil then part.part.color = api.type.Vec3f.new(locoSnap.color.x, locoSnap.color.y, locoSnap.color.z) end
+			return part
 		end
 	end
-	return finishConfig(config, parts)
+	return partFromSnapshot(locoSnap, reversed)
 end
 
--- The creep layout (see creepLayout): the coaches in their current order, with
--- stand-ins of total length a in front (the head) and one of length b behind
--- (left out when 0). The front is always a fixed 0.5 m stand-in followed by the
--- rest of a: the head carriage then never moves while the coaches creep, so the
--- game's vehicle marker, which sits on it, stays still (it wiggled at every step
--- when the head stand-in itself was shrinking).
-local CREEP_HEAD = 0.5
-local function buildCreepConfig(tvc, a, b, locoSnap, skipIdx)
+-- The train with its loco hidden in place, everything else as it is.
+local function buildConfigWithHiddenLoco(tvc, locoIdx)
 	local config = api.type.TransportVehicleConfig.new(tvc)
 	local parts = {}
-	parts[#parts + 1] = makeStandInPart(findStandInModelId(CREEP_HEAD), locoSnap)
-	if a - CREEP_HEAD > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(a - CREEP_HEAD), locoSnap) end
 	for i, part in ipairs(config.vehicles) do
-		-- skipIdx: the loco itself, at the detach (it is not a stand-in, so without
-		-- this it stayed on the train and the ghost made a second loco, live)
-		if i ~= skipIdx and not isStandIn(part.part.modelId) then parts[#parts + 1] = part end
+		if i == locoIdx then part.part.color = hideColour() end
+		parts[#parts + 1] = part
 	end
-	if b > 0.1 then parts[#parts + 1] = makeStandInPart(findStandInModelId(b), locoSnap) end
 	return finishConfig(config, parts)
 end
 
--- Config with the stand-in(s) taken out and the real locomotive put back on the
--- train. A loco cannot pass through its consist, so it can only couple onto the
--- end it arrives at; which end that is comes from where the run finished (see
--- chooseAttachEnd), not from a setting. It then faces OUTWARD, away from the
--- wagons, so that it can pull them: a loco at the front of the parts list is
--- not reversed, one at the rear is.
+-- The train with the hidden loco slot taken out and the loco put back at one
+-- end. A loco cannot pass through its consist, so it can only couple onto the
+-- end it arrives at (see chooseAttachEnd). It then faces OUTWARD, away from the
+-- wagons, so that it can pull them: a loco at the front of the parts list is not
+-- reversed, one at the rear is.
 --
 -- origRev (the wagons' original reversed flags, in original order) is given
 -- after a flip: the loco goes at the head and the wagons are re-listed in the
 -- opposite order with their flags toggled, which is exactly the flip's mirror
 -- undone, so every wagon ends up where it stood and facing as it did.
-local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, standId, locoReversed, origRev)
+local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear, locoReversed, origRev)
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
 	if locoReversed == nil then locoReversed = attachAtRear end
-	local loco = partFromSnapshot(locoSnap, locoReversed)
+	local loco = locoForRecouple(config, locoSnap, locoReversed)
+	local wagons = {}
+	for _, part in ipairs(config.vehicles) do
+		if not isLocoSlot(part, locoSnap) then wagons[#wagons + 1] = part end -- stand-ins go away here
+	end
 	if origRev ~= nil then
-		local wagons = {}
-		for _, part in ipairs(config.vehicles) do
-			if not isStandIn(part.part.modelId) then wagons[#wagons + 1] = part end
-		end
 		local parts = { loco }
 		for i = #wagons, 1, -1 do
 			local flag = origRev[i]
@@ -604,11 +574,7 @@ local function buildConfigWithLocoReattached(currentTvc, locoSnap, attachAtRear,
 	end
 	local parts = {}
 	if not attachAtRear then parts[1] = loco end
-	for _, part in ipairs(config.vehicles) do
-		if not isStandIn(part.part.modelId) then -- the stand-ins go away here
-			parts[#parts + 1] = part
-		end
-	end
+	for _, part in ipairs(wagons) do parts[#parts + 1] = part end
 	if attachAtRear then parts[#parts + 1] = loco end
 	return finishConfig(config, parts)
 end
@@ -1089,42 +1055,11 @@ local function locateOnRoute(loop, pos)
 	return bestK, bestS, math.sqrt(bestD2)
 end
 
--- Where the loco goes back on after the creep: the stand-in left on the train,
--- found by its model (not by list position, which misled the ghost into
--- driving back through the coaches, live).
-local function readStandInPosition(vehicleEntity, awayFrom)
-	-- Every stand-in carriage with its length; the far end's ones (after the creep
-	-- there are only the front ones, 0.5 m + the rest) give the loco's centre as
-	-- their length-weighted centre.
-	local found = {}
-	pcall(function()
-		local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-		for _, c in ipairs(cl.carriages) do
-			local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
-			local inst = mil.fatInstances[1]
-			if isStandIn(inst.modelId) then
-				local p = inst.transf:cols(3)
-				local d = awayFrom and math.sqrt((p.x - awayFrom.x) ^ 2 + (p.y - awayFrom.y) ^ 2) or 0
-				found[#found + 1] = { x = p.x, y = p.y, z = p.z, d = d, len = standInLength[inst.modelId] or 1 }
-			end
-		end
-	end)
-	if #found == 0 then return nil end
-	local far = 0
-	for _, f in ipairs(found) do if f.d > far then far = f.d end end
-	local sx, sy, sz, sw = 0, 0, 0, 0
-	for _, f in ipairs(found) do
-		if f.d > far - 30 then -- the far end's stand-ins
-			sx, sy, sz, sw = sx + f.x * f.len, sy + f.y * f.len, sz + f.z * f.len, sw + f.len
-		end
-	end
-	return { x = sx / sw, y = sy / sw, z = sz / sw }
-end
 
 -- The route is done: with the flip enabled the train is flipped next and the
 -- ghost then glides to where the loco goes back on; without it, the run ends.
 local function routeFinished(run)
-	if (run.layout ~= nil or run.rake ~= nil) and run.phase == nil then
+	if run.rake ~= nil and run.phase == nil then
 		run.phase = "waitLayout"
 		run.speed = 0.0
 		startSegment(run, 0.0, 0.0, 0.0)
@@ -1203,9 +1138,8 @@ local function watchdog(run, dt)
 		run.timeLimit = (loop.routeLength or 1000.0) / speed * CONFIG.watchdogFactor + CONFIG.watchdogExtraSeconds
 	end
 	if run.age > run.timeLimit then
-		logInfo(string.format("watchdog: the run-around for vehicle %s has stalled (%.0f s, limit %.0f s; phase %s, ghost rake %s, creep %s) - putting the real train back",
-			tostring(run.vehicleEntity), run.age, run.timeLimit, tostring(run.phase or "route"),
-			tostring(run.rake and run.rake.stage), tostring(run.layout and run.layout.stage)))
+		logInfo(string.format("watchdog: the run-around for vehicle %s has stalled (%.0f s, limit %.0f s; phase %s, ghost rake %s) - putting the real train back",
+			tostring(run.vehicleEntity), run.age, run.timeLimit, tostring(run.phase or "route"), tostring(run.rake and run.rake.stage)))
 		run.phase, run.aborted = "finish", true
 	end
 end
@@ -1240,23 +1174,6 @@ local function advanceGhost(run, dt)
 		elseif run.rake.stage == "failed" then
 			logInfo("ghost rake failed - putting the real train back where it is")
 			run.phase = "finish"
-		end
-		return false
-	end
-	if run.phase == "waitLayout" then
-		local L = run.layout
-		if L.stage == "done" or (L.stage == "failed" and run.flipped) then
-			run.target = readStandInPosition(run.vehicleEntity, run.locoPos)
-			if run.target ~= nil then
-				logInfo(string.format("ghost heading for the stand-in at %.1f, %.1f", run.target.x, run.target.y))
-				run.phase = "approach"
-			else
-				run.phase = "finish"
-			end
-		elseif L.stage == "failed" then
-			run.layout = nil -- not flipped: the plain way (flip now)
-			run.phase = nil
-			return routeFinished(run)
 		end
 		return false
 	end
@@ -1424,7 +1341,7 @@ end
 -- (first part): whichever end is nearer the last route point the user clicked,
 -- since that is where the loco has just arrived. Also returns a description
 -- for the log.
-local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
+local function chooseAttachEnd(vehicleEntity, loop, tvc, locoSnap)
 	local last = loop.waypoints and loop.waypoints[#loop.waypoints]
 	if last == nil then return true, "no route points recorded, defaulting to the rear" end
 	local pos = piecePos(last, 0.5)
@@ -1435,11 +1352,11 @@ local function chooseAttachEnd(vehicleEntity, loop, tvc, standId)
 		local c = mil.fatInstances[1].transf:cols(3)
 		return math.sqrt((c.x - pos.x) ^ 2 + (c.y - pos.y) ^ 2)
 	end
-	-- The stand-in sits where the loco used to be and is about to be removed,
-	-- so the ends that matter are those of the wagons.
+	-- The hidden loco is about to be moved to an end, so the ends that matter are
+	-- those of the wagons.
 	local first, last = nil, nil
 	for i, part in ipairs(tvc.vehicles) do
-		if part.part.modelId ~= standId then
+		if not isLocoSlot(part, locoSnap) then
 			first = first or i
 			last = i
 		end
@@ -1532,9 +1449,9 @@ local function recoupleFailed(state, run, why)
 end
 
 local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
-	logInfo("recouple: removing the stand-in and attaching the loco at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed" or "not reversed", "-", why)
+	logInfo("recouple: the loco shown again at the", atRear and "REAR" or "FRONT", "of the consist,", locoReversed and "reversed" or "not reversed", "-", why)
 
-	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed, origRev)
+	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, locoReversed, origRev)
 	if not okBuild then
 		return recoupleFailed(state, run, "could not build the new consist: " .. tostring(newConfig))
 	end
@@ -1623,89 +1540,7 @@ local function updateRun(state, vehicleEntity, fn)
 	return found
 end
 
--- Steps the creep layout on (see creepLayout). Returns true when a command is
--- due, which layoutStep then sends from postUpdate.
-local function advanceLayout(run, dt)
-	local L = run.layout
-	if L == nil or L.busy or L.stage == "done" or L.stage == "failed" then return false end
-	if L.stage == "waiting" then
-		if (run.gdist or 0) < CONFIG.creepStartDistance then return false end
-		L.stage = "A"
-		L.timer = 0
-		logInfo("creep: moving the coaches along by", L.len, "m while the loco is away")
-	end
-	L.timer = (L.timer or 0) + dt
-	if L.timer < CONFIG.creepStepSeconds then return false end
-	L.timer = 0
-	local half = L.len / 2
-	local step = CONFIG.creepStep or 0.25
-	if L.stage == "A" then
-		if L.a > half + 1e-6 then
-			local d = math.min(step, L.a - half)
-			L.a, L.b, L.action = L.a - d, L.b + d, "replace"
-		else
-			L.stage, L.action = "flip", "flip"
-		end
-	elseif L.stage == "B" then
-		if L.b > 1e-6 then
-			local d = math.min(step, L.b)
-			L.a, L.b, L.action = L.a + d, L.b - d, "replace"
-		else
-			L.stage = "done"
-			logInfo("creep: done")
-			return false
-		end
-	else
-		return false
-	end
-	L.busy = true
-	return true
-end
 
-local function layoutStep(state, vehicleEntity)
-	local data = state:get()
-	local run = nil
-	for _, r in ipairs(data.runs) do if r.vehicleEntity == vehicleEntity then run = r end end
-	if run == nil or run.layout == nil then return end
-	local L = run.layout
-	local function done(fn)
-		local live = updateRun(state, vehicleEntity, function(r)
-			if r.layout ~= nil then
-				r.layout.busy = false
-				if fn then fn(r) end
-			end
-		end)
-		if live then holdTrain(vehicleEntity) end -- not once the watchdog has released it
-	end
-	local function fail(why)
-		logInfo("creep: stopped -", why)
-		done(function(r) r.layout.stage = "failed" end)
-	end
-	if L.action == "flip" then
-		local ok, cmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
-		if not ok then return fail("reverse command rejected: " .. tostring(cmd)) end
-		api.cmd.sendCommand(cmd, function(_, success)
-			if not success then return fail("reverse command failed") end
-			logInfo("creep: train flipped (it is symmetrical now, so nothing should move)")
-			scheduleTrace(state, "after the flip (+4 ticks)", vehicleEntity, 4)
-			done(function(r)
-				r.layout.stage = "B"
-				r.flipped = true
-			end)
-		end)
-		return
-	end
-	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
-	if tv == nil then return fail("the train is gone") end
-	local okB, cfg = pcall(buildCreepConfig, tv.transportVehicleConfig, L.a, L.b, run.locoPart)
-	if not okB then return fail("could not build the layout: " .. tostring(cfg)) end
-	local okC, cmd = pcall(makeReplaceCmd, vehicleEntity, cfg)
-	if not okC then return fail("replace rejected: " .. tostring(cmd)) end
-	api.cmd.sendCommand(cmd, function(_, success)
-		if not success then return fail("replace failed") end
-		done(nil)
-	end)
-end
 
 -- The game flips a train that has to leave a terminus by the way it came (it
 -- mirrors the consist end for end and keeps the parts list order), and it does
@@ -1802,12 +1637,12 @@ local function finishRun(state, run)
 	end
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
-		-- Head faces the exit and the stand-in is the head part: loco goes there.
-		local restore = run.layout == nil and (run.origRev or {}) or nil
+		-- Head faces the exit and the hidden loco is the head part: shown there.
+		local restore = run.layout == nil and (run.origRev or {}) or nil -- (layout: a creep run from an older version)
 		recouple(state, run, tv, false, reversed, "train was flipped first, loco takes the head; " .. tostring(why), restore)
 		return
 	end
-	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.standInModelId)
+	local okEnd, atRear, endWhy = pcall(chooseAttachEnd, run.vehicleEntity, run.loop, tv.transportVehicleConfig, run.locoPart)
 	if not okEnd then
 		logInfo("could not work out which end to attach at (", tostring(atRear), ") - defaulting to the rear")
 		atRear, endWhy = true, "fallback"
@@ -1832,48 +1667,20 @@ local function carriageFrames(vehicleEntity)
 	return frames
 end
 
--- Every part's length, from the spacing of the carriage centres (neighbours are
--- half of one plus half of the other apart). Parts of the same model are taken to
--- be the same length, which fixes the one unknown; nil if it cannot be worked out.
-local function partLengths(frames, tvc)
-	local n = #frames
-	if n < 2 then return nil end
-	local gaps = {}
-	for i = 1, n - 1 do
-		gaps[i] = math.sqrt((frames[i].x - frames[i + 1].x) ^ 2 + (frames[i].y - frames[i + 1].y) ^ 2)
-	end
-	local len = {}
-	for i = 1, n - 1 do
-		if tvc.vehicles[i].part.modelId == tvc.vehicles[i + 1].part.modelId then len[i], len[i + 1] = gaps[i], gaps[i] end
-	end
-	if next(len) == nil then return nil end
-	for _ = 1, n do -- spread from the known ones: len[i] + len[i+1] = 2 * gap
-		for i = 1, n - 1 do
-			if len[i] ~= nil and len[i + 1] == nil then len[i + 1] = 2 * gaps[i] - len[i] end
-			if len[i + 1] ~= nil and len[i] == nil then len[i] = 2 * gaps[i] - len[i + 1] end
-		end
-	end
-	for i = 1, n do
-		if len[i] == nil or len[i] < 0.5 or len[i] > 44 then return nil end
-	end
-	return len
-end
 
--- The colour that tells the wrapped transformator to draw a real carriage as
--- nothing (it is unlikely to be anyone's paint; see ghost_real.script.lua).
-local HIDE_COLOUR = { 0.1234567, 0.7654321, 0.3141593 }
-
--- The train while its ghosts are shown: a stand-in for the loco, then the REAL
--- coaches, hidden, in reverse order and turned. After the flip that is, from the
--- new head, loco then last coach ... first coach, each facing as it did: the train
--- the loco couples back onto, with nothing taken out of it.
-local function buildHiddenRakeConfig(tvc, lengths, locoSnap)
+-- The train while its ghosts are shown: the loco hidden in its place, then the
+-- REAL coaches, hidden, in reverse order and turned. After the flip that is, from
+-- the new head, loco then last coach ... first coach, each facing as it did: the
+-- train the loco couples back onto, with nothing taken out of it or added to it.
+local function buildHiddenRakeConfig(tvc)
 	local config = api.type.TransportVehicleConfig.new(tvc)
-	local parts = { makeStandInPart(findStandInModelId(lengths[1]), locoSnap) }
+	local loco = config.vehicles[1]
+	loco.part.color = hideColour()
+	local parts = { loco }
 	for i = #config.vehicles, 2, -1 do
 		local part = config.vehicles[i]
 		part.part.reversed = not part.part.reversed
-		part.part.color = api.type.Vec3f.new(HIDE_COLOUR[1], HIDE_COLOUR[2], HIDE_COLOUR[3])
+		part.part.color = hideColour()
 		parts[#parts + 1] = part
 	end
 	return finishConfig(config, parts)
@@ -1898,8 +1705,9 @@ local function buildRealRakeConfig(currentTvc, locoSnap, locoReversed, coaches, 
 	local config = api.type.TransportVehicleConfig.new(currentTvc)
 	for _, c in ipairs(coaches) do c.matched = false end
 	local found = {}
+	local loco = locoForRecouple(config, locoSnap, locoReversed)
 	for _, part in ipairs(config.vehicles) do
-		if not isStandIn(part.part.modelId) then
+		if not isLocoSlot(part, locoSnap) then
 			local idx, c = matchCoach(part, coaches)
 			if c ~= nil and c.snap.color ~= nil then
 				part.part.color = api.type.Vec3f.new(c.snap.color.x, c.snap.color.y, c.snap.color.z)
@@ -1907,7 +1715,7 @@ local function buildRealRakeConfig(currentTvc, locoSnap, locoReversed, coaches, 
 			found[#found + 1] = { part = part, idx = idx or (#found + 1), c = c }
 		end
 	end
-	local parts = { partFromSnapshot(locoSnap, locoReversed) }
+	local parts = { loco }
 	if flipped then
 		for _, f in ipairs(found) do parts[#parts + 1] = f.part end
 	else
@@ -1977,15 +1785,14 @@ local function advanceRake(run, dt)
 	if R.stage == "settle" then
 		R.ticks = (R.ticks or 0) + 1
 		if R.ticks < 4 then return false end
-		-- Where everything will be: the invisible stand-ins, ordered from the buffer
-		-- end (where the loco stood) outwards. The last is the loco's place; the
-		-- others are the coaches', first to last.
+		-- Where everything will be: the hidden loco and coaches, the coaches ordered
+		-- from the buffer end (where the loco stood) outwards, first to last.
 		local ok, frames = pcall(carriageFrames, run.vehicleEntity)
 		if not ok then R.stage = "failed" return false end
 		local from = run.locoPos
 		local coachFrames, locoFrame = {}, nil
 		for _, f in ipairs(frames) do
-			if isStandIn(f.modelId) then locoFrame = f else coachFrames[#coachFrames + 1] = f end
+			if isStandIn(f.modelId) or f.modelId == run.locoPart.modelId then locoFrame = f else coachFrames[#coachFrames + 1] = f end
 		end
 		table.sort(coachFrames, function(a, b)
 			return (a.x - from.x) ^ 2 + (a.y - from.y) ^ 2 < (b.x - from.x) ^ 2 + (b.y - from.y) ^ 2
@@ -2261,17 +2068,11 @@ local function startRunAround(state, vehicleEntity, loop)
 	local startCursor, startOffset, where = checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, #tvc.vehicles)
 	if startCursor == nil then return refuse(where) end
 	logInfo(string.format("ghost starts on route piece %d, %d m along it (%s)", startCursor, math.floor(startOffset), where))
-	local locoLength = modelLength(tvc.vehicles[locoIdx].part.modelId)
-	local lengthFrom = "its model"
-	if locoLength == nil then
-		local okLen, measured = pcall(carriageLength, vehicleEntity, locoIdx)
-		if okLen and measured ~= nil and measured >= 2 and measured <= 60 then locoLength, lengthFrom = measured, "carriage spacing" end
-	end
-	local standId, standLength = findStandInModelId(locoLength)
-	logInfo("stand-in:", tostring(standLength), "m; loco", locoLength and string.format("%.2f m long (from %s)", locoLength, lengthFrom) or "of unknown length")
-	if standId == nil then
-		logInfo("startRunAround: no stand-in model found, so the loco will NOT be detached (a wagons-only train crashes the game). Is res/models/runaround_standin/ loaded?")
-		return
+	-- The loco stays on the train, hidden, while its ghost runs around (so nothing
+	-- is sold or bought): it must be hideable, i.e. its transformator wrapped or
+	-- chained at load (ghost_build leaves a marker). If not, no run-around.
+	if not canHide(locoSnap.modelId) then
+		return refuse("this loco can't be hidden while its copy runs around (another mod's animation script could not be wrapped)")
 	end
 	local ghostModelId, ghostEffects = findGhostModelId(locoSnap.modelId)
 	if CONFIG.useRealModel then
@@ -2284,8 +2085,7 @@ local function startRunAround(state, vehicleEntity, loop)
 		end
 	end
 	if ghostModelId == nil then
-		logInfo("startRunAround: no ghost model available, so the loco will NOT be detached (is res/models/runaround_ghost/ loaded?)")
-		return
+		return refuse("no copy of this loco is available to run around")
 	end
 	local locoTopSpeed = tonumber(modelMeta(locoSnap.modelId, "landVehicle", "topSpeed"))
 	if locoTopSpeed ~= nil and locoTopSpeed <= 1 then locoTopSpeed = nil end
@@ -2303,28 +2103,12 @@ local function startRunAround(state, vehicleEntity, loop)
 	for i, part in ipairs(tvc.vehicles) do
 		if i ~= locoIdx then origRev[#origRev + 1] = part.part.reversed and true or false end
 	end
-	local creep = CONFIG.creepLayout and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1
-	if creep then
-		-- a multiple of 0.5 m, so it splits into two equal stand-ins (in 0.25 m
-		-- steps) and the train can be exactly symmetrical at the flip
-		local len = 0.5 * math.floor((locoLength or 12.0) / 0.5 + 0.5)
-		if len < 0.5 then len = 0.5 end
-		if len > 44 then len = 44 end
-		standId, standLength = findStandInModelId(len)
-	end
-	-- The ghost rake, when every coach can be shown (see CONFIG.ghostRake).
+	-- The ghost rake, when every coach can be shown (see CONFIG.ghostRake);
+	-- otherwise the coaches stay visible and jump once at the flip.
 	local rakeInfo = nil
 	if CONFIG.ghostRake and CONFIG.reverseBeforeRecouple and locoIdx == 1 and #tvc.vehicles > 1 then
 		local okF, frames = pcall(carriageFrames, vehicleEntity)
-		-- only the loco's length is needed (for its stand-in); the coaches stay in the train
-		local lengths = nil
-		if okF and locoLength ~= nil then
-			lengths = { locoLength }
-		elseif okF then
-			lengths = partLengths(frames, tvc)
-		end
-		if lengths == nil then logInfo("ghost rake: the loco's length is unknown") end
-		if lengths ~= nil then
+		if okF then
 			local coaches = {}
 			for i = 2, #tvc.vehicles do
 				local okS, snap = pcall(snapshotPart, tvc.vehicles[i])
@@ -2338,27 +2122,24 @@ local function startRunAround(state, vehicleEntity, loop)
 					dist = 0.0,
 				}
 			end
-			if coaches ~= nil then rakeInfo = { coaches = coaches, lengths = lengths } end
+			if coaches ~= nil then rakeInfo = { coaches = coaches } end
 		end
-		if rakeInfo == nil then logInfo("ghost rake: not every coach can be shown - using the creep instead") end
+		if rakeInfo == nil then logInfo("ghost rake: not every coach can be hidden - the coaches stay in view and move at the flip") end
 	end
-	if rakeInfo ~= nil then creep = false end
 
 	local okBuild, strippedConfig
 	if rakeInfo ~= nil then
-		okBuild, strippedConfig = pcall(buildHiddenRakeConfig, tvc, rakeInfo.lengths, locoSnap)
-	elseif creep then
-		okBuild, strippedConfig = pcall(buildCreepConfig, tvc, standLength, 0, locoSnap, locoIdx)
+		okBuild, strippedConfig = pcall(buildHiddenRakeConfig, tvc)
 	else
-		okBuild, strippedConfig = pcall(buildConfigWithStandIn, tvc, locoIdx, standId, locoSnap)
+		okBuild, strippedConfig = pcall(buildConfigWithHiddenLoco, tvc, locoIdx)
 	end
 	if not okBuild then
-		logInfo("startRunAround: could not build the consist with the stand-in:", tostring(strippedConfig))
+		logInfo("startRunAround: could not build the train with the loco hidden:", tostring(strippedConfig))
 		return
 	end
 	local okCmd, replaceCmd = pcall(makeReplaceCmd, vehicleEntity, strippedConfig)
 	if not okCmd then
-		logInfo("startRunAround: stand-in swap command rejected:", tostring(replaceCmd))
+		logInfo("startRunAround: hiding the loco was rejected:", tostring(replaceCmd))
 		return
 	end
 
@@ -2399,11 +2180,7 @@ local function startRunAround(state, vehicleEntity, loop)
 			locoPart = locoSnap,
 			locoIdx = locoIdx,
 			partCount = #tvc.vehicles,
-			standInModelId = standId,
-			standInLength = standLength,
-			layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
 			rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
-			locoLength = locoLength,
 			startHead = startHead,
 			startSign = startSign,
 			startReversed = locoSnap.reversed and true or false,
@@ -2657,6 +2434,12 @@ return {
 		if #data.runs > 0 then
 			local remaining = {}
 			for _, run in ipairs(data.runs) do
+				-- A creep run from an older version (the creep is gone): put the
+				-- real train back now.
+				if run.layout ~= nil and run.phase ~= "finish" and not run.aborted then
+					logInfo("a run-around from an older version of the mod (creep) - putting the real train back")
+					run.phase, run.aborted = "finish", true
+				end
 				watchdog(run, dt)
 				if advanceGhost(run, dt) then
 					result = result or {}
@@ -2668,11 +2451,6 @@ return {
 						result = result or {}
 						result.rakeFlips = result.rakeFlips or {}
 						result.rakeFlips[#result.rakeFlips + 1] = run.vehicleEntity
-					end
-					if advanceLayout(run, dt) then
-						result = result or {}
-						result.layout = result.layout or {}
-						result.layout[#result.layout + 1] = run.vehicleEntity
 					end
 					if run.phase == "flip" and not run.flipSent then
 						run.flipSent = true
@@ -2714,12 +2492,6 @@ return {
 		if updateResult.rakeFlips ~= nil then
 			for _, vehicleEntity in ipairs(updateResult.rakeFlips) do
 				rakeFlipStep(state, vehicleEntity)
-			end
-		end
-
-		if updateResult.layout ~= nil then
-			for _, vehicleEntity in ipairs(updateResult.layout) do
-				layoutStep(state, vehicleEntity)
 			end
 		end
 

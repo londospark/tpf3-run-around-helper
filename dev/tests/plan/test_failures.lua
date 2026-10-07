@@ -11,6 +11,9 @@ names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; n
 names[9000] = "m::/res/models/runaround_ghost_real/loco.mdl"
 names[9001] = "m::/res/models/runaround_ghost_real/coach.mdl"
 names[9002] = "m::/res/models/runaround_ghost_real/boxcar.mdl"
+names[9010] = "m::/res/models/runaround_ghost_hide/loco.mdl"
+names[9011] = "m::/res/models/runaround_ghost_hide/coach.mdl"
+names[9012] = "m::/res/models/runaround_ghost_hide/boxcar.mdl"
 local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
 local HIDE = 0.1234567
 local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end
@@ -105,6 +108,7 @@ local function fresh()
   TRACK.x0, TRACK.dx, TRACK.y0 = -20, -100, nil
   loop.lastProblem = nil
   train.parts = { part(4225, false), part(7, false), part(8, true), part(7, false) }
+  ORIGINAL = { train.parts[1], train.parts[2], train.parts[3], train.parts[4] }
   refuse.replace, refuse.reverse, refuse.createModel, stall.reverse = false, false, nil, false
   sent, live, held, log = {}, {}, false, {}
   saved = { runs = {}, loops = { loop }, pending = {} }
@@ -126,6 +130,7 @@ local function assertTrainAsOriginal(what)
     assert(p[i].part.reversed == w[2], what .. ": part " .. i .. " reversed " .. tostring(p[i].part.reversed))
     assert(p[i].purchaseTime == w[3], what .. ": part " .. i .. " purchase time")
     assert(math.abs(p[i].part.color.x - 0.1 * i) < 1e-6, what .. ": part " .. i .. " paint " .. tostring(p[i].part.color.x))
+    assert(p[i] == ORIGINAL[i], what .. ": part " .. i .. " is the very same part (nothing bought or sold)")
   end
 end
 
@@ -171,7 +176,7 @@ start()
 assert(#saved.runs == 1 and saved.runs[1].restore, "H2: a restore is queued")
 local hidden = 0
 for _, p in ipairs(train.parts) do if p.part.color and math.abs(p.part.color.x - HIDE) < 1e-6 then hidden = hidden + 1 end end
-assert(hidden == 3, "H2: (setup) the coaches are hidden after the detach")
+assert(hidden == 4, "H2: (setup) the loco and coaches are hidden after the detach")
 for _ = 1, 3 do tick(0.1) end
 assertTrainAsOriginal("H2")
 assert(liveCount() == 0, "H2: coach ghosts destroyed, " .. liveCount() .. " left")

@@ -96,18 +96,16 @@ While editing or showing:
 1. The train arrives and is held.
 2. The loco and every coach or wagon are shown as exact copies of themselves,
    on the spot, with their own paint and, for wagons, their own load. The real
-   loco is swapped for an invisible stand-in of the same length, because a train
-   without a powered vehicle crashes the game. The real coaches and wagons stay
-   in the train, just hidden, so **passengers and goods stay aboard**. Out of
-   sight, the hidden train is turned round.
+   loco, coaches and wagons all stay in the train, just hidden, so **passengers
+   and goods stay aboard and nothing is bought or sold**. Out of sight, the
+   hidden train is turned round.
 3. The train draws forward one loco length, gently, with the loco still coupled,
    and stops. See [The coaches move forward](#the-coaches-move-forward).
 4. A short pause while the loco uncouples.
 5. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-6. It comes back and brakes to a stop against the far coach. The real loco takes
-   the stand-in's place, the real coaches reappear exactly where their copies
-   are, and the copies go.
+6. It comes back and brakes to a stop against the far coach. The real loco and
+   coaches reappear exactly where their copies are, and the copies go.
 7. The train loads as normal and leaves, with the loco leading.
 
 ### If something goes wrong
@@ -118,7 +116,7 @@ A train is never left stuck or broken by a run-around:
   exactly as it was, coaches in their order with their own paint, and leaves
   the normal way. The copies are cleared away.
 - **If the loco can't be coupled back on**, the train stays held, rather than
-  leaving on the invisible stand-in, and the mod keeps trying. The run-around
+  leaving without its loco showing, and the mod keeps trying. The run-around
   card says **Stuck** while this goes on.
 - **If a run stalls** (for example the game never answers a step), it is given
   up after three times the route's length at the run-around's speed, plus a
@@ -172,9 +170,11 @@ This works for passenger coaches and goods wagons alike. Nothing is taken out of
 the train: the coaches and wagons are the same vehicles throughout, so their
 passengers and cargo are kept.
 
-A coach or wagon that can't be hidden (a modded one with its own animation
-script) makes the whole run fall back to an older method: the real coaches creep
-forward in small steps, and the marker flickers.
+A coach or wagon that can't be hidden (a modded one whose animation script
+can't be wrapped) means the coaches stay in view: they move a loco length in one
+go when the hidden train is turned. A loco that can't be hidden doesn't run
+around at all: taking it off the train would mean selling it and buying it back.
+The card says why.
 
 ### Modded locos
 
@@ -209,19 +209,16 @@ Useful log lines:
 | Line | Meaning |
 |---|---|
 | `loco setup: N rail vehicles; M can be their own ghost, ...` | at start-up, how many locos, coaches and wagons were prepared |
-| `stand-in: ... m; loco ... m long (from its model)` | the loco's length, from its model or, failing that, from the carriage spacing |
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
 | `ghost rake: ...` | the coaches shown as copies, the pull forward (how far, and how much the coaches turn on a curved platform; the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
-| `creep: ...` | the fallback: the real coaches creeping and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
 | `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |
 | `watchdog: ...` | a run stalled, or its train went, and was given up |
 | `train put back as it was ...` | a run couldn't start and the train was restored |
 | `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID: no vehicle was patched, and the run-around card won't appear (run-arounds already in a save still run, with plain copies). Please report it |
 | `GUI registered` | the train-window card loaded; if it's missing from the log, the card failed to load |
-| `vehicle replace: purchase cost switched off` | once per session: run-arounds cost nothing. If it says `COULD NOT`, please report it |
-| `money: the detach changed the balance by N` (and `the recouple`) | should be 0 |
+| `money: the detach changed the balance by N` (and `the recouple`) | should be 0: the loco stays on the train, so nothing is bought or sold |
 | `... reported at the stop it has just run around at - ignored` | the game's repeat arrival straight after a run-around, ignored (normal) |
 | `loco setup: ... has its own transformator, left alone: <name>` | another mod changed that vehicle's animation script, so it runs around as a copy. If every vehicle says this, a mod is replacing all train transformators (see "Other mods") |
 | `run-around NOT started ...` | the train didn't run around this time, and why (also shown on the card): it's at another platform than the route starts from, or the route sets off towards the coaches |
@@ -239,9 +236,6 @@ These are in the files, for tinkering. Most people won't need them.
 | `ghostRake` | `true` | show the loco and coaches as copies, hide the real train, turn it out of sight and draw it forward before the uncouple (the smooth way) |
 | `rakePullSpeed` | `2.0` | top speed, in m/s, of the train drawing forward before the uncouple |
 | `uncouplePause` | `2.5` | seconds the train stands before the loco uncouples and sets off |
-| `creepLayout` | `true` | fallback when a coach can't be copied: the real coaches creep forward; `false` = they jump once at the flip |
-| `creepStep` | `0.25` | metres per creep step: bigger = fewer, larger steps |
-| `creepStartDistance` | `30` | how far the loco drives before the coaches start moving |
 | `useRealModel` | `true` | run around as the loco's own model when possible |
 | `useEffectGhosts` | `true` | otherwise use the copy with smoke and sound |
 | `verifyFacing` | `true` | check the loco's facing after coupling, and correct it |
@@ -258,12 +252,12 @@ untouched. Only the copies are then used.
 
 | File | Role |
 |---|---|
-| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts, swaps the loco for an invisible stand-in and hides the real coaches, turns the hidden train, draws the train forward a loco length (coach ghosts following the loco ghost), uncouples, drives the loco ghost along the planned route, puts the loco back and shows the coaches again |
+| `res/scripts/runaround.script.lua` | the game script: queues a run when a train arrives, shows the loco and coaches as ghosts, hides the real loco and coaches in place, turns the hidden train, draws the train forward a loco length (coach ghosts following the loco ghost), uncouples, drives the loco ghost along the planned route, puts the loco back and shows the coaches again |
 | `ghost_build.script.lua` | the load-time script (`postRunScript`): prepares every rail vehicle, locos and coaches |
 | `res/scripts/ghost_real.script.lua` | wrappers for the game's sound and train transformator functions; they also draw a real carriage painted the flag colour as nothing, and give its ghost the same load |
 | `res/audio/ghostwrap/*.snd.lua` | the game's own rail sound sets, generated with absolute sound paths and the update script wrapped |
 | `res/models/runaround_ghost/` | `real*.trf.lua` (the stock train and tilting-train transformators, wrapped), plus plain silent copies of the base locos as a last fallback |
-| `res/models/runaround_standin/` | the invisible 1 kW stand-ins, 0.25 to 44 m in 0.25 m steps, with blank icons for the train window |
+| `res/models/runaround_standin/` | invisible stand-ins used by older versions (the loco now stays on the train, hidden); kept so a run-around in progress in an older save can finish. Can go in a later release |
 | `res/scripts/runaround_gui.script.lua`, `runaround_vehicle.res.lua` | the train window card and the route tool |
 | `dev/` (not shipped) | offline tests (`dev/run_tests.sh`), the staging install script and generators; see `AGENTS.md` |
 

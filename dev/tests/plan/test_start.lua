@@ -34,11 +34,14 @@ api = {
   cmd = { sendCommand = function() end, makeCustomEntityUpdateStateCmd = function() return {} end, makeCustomEntityUpdateTransformationCmd = function() return {} end },
 }
 -- Drives startRunAround through the ghost-rake path with the mock above.
-local function run(markers)
-  for k in pairs(names) do if string.find(names[k], "runaround_ghost_real/", 1, true) then names[k] = nil end end
+-- markers: vehicles wrapped as their own ghost; hide: vehicles that can be hidden
+-- (transformator wrapped or chained; defaults to the same).
+local function run(markers, hide)
+  for k in pairs(names) do if string.find(names[k], "runaround_ghost_real/", 1, true) or string.find(names[k], "runaround_ghost_hide/", 1, true) then names[k] = nil end end
   names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; names[8] = "vehicle/waggon/boxcar.mdl"
   local mid = 9000
   for _, f in ipairs(markers) do names[mid] = "m::/res/models/runaround_ghost_real/" .. f .. ".mdl"; mid = mid + 1 end
+  for _, f in ipairs(hide or markers) do names[mid] = "m::/res/models/runaround_ghost_hide/" .. f .. ".mdl"; mid = mid + 1 end
   local pt = 0
   local function part(m) pt = pt + 1; return { part = { modelId = m, reversed = false, compartment2loadConfig = { {} }, color = { x = 0.1 * pt, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1000 + pt } end
   train.mid, train.dir = 0.0, -1
@@ -83,11 +86,9 @@ M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround}",
 
 -- every vehicle wrapped: a ghost rake, a ghost per coach from the coach's own model, the replace after them
 local saved, created, order, lg = run({ "loco", "coach", "boxcar" })
-local sawLen = false for _, l in ipairs(lg) do if l:find("12.80 m long (from its model)", 1, true) then sawLen = true end end
-assert(sawLen, "loco length from its model extent")
 local r = saved.runs[1]
 assert(r ~= nil, "run started")
-assert(r.rake ~= nil and r.layout == nil, "ghost rake, not creep")
+assert(r.rake ~= nil, "ghost rake")
 assert(#r.rake.coaches == 3)
 assert(created[1] == 7 and created[2] == 8 and created[3] == 7 and created[4] == 4225, "coach ghosts (own models) then the loco: " .. table.concat(created, ","))
 local firstReplace
@@ -96,12 +97,22 @@ local creates = 0 for i = 1, firstReplace do if order[i] == "create" then create
 assert(creates == 3, "all coach ghosts shown before the replace")
 local hidden = 0
 for _, p in ipairs(train.parts) do if p.part.color and math.abs(p.part.color.x - 0.1234567) < 1e-6 then hidden = hidden + 1 end end
-assert(#train.parts == 4 and hidden == 3, "the three real coaches are still in the train, hidden")
-print("start (all wrapped): ghost rake, coaches hidden in the train, ghosts from their own models")
+assert(#train.parts == 4 and hidden == 4, "the loco and three coaches are still in the train, hidden")
+assert(train.parts[1].part.modelId == 4225, "the real loco stays first (nothing swapped in)")
+print("start (all wrapped): ghost rake, loco and coaches hidden in the train, ghosts from their own models")
 
--- a coach whose model was not wrapped: no rake (it could not be hidden) - creep instead
+-- a coach whose model was not wrapped: no rake (it could not be hidden) - the
+-- simple sequence, the loco still hidden in place, the coaches in view
 saved = run({ "loco", "coach" })
 r = saved.runs[1]
-assert(r ~= nil and r.rake == nil and r.layout ~= nil, "falls back to the creep")
-print("start (a wagon not wrapped): creep fallback")
+assert(r ~= nil and r.rake == nil, "the simple sequence")
+hidden = 0
+for _, p in ipairs(train.parts) do if p.part.color and math.abs(p.part.color.x - 0.1234567) < 1e-6 then hidden = hidden + 1 end end
+assert(#train.parts == 4 and hidden == 1 and train.parts[1].part.modelId == 4225, "only the loco hidden, in place")
+print("start (a wagon not wrapped): simple sequence, loco hidden in place")
+
+-- a loco that can't be hidden: no run-around (taking it off would sell it)
+saved, created, order = run({ "coach", "boxcar" }, { "coach", "boxcar" })
+assert(#saved.runs == 0 and #created == 0, "not started")
+print("start (loco can't be hidden): no run-around")
 print("start ok")

@@ -377,6 +377,9 @@ local function updateSoundSet(captureParams, params, soundTransfOutput)
 	if baseUpdateSoundSet == nil then return end
 	local ci = params.currentInfo
 	if ci.vehicle ~= nil then
+		-- a hidden real loco (its copy is running around): silent, or its engine
+		-- would be heard idling at the platform as well as the copy's
+		if isHidden(ci.vehicle) then return end
 		return baseUpdateSoundSet(captureParams, params, soundTransfOutput)
 	end
 	local cs = ci.customState

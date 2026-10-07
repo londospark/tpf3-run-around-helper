@@ -38,12 +38,12 @@ instead of the game's instant flip.
 
 | Path | What |
 |---|---|
-| `res/scripts/runaround.script.lua` | game script: arrivals, route planning, the run (ghost loco, ghost rake, creep fallback), recouple, GUI command handling |
+| `res/scripts/runaround.script.lua` | game script: arrivals, route planning, the run (ghost loco, ghost rake, simple sequence), recouple, GUI command handling |
 | `res/scripts/runaround_gui.script.lua` | train-window card (`RunAroundHelperVehiclePlugin`) and the route tool |
 | `res/scripts/ghost_real.script.lua` | transformator and sound wrappers: stock behaviour for real trains; drives free-entity copies; hides carriages painted the flag colour |
 | `ghost_build.script.lua` | load-time `postRunScript`: patches every rail vehicle to use the wrappers, builds `runaround_ghost_dyn/` copies and `runaround_ghost_real/` markers |
 | `res/audio/ghostwrap/` | 15 generated copies of the game's rail sound sets (absolute paths, wrapped update script) |
-| `res/models/runaround_standin/` | 176 invisible 1 kW stand-ins `standin_cm<cm>.mdl`, 0.25-44 m, plus blank icons |
+| `res/models/runaround_standin/` | 176 invisible stand-ins from older versions; only so a run started under one can finish. Remove in a later release |
 | `res/models/runaround_ghost/` | `real.trf.lua`, `real_tilting.trf.lua`, plus 55 static plain loco copies (last fallback) |
 | `_metadata/` | `modinfo.json`, `0.png` logo (rendered from `logo_source.svg` with `rsvg-convert`) |
 | `MODIO.md` | text for the mod.io page (the owner uploads it themselves) |
@@ -97,8 +97,9 @@ what needs doing. `postUpdate()` sends commands with callbacks; callbacks aren't
 allowed inside `update()`.
 
 1. Coach copies appear (each coach's own model, as a free entity).
-2. The detach: the loco becomes a stand-in of the same length, and the real
-   coaches stay coupled, painted `HIDE_COLOUR`. The wrapped transformator then
+2. The detach: the real loco and coaches stay on the train, painted
+   `HIDE_COLOUR` (the coaches reversed in order and turned). Nothing is added or
+   removed, so the replace buys and sells nothing. The wrapped transformator then
    scales every node to zero, bogies included. Passengers and cargo stay because
    the vehicles never leave the train.
 3. The loco copy appears.
@@ -108,14 +109,18 @@ allowed inside `update()`.
 6. **Uncouple:** a 2.5 s pause.
 7. The loco copy runs the route (reversals, facing kept) and brakes against the
    far coach.
-8. `recoupleRake`: the real loco replaces the stand-in, and the coaches get their
-   own paint back (matched by model and purchase time). The copies are destroyed.
+8. `recoupleRake`: the real loco and coaches get their own paint back (matched
+   by model and purchase time; the loco part is the same object throughout). The
+   copies are destroyed.
 9. The loco's facing is checked and corrected if needed, then the train is
    released.
 
-**Fallback (the creep):** if any coach can't be hidden (its transformator wasn't
-wrapped), the real coaches creep forward in 0.25 m replace steps. It works, but
-the vehicle marker jitters.
+**If a coach can't be hidden:** the simple sequence. The loco is hidden in place,
+the coaches stay in view and move at the flip. **If the loco can't be hidden**
+(no `runaround_ghost_hide/` marker): no run-around, and the card says why. The
+creep (0.25 m stand-in steps) and the loco-for-a-stand-in swap are gone. Both
+bought and sold vehicles (live: money in the world). Stand-in models and
+`isStandIn` remain only so a run started under an older version can finish.
 
 ### Engine facts the design rests on (traced live)
 
@@ -140,6 +145,8 @@ So that nobody repeats them:
 - **Stand-ins added at the tail or balanced to stop the shift:** a replace
   always keeps the middle fixed, so the coaches *must* move a loco length.
   Hence the pull.
+- **Swapping the loco for a stand-in:** every replace sold and bought it (money
+  in the world, a loss each run). The loco stays on the train, hidden.
 - **The creep as the main method:** works, but every step re-attaches the
   vehicle marker, which blinks.
 - **Plain shipped copies of the loco:** no sound or paint. Using the real model
@@ -156,20 +163,19 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Repeat arrival and loco choice (N5, N6, seen in the first smoke test):**
   after a run, the log should show `reported at the stop it has just run around
   at - ignored`, and no second run. `loco chosen automatically` must name a loco.
-- **Free replaces (N7):** look for `vehicle replace: purchase cost switched off`
-  and `money: the detach changed the balance by 0` (and the recouple). No money
-  should float up in the world. If the flag didn't take, see CODE_REVIEW N7 for
-  the fallback.
+- **No buying or selling (N7):** the loco now stays on the train, hidden. No money
+  should float up in the world at the detach or recouple, and the loco should
+  be silent while its copy is away. `money: ... changed the balance by 0`. (The
+  purchase-cost flag can't be set; the log says so, and that's fine.)
 - **Chaining is checked at load:** `ghost_build` loads the original transformator
   with `ug_require` and chains it only if it has nothing but update/particle
   scripts and its update function is found. Look for
   `left alone: <trf> - <why>` lines. If every devers vehicle says "can't load
   other scripts here", `ug_require` isn't available at load, and nothing is
-  chained (safe, but the creep again).
+  chained (no ghost rake; and a loco that can't be hidden doesn't run around).
 - **Chaining another mod's transformator** (*devers* is in the owner's game):
   the load line should say `N through another mod's transformator` with N about
-  the number of rail vehicles, a run should log `ghost rake` rather than
-  `creep`, there should be no `chained transformator not found`, and trains not
+  the number of rail vehicles, a run should log `ghost rake`, there should be no `chained transformator not found`, and trains not
   running around should still lean on curves (devers' roll). If the roll goes,
   the original isn't being called: check `ug_require` of a `.trf.lua` in the
   transformator scope (a `.trf` already required elsewhere in that scope
@@ -232,7 +238,8 @@ These are documented in the README:
   not decided.
 - Wheel radius is assumed to be 0.9 m.
 - Modded vehicles with their own transformator or sound set can't be hidden or
-  driven as themselves. They use copies, and the coaches use the creep.
+  driven as themselves. They use copies; such coaches stay in view (simple
+  sequence), and such a loco can't run around.
 - The smooth sequence needs the loco to be part 1 of the train.
 
 ## Next steps

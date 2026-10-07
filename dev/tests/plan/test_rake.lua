@@ -28,22 +28,20 @@ api = {
     Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end }, Mat4f = { rotZTransl = function() return {} end } },
   cmd = { sendCommand = function() end, makeCustomEntityUpdateStateCmd = function() return {} end, makeCustomEntityUpdateTransformationCmd = function() return {} end },
 }
-local M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {frames=carriageFrames, lengths=partLengths, invisible=buildHiddenRakeConfig, real=buildRealRakeConfig, adv=advanceRake}", "s"))()
+local M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {frames=carriageFrames, invisible=buildHiddenRakeConfig, real=buildRealRakeConfig, adv=advanceRake}", "s"))()
 -- the train: loco + a mixed rake
 local pt = 0
 local function part(mid, rev) pt = pt + 1; return { part = { modelId = mid, reversed = rev or false, compartment2loadConfig = { {} }, color = { x = 0.1 * pt, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1000 + pt, tag = "coach" .. pt } end
 setParts({ part(4225), part(7), part(7), part(8), part(7) })
 local originals = {} for i, p in ipairs(train.parts) do originals[i] = p end
 local start = layout()
-local frames = M.frames(1)
-local lengths = M.lengths(frames, { vehicles = train.parts })
-print("lengths:", table.concat((function() local t = {} for i, l in ipairs(lengths) do t[i] = string.format("%.1f", l) end return t end)(), " "))
-assert(math.abs(lengths[1] - 12.8) < 1e-6 and math.abs(lengths[4] - 20.0) < 1e-6)
--- detach: the invisible train, then the flip
-local snap = { modelId = 4225, reversed = false, loads = { {} }, autos = { false } }
-setParts(M.invisible({ vehicles = train.parts }, lengths, snap).vehicles)
+-- detach: the loco hidden in place and the coaches hidden and turned (nothing
+-- taken out or added), then the flip
+local snap = { modelId = 4225, reversed = false, loads = { {} }, autos = { false }, purchaseTime = originals[1].purchaseTime, color = { x = 0.1, y = 0.2, z = 0.3 } }
+setParts(M.invisible({ vehicles = train.parts }).vehicles)
 local after = layout()
-print(string.format("invisible train: head moved %.2f m (lengths rounded to 0.25 m)", after[1].x - start[1].x))
+print(string.format("invisible train: head moved %.2f m", after[1].x - start[1].x))
+assert(math.abs(after[1].x - start[1].x) < 1e-9, "the loco itself stays: the head does not move")
 train.dir = -train.dir -- flip: the head is the other end; parts order kept; positions mirror about the middle
 -- settle: targets
 local coaches = {}
@@ -51,8 +49,8 @@ for i = 2, 5 do local o = originals[i]; coaches[#coaches + 1] = { snap = { model
 -- while hidden: the coaches are the SAME parts, flagged with the hide colour
 local hiddenCount = 0
 for _, p in ipairs(train.parts) do if p.tag and p.part.color and math.abs(p.part.color.x - 0.1234567) < 1e-6 then hiddenCount = hiddenCount + 1 end end
-assert(hiddenCount == 4, "all four coaches hidden, none removed")
-local run = { vehicleEntity = 1, locoPos = { x = start[1].x, y = 0 }, rake = { stage = "settle", ticks = 3, coaches = coaches }, gdist = 0 }
+assert(hiddenCount == 5, "the loco and all four coaches hidden, none removed")
+local run = { vehicleEntity = 1, locoPart = snap, locoPos = { x = start[1].x, y = 0 }, rake = { stage = "settle", ticks = 3, coaches = coaches }, gdist = 0 }
 M.adv(run, 0.1)
 assert(run.rake.stage == "pull", run.rake.stage)
 -- the pull: the loco ghost draws forward; coach ghosts follow it exactly, never ahead of it
@@ -89,7 +87,7 @@ for i, c in ipairs(coaches) do
 end
 local locoErr = math.abs(final[1].x - run.target.x)
 print(string.format("final swap: coaches within %.2f m of where the ghosts slid to, loco within %.2f m", worst, locoErr))
-print(string.format("coaches moved %.2f m in all (a loco length: %.1f)", coaches[1].target.x - start[2].x, lengths[1]))
+print(string.format("coaches moved %.2f m in all (a loco length: %.1f)", coaches[1].target.x - start[2].x, 12.8))
 assert(worst < 0.3 and locoErr < 0.3)
 -- loco couples against the last coach: gap between loco and the neighbouring coach = half lengths
 local gap = math.abs(final[1].x - final[2].x) - (12.8 + 23.4) / 2
@@ -105,4 +103,14 @@ for k, e in ipairs(byPos) do
   assert(math.abs(e.p.part.color.x - 0.1 * (k + 1)) < 1e-9, "paint restored on coach " .. k)
   assert(e.p.part.reversed == true, "coach " .. k .. " turned relative to the new head (so it faces as it did)")
 end
+-- nothing was bought or sold: the train is the very same five parts, the loco
+-- with its own paint back
+assert(#train.parts == 5, "five parts")
+for _, p in ipairs(train.parts) do
+  local found = false
+  for _, o in ipairs(originals) do if o == p then found = true end end
+  assert(found, "every part is one of the original parts")
+end
+assert(train.parts[1] == originals[1] and math.abs(train.parts[1].part.color.x - 0.1) < 1e-9, "the loco is the same part, own paint back")
+print("no part added or removed in the whole run-around")
 print("rake ok")

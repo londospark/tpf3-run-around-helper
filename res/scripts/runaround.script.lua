@@ -82,6 +82,17 @@ local CONFIG = {
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
 	verifyFacing = true,
+	-- A run that takes longer than watchdogFactor times its route at the loop's
+	-- speed, plus watchdogExtraSeconds, has stalled: the real train is put back
+	-- and released (see watchdog).
+	watchdogFactor = 3.0,
+	watchdogExtraSeconds = 60.0,
+	-- A refused recouple is tried again recoupleRetries times, recoupleRetrySeconds
+	-- apart, with the train held; after that it is "stuck" and tried every
+	-- stuckRetrySeconds (see recoupleFailed).
+	recoupleRetries = 3,
+	recoupleRetrySeconds = 1.0,
+	stuckRetrySeconds = 30.0,
 
 	-- Defaults for a newly added loop (editable per loop in the panel).
 	defaultSpeed = 8.0,
@@ -1132,6 +1143,36 @@ local function readHeadPosition(vehicleEntity)
 	return nil
 end
 
+-- Phases the watchdog leaves alone: already ending, or held on purpose.
+local WATCHDOG_SKIP = { finish = true, done = true, verify = true, retry = true, stuck = true }
+
+-- Every stage waits for a command callback or a position, and if one never comes
+-- the train would stay held for ever. So: a run whose train has gone, or that has
+-- taken longer than watchdogFactor times its route at the loop's speed plus
+-- watchdogExtraSeconds, is sent to "finish", and finishRun puts the real train
+-- back (or clears the ghosts, if the train has gone) and releases it.
+local function watchdog(run, dt)
+	if WATCHDOG_SKIP[run.phase or ""] then return end
+	local okTv, tv = pcall(api.engine.getComponent, run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+	if okTv and tv == nil then
+		logInfo("watchdog: vehicle", run.vehicleEntity, "has gone mid-run - clearing its ghosts")
+		run.phase, run.aborted = "finish", true
+		return
+	end
+	run.age = (run.age or 0.0) + dt
+	if run.timeLimit == nil then
+		local loop = run.loop or {}
+		local speed = math.max(loop.speed or CONFIG.defaultSpeed, 1.0)
+		run.timeLimit = (loop.routeLength or 1000.0) / speed * CONFIG.watchdogFactor + CONFIG.watchdogExtraSeconds
+	end
+	if run.age > run.timeLimit then
+		logInfo(string.format("watchdog: the run-around for vehicle %s has stalled (%.0f s, limit %.0f s; phase %s, ghost rake %s, creep %s) - putting the real train back",
+			tostring(run.vehicleEntity), run.age, run.timeLimit, tostring(run.phase or "route"),
+			tostring(run.rake and run.rake.stage), tostring(run.layout and run.layout.stage)))
+		run.phase, run.aborted = "finish", true
+	end
+end
+
 -- Advances one run by dt seconds. Returns true when the run needs its next
 -- step done in postUpdate (recouple, or the facing check after it).
 local function advanceGhost(run, dt)
@@ -1186,6 +1227,10 @@ local function advanceGhost(run, dt)
 	if run.phase == "verify" then
 		run.verifyWait = (run.verifyWait or 0) + 1
 		return run.verifyWait >= 4
+	end
+	if run.phase == "retry" or run.phase == "stuck" then -- the recouple failed (see recoupleFailed)
+		run.retryWait = (run.retryWait or 0) - dt
+		return run.retryWait <= 0
 	end
 	if run.phase == "done" or run.phase == "finish" then return true end
 
@@ -1397,12 +1442,46 @@ local function scheduleTrace(state, label, vehicleEntity, ticks)
 	state:set(data)
 end
 
+-- Removes the coach ghosts (ghost rake) that are still up. Called wherever a run
+-- ends or fails to start, so none is left standing in the world.
+local function destroyCoachGhosts(coaches)
+	for _, c in ipairs(coaches or {}) do
+		if c.ghost ~= nil then
+			local ghost = c.ghost
+			c.ghost = nil
+			pcall(function() api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(ghost)) end)
+		end
+	end
+end
+
 -- Ends a run: the ghost goes, the train is released.
 local function finalizeRun(run)
-	if not run.ghostGone then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
+	if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 	releaseTrain(run.vehicleEntity)
 	if not run.noDepartNow then api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end
-	logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+	if run.restore then
+		logInfo("train put back as it was for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "- no run-around this time")
+	else
+		logInfo("run-around complete for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop))
+	end
+end
+
+-- The loco could not be put back on. Releasing the train now would send it off
+-- on the invisible 1 kW stand-in (with hidden coaches, after a ghost rake), so it
+-- stays held with its ghosts up and the recouple is tried again: a few times
+-- soon, then every stuckRetrySeconds for as long as the train exists. The card
+-- shows "stuck" meanwhile (see runaround_gui.script.lua).
+local function recoupleFailed(state, run, why)
+	run.recoupleTries = (run.recoupleTries or 0) + 1
+	local stuck = run.recoupleTries >= CONFIG.recoupleRetries
+	run.phase = stuck and "stuck" or "retry"
+	run.retryWait = stuck and CONFIG.stuckRetrySeconds or CONFIG.recoupleRetrySeconds
+	logInfo("recouple FAILED for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "-", why, "- try", run.recoupleTries,
+		"- train held, trying again in", run.retryWait, "s", stuck and "(STUCK: the loco is not on the train)" or "")
+	holdTrain(run.vehicleEntity)
+	local data = state:get()
+	data.runs[#data.runs + 1] = run
+	state:set(data)
 end
 
 local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
@@ -1410,29 +1489,22 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 
 	local okBuild, newConfig = pcall(buildConfigWithLocoReattached, tv.transportVehicleConfig, run.locoPart, atRear, run.standInModelId, locoReversed, origRev)
 	if not okBuild then
-		-- The ghost is deliberately left in place: it is the only copy of the loco.
-		logInfo("recouple FAILED - could not build the new consist:", tostring(newConfig), "- loco ghost left in place, train released")
-		releaseTrain(run.vehicleEntity)
-		return
+		return recoupleFailed(state, run, "could not build the new consist: " .. tostring(newConfig))
 	end
 	local okCmd, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, newConfig)
 	if not okCmd then
-		logInfo("recouple FAILED - replace command rejected:", tostring(cmd), "- loco ghost left in place, train released")
-		releaseTrain(run.vehicleEntity)
-		return
+		return recoupleFailed(state, run, "replace command rejected: " .. tostring(cmd))
 	end
 
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then
-			logInfo("recouple replaceVehicle FAILED for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "- loco ghost left in place, train released")
-			releaseTrain(run.vehicleEntity)
-			return
+			return recoupleFailed(state, run, "replace refused")
 		end
 		scheduleTrace(state, "after the recouple (+1 tick)", run.vehicleEntity, 1)
 		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
 		-- The ghost goes at once: the real loco is on the train now, and leaving the
 		-- ghost up while the facing is verified showed two locos for a moment.
-		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+		if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 		run.ghostGone = true
 		if CONFIG.verifyFacing and run.gyaw ~= nil then
 			-- Keep the run (and the ghost) for a few ticks so the new carriages exist,
@@ -1489,13 +1561,17 @@ local function locoIsReversed(run)
 	return reversed, string.format("ghost facing dot head direction = %.2f (was %+d at the start with reversed=%s)", dot, run.startSign, tostring(run.startReversed))
 end
 
--- Edits one run in the saved state (a run handed to postUpdate is a copy).
+-- Edits one run in the saved state (a run handed to postUpdate is a copy). A run
+-- the watchdog has taken over (aborted) is left alone: a late callback from a
+-- command sent before that must not set it going again.
 local function updateRun(state, vehicleEntity, fn)
 	local data = state:get()
+	local found = false
 	for _, r in ipairs(data.runs) do
-		if r.vehicleEntity == vehicleEntity then fn(r) end
+		if r.vehicleEntity == vehicleEntity and not r.aborted then fn(r); found = true end
 	end
 	state:set(data)
+	return found
 end
 
 -- Steps the creep layout on (see creepLayout). Returns true when a command is
@@ -1544,13 +1620,13 @@ local function layoutStep(state, vehicleEntity)
 	if run == nil or run.layout == nil then return end
 	local L = run.layout
 	local function done(fn)
-		holdTrain(vehicleEntity)
-		updateRun(state, vehicleEntity, function(r)
+		local live = updateRun(state, vehicleEntity, function(r)
 			if r.layout ~= nil then
 				r.layout.busy = false
 				if fn then fn(r) end
 			end
 		end)
+		if live then holdTrain(vehicleEntity) end -- not once the watchdog has released it
 	end
 	local function fail(why)
 		logInfo("creep: stopped -", why)
@@ -1660,12 +1736,20 @@ local recoupleRake -- defined with the ghost rake, below
 local function finishRun(state, run)
 	local tv = api.engine.getComponent(run.vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
-		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, aborting recouple")
-		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
+		logInfo("finishRun: vehicle", run.vehicleEntity, "no longer exists, clearing its ghosts")
+		if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
+		run.ghostGone = true
+		destroyCoachGhosts(run.rake and run.rake.coaches)
 		return
 	end
 	if run.rake ~= nil then
 		return recoupleRake(state, run) -- also when it failed: the real train goes back
+	end
+	if run.restore then
+		-- The run never got going: the loco goes back where it was, facing as it did.
+		local atRear = run.locoIdx ~= nil and run.locoIdx > 1 and run.locoIdx == run.partCount
+		recouple(state, run, tv, atRear, run.startReversed, "putting the train back as it was")
+		return
 	end
 	local reversed, why = locoIsReversed(run)
 	if run.flipped then
@@ -1890,8 +1974,8 @@ end
 
 local function rakeFlipStep(state, vehicleEntity)
 	local function done(fn)
-		holdTrain(vehicleEntity)
-		updateRun(state, vehicleEntity, function(r) if r.rake then r.rake.busy = false; fn(r) end end)
+		local live = updateRun(state, vehicleEntity, function(r) if r.rake then r.rake.busy = false; fn(r) end end)
+		if live then holdTrain(vehicleEntity) end -- not once the watchdog has released it
 	end
 	local ok, cmd = pcall(api.cmd.makeVehicleReverseCmd, vehicleEntity)
 	if not ok then
@@ -1922,28 +2006,26 @@ recoupleRake = function(state, run)
 	local okC, cmd = false, nil
 	if okB then okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, run.vehicleEntity, cfg) end
 	if not okC then
-		logInfo("recouple (ghost rake) FAILED:", tostring(okB and cmd or cfg), "- ghosts left in place, train released")
-		releaseTrain(run.vehicleEntity)
-		return
+		return recoupleFailed(state, run, "(ghost rake) " .. tostring(okB and cmd or cfg))
 	end
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then
-			logInfo("recouple (ghost rake) replace FAILED - ghosts left in place, train released")
-			releaseTrain(run.vehicleEntity)
-			return
+			return recoupleFailed(state, run, "(ghost rake) replace refused")
 		end
 		scheduleTrace(state, "after the recouple (+3 ticks)", run.vehicleEntity, 3)
-		api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost))
-		for _, c in ipairs(run.rake.coaches) do
-			if c.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(c.ghost)) end
-		end
+		if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
+		destroyCoachGhosts(run.rake.coaches)
 		run.ghostGone = true
-		run.phase = "verify"
-		run.verifyWait = 0
-		run.locoAtRear = false
-		local data = state:get()
-		data.runs[#data.runs + 1] = run
-		state:set(data)
+		if CONFIG.verifyFacing and run.gyaw ~= nil then
+			run.phase = "verify"
+			run.verifyWait = 0
+			run.locoAtRear = false
+			local data = state:get()
+			data.runs[#data.runs + 1] = run
+			state:set(data)
+		else
+			finalizeRun(run)
+		end
 	end)
 end
 
@@ -2109,7 +2191,7 @@ local function startRunAround(state, vehicleEntity, loop)
 		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(c.ghostModel), function(res, ok)
 			if not ok then
 				logInfo("ghost rake: could not show coach", i, "- run-around not started")
-				for j = 1, i - 1 do api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(rakeInfo.coaches[j].ghost)) end
+				destroyCoachGhosts(rakeInfo.coaches)
 				releaseTrain(vehicleEntity)
 				return
 			end
@@ -2121,9 +2203,45 @@ local function startRunAround(state, vehicleEntity, loop)
 		end)
 	end
 
+	-- The run's record. Also made (with no ghost, phase "finish", restore set) when
+	-- the loco ghost cannot be shown after the detach: finishRun then puts the real
+	-- train back exactly as it would at the end of a run, with the same retries, so
+	-- a ghost rake's coaches get back their order, facing and paint (they are
+	-- hidden, reversed and in reverse order at that point).
+	local function newRun(ghost)
+		return {
+			vehicleEntity = vehicleEntity,
+			loop = loop,
+			locoPart = locoSnap,
+			locoIdx = locoIdx,
+			partCount = #tvc.vehicles,
+			standInModelId = standId,
+			standInLength = standLength,
+			hasTail = addTail,
+			layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
+			rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
+			locoLength = locoLength,
+			startHead = startHead,
+			startSign = startSign,
+			startReversed = locoSnap.reversed and true or false,
+			effects = ghostEffects,
+			color = locoSnap.color and { locoSnap.color.x, locoSnap.color.y, locoSnap.color.z } or nil,
+			topSpeed = locoTopSpeed,
+			origRev = origRev,
+			ghost = ghost,
+			ghostGone = ghost == nil,
+			edgeCursor = 1,
+			edgeLength = nil,
+			edgeProgress = 0.0,
+			speed = 0.0,
+			age = 0.0,
+		}
+	end
+
 	sendReplace = function() api.cmd.sendCommand(replaceCmd, function(_, success)
 		if not success then
 			logInfo("detach replaceVehicle FAILED for vehicle", vehicleEntity, "loop", loopLabel(loop), "- train released")
+			destroyCoachGhosts(rakeInfo and rakeInfo.coaches)
 			releaseTrain(vehicleEntity)
 			return
 		end
@@ -2132,15 +2250,14 @@ local function startRunAround(state, vehicleEntity, loop)
 		scheduleTrace(state, "after the detach (+30 ticks)", vehicleEntity, 30)
 		api.cmd.sendCommand(api.cmd.makeCustomEntityCreateCmd(ghostModelId), function(createRes, createSuccess)
 			if not createSuccess then
-				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- putting the loco back on the train")
-				local tvNow = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
-				if tvNow ~= nil then
-					local okB, cfg = pcall(buildConfigWithLocoReattached, tvNow.transportVehicleConfig, locoSnap, false, standId)
-					local okC, cmd = false, nil
-					if okB then okC, cmd = pcall(api.cmd.makeVehicleReplaceCmd, vehicleEntity, cfg) end
-					if okC then api.cmd.sendCommand(cmd) else logInfo("could not restore the loco:", tostring(okB and cmd or cfg)) end
-				end
-				releaseTrain(vehicleEntity)
+				logInfo("failed to spawn ghost loco entity for loop", loopLabel(loop), "- putting the train back as it was")
+				local run = newRun(nil)
+				run.phase = "finish"
+				run.restore = true
+				run.aborted = true
+				local data = state:get()
+				data.runs[#data.runs + 1] = run
+				state:set(data)
 				return
 			end
 			local ghost = createRes.resultEntity
@@ -2164,33 +2281,13 @@ local function startRunAround(state, vehicleEntity, loop)
 					logInfo("the loco is not on the first pieces of the route (", tostring(okL and dist or k), ") - the ghost starts at the route's first piece")
 				end
 			end
+			local run = newRun(ghost)
+			run.edgeCursor = startCursor
+			run.startOffset = startOffset
+			run.locoYaw = locoYaw
+			run.locoPos = locoTransf ~= nil and { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y } or nil
 			local data = state:get()
-			data.runs[#data.runs + 1] = {
-				vehicleEntity = vehicleEntity,
-				loop = loop,
-				locoPart = locoSnap,
-				standInModelId = standId,
-				standInLength = standLength,
-				hasTail = addTail,
-				layout = creep and { len = standLength, a = standLength, b = 0, stage = "waiting", timer = 0, busy = false } or nil,
-				rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
-				locoLength = locoLength,
-				startHead = startHead,
-				startSign = startSign,
-				startReversed = locoSnap.reversed and true or false,
-				effects = ghostEffects,
-				color = locoSnap.color and { locoSnap.color.x, locoSnap.color.y, locoSnap.color.z } or nil,
-				topSpeed = locoTopSpeed,
-				origRev = origRev,
-				ghost = ghost,
-				edgeCursor = startCursor,
-				startOffset = startOffset,
-				locoYaw = locoYaw,
-				locoPos = locoTransf ~= nil and { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y } or nil,
-				edgeLength = nil,
-				edgeProgress = 0.0,
-				speed = 0.0,
-			}
+			data.runs[#data.runs + 1] = run
 			state:set(data)
 			if ghostEffects then
 				local run = data.runs[#data.runs]
@@ -2496,6 +2593,7 @@ return {
 		if #data.runs > 0 then
 			local remaining = {}
 			for _, run in ipairs(data.runs) do
+				watchdog(run, dt)
 				if advanceGhost(run, dt) then
 					result = result or {}
 					result.finishes = result.finishes or {}

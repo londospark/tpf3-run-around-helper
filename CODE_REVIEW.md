@@ -9,7 +9,8 @@ Each finding says how it was established: **reproduced** (shown with the offline
 mock), **checked** (against game files), or **by reading** (traced through the
 code, not yet run).
 
-Nothing here has been fixed yet. The run-around works end to end live; most of
+H1-H4 are fixed (see each one; tests in `dev/tests/plan/test_failures.lua`).
+Nothing else has been fixed yet. The run-around works end to end live; most of
 the findings are about what happens when something goes wrong.
 
 ---
@@ -33,6 +34,10 @@ mid-run, only the loco copy is destroyed.
 **Fix:** one `destroyCoachGhosts(rakeInfo)` helper, called on every failure path
 and in `finishRun` when the train is gone.
 
+**Fixed:** `destroyCoachGhosts(coaches)` is called when a coach copy or the
+detach fails, in `finishRun` when the train has gone, and in `recoupleRake`. The
+watchdog (H4) notices a train that has gone mid-run.
+
 ### H2. A failed loco copy in ghost-rake mode leaves the coaches invisible — by reading
 
 When the loco copy can't be created (line 2134), the loco is put back with
@@ -44,6 +49,12 @@ later removed), back to front, and with their own paint lost.
 
 **Fix:** in ghost-rake mode, restore with `buildRealRakeConfig(..., flipped = false)`,
 which already puts the coaches back in order with their paint.
+
+**Fixed:** a failed loco copy now queues a run with no ghost, `restore = true`
+and phase `"finish"`. `finishRun` then restores the train the way it does at
+the end of any run: `recoupleRake` with `flipped = false` for the ghost rake, or
+the loco back where it was, facing as it did, otherwise. The retries from H3
+apply to it as well.
 
 ### H3. A failed recouple leaves the train running on the stand-in — by reading
 
@@ -57,6 +68,12 @@ it.
 **Fix:** retry the replace a few times. If it still fails, keep the train held
 and say so on the run-around card, rather than releasing a broken train.
 
+**Fixed:** `recoupleFailed` keeps the train held and puts the run back with
+phase `"retry"`. It is retried `recoupleRetries` times, `recoupleRetrySeconds`
+apart, then goes to phase `"stuck"` and is retried every `stuckRetrySeconds`.
+The card shows "Stuck" with a warning icon. Selling the train ends it, through
+`finishRun`.
+
 ### H4. No watchdog: a stalled run holds the train for ever — by reading
 
 Every stage waits for a command callback (`busy` flags in `advanceRake` and
@@ -69,6 +86,14 @@ Examples: a vehicle deleted while `busy`, or a route the ghost can't finish.
 route length ÷ speed × 3 + 60 s), put the real train back with
 `buildRealRakeConfig` or the plain restore, destroy every copy and release the
 train, with a log line.
+
+**Fixed:** `watchdog(run, dt)` runs every tick before `advanceGhost`. It
+accumulates game time in `run.age` and works out `run.timeLimit` lazily, so runs
+in old saves get one too. It sends a run to `"finish"` with `aborted = true`
+once the limit passes, or at once if the train has gone. The settings are
+`watchdogFactor` and `watchdogExtraSeconds`. `updateRun` ignores aborted runs,
+and the creep and rake `done()` callbacks only hold the train again if a live
+run was found, so a late callback can't hold a train that has been released.
 
 ---
 

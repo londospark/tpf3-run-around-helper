@@ -160,19 +160,17 @@ These were just changed and pass offline, but haven't been seen in game:
   - Trains with a single coach, or mixed wagons, now use the ghost rake too.
 - **Blank stand-in icons:** no more "Could not find texture ... _icon20.tga"
   warnings.
+- **Failure handling (H1-H4)**, tested offline only (`test_failures.lua`): the
+  restore after a failed start, recouple retries and "Stuck" on the card, the
+  watchdog. None of these paths has been hit live.
 
 ### Bugs found in review
 
-See `CODE_REVIEW.md`, high section (not fixed yet):
+H1-H4 in `CODE_REVIEW.md` (failure paths) are fixed. Still open:
 
-- Coach copies are orphaned when a run fails to start (reproduced) or when the
-  train is deleted mid-run.
-- A failed loco copy in ghost-rake mode leaves the coaches invisible and back to
-  front.
-- A failed recouple releases the train on the stand-in.
-- No watchdog for stalled runs.
-- The hard-coded mod ID in the generated files may break a mod.io install.
+- The hard-coded mod ID in the generated files may break a mod.io install (M3).
   Check this before publishing.
+- The medium and low items in `CODE_REVIEW.md`.
 
 ### Limitations
 
@@ -193,7 +191,7 @@ These are documented in the README:
 
 1. **The owner's next live test** of the above. Read their `stdout.txt` lines
    before changing anything.
-2. Fix review items H1-H4, and check M3.
+2. Check review item M3.
 3. Tag `v0.1.0-alpha` on GitHub. Help the owner publish using `MODIO.md`; they
    upload to mod.io themselves and will add a video link later.
 4. Add a chapter on the hidden-coach technique to the modding guide (new source

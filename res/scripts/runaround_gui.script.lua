@@ -363,6 +363,8 @@ function data()
 		approach = "Coupling on",
 		finish = "Coupling on",
 		verify = "Coupled",
+		retry = "Coupling on (trying again)",
+		stuck = "Stuck: the loco could not be coupled back on. The train is held while it keeps trying.",
 	}
 
 	local function routeLine(loop)
@@ -385,7 +387,7 @@ function data()
 					progress = 1.0
 				end
 				return Column({
-					Row({ Icon(ICON.train), Text(text, "font-scale-body") }),
+					Row({ Icon(run.phase == "stuck" and ICON.warn or ICON.train), Text(text, "font-scale-body") }),
 					builtin.ProgressBar{ value = progress, applyGradient = false },
 				})
 			end

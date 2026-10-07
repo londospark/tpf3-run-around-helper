@@ -17,3 +17,8 @@
   the train draws forward a loco length with the loco still coupled, stops, and
   the loco uncouples, instead of the coaches jumping.
   Copies of goods wagons show the wagon's load.
+- A run-around never leaves a train stuck or broken. If a run can't start, the
+  train is put back exactly as it was. If the loco can't be coupled back on, the
+  train stays held and the mod keeps trying, with **Stuck** on the card. A run
+  that stalls is given up after a time limit, and the train is put back. The
+  copies are always cleared away, also when a train is sold mid-run.

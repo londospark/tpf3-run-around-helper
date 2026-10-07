@@ -109,6 +109,21 @@ While editing or showing:
    are, and the copies go.
 7. The train loads as normal and leaves, with the loco leading.
 
+### If something goes wrong
+
+A train is never left stuck or broken by a run-around:
+
+- **If the run can't start** (the game refuses a step), the train is put back
+  exactly as it was, coaches in their order with their own paint, and leaves
+  the normal way. The copies are cleared away.
+- **If the loco can't be coupled back on**, the train stays held, rather than
+  leaving on the invisible stand-in, and the mod keeps trying. The run-around
+  card says **Stuck** while this goes on.
+- **If a run stalls** (for example the game never answers a step), it is given
+  up after three times the route's length at the run-around's speed, plus a
+  minute. The real train is put back and released.
+- **If the train is sold or deleted mid-run**, the copies are cleared away.
+
 ## Tips and limitations
 
 - **One loco plus coaches or wagons.** Multiple units and double-heading are not
@@ -182,6 +197,9 @@ Useful log lines:
 | `ghost rake: ...` | the coaches shown as copies, the pull forward (the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
 | `creep: ...` | the fallback: the real coaches creeping and the train being turned |
 | `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
+| `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |
+| `watchdog: ...` | a run stalled, or its train went, and was given up |
+| `train put back as it was ...` | a run couldn't start and the train was restored |
 
 ## Advanced settings
 
@@ -202,6 +220,8 @@ These are in the files, for tinkering. Most people won't need them.
 | `useRealModel` | `true` | run around as the loco's own model when possible |
 | `useEffectGhosts` | `true` | otherwise use the copy with smoke and sound |
 | `verifyFacing` | `true` | check the loco's facing after coupling, and correct it |
+| `watchdogFactor`, `watchdogExtraSeconds` | `3`, `60` | a run taking longer than factor × route ÷ speed + extra seconds is given up and the train put back |
+| `recoupleRetries`, `recoupleRetrySeconds`, `stuckRetrySeconds` | `3`, `1`, `30` | a refused recouple is retried this many times this far apart, then every `stuckRetrySeconds` |
 | `LOG_ARRIVALS`, `LOG_TRACES` | `true` | logging |
 
 `ghost_build.script.lua`: set `PATCH_LOCOS = false` to leave every loco

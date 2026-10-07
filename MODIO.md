@@ -65,6 +65,7 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <li><strong>The train draws forward one loco length before the loco uncouples.</strong> A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so the train pulls up first, with the loco still coupled, and then stays put.</li>
 <li><strong>Passengers and goods stay aboard.</strong> The coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>
 <li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets.</li>
+<li><strong>Nothing is left stuck.</strong> If a run-around can't start or stalls, the train is put back as it was and goes on its way. If the loco can't couple back on, the train waits and the card says so.</li>
 <li>Run-arounds belong to a line and a stop. If you insert or remove stops earlier in the line, check the run-around still points at the right station.</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
 </ul>

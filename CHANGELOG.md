@@ -35,6 +35,12 @@
 - A train that stops at another platform than the route starts from, or whose
   route would set off towards its own coaches, doesn't run around that time. It
   leaves the normal way, and the card says why.
+- Fixed: straight after a run-around, the game reports the train arriving
+  again, and a second run-around started on the turned train, running a coach
+  around as the "loco". Repeat arrivals at the same stop are now ignored.
+- The automatic loco choice only ever picks a part with an engine, at an end of
+  the train. With no loco at either end, there's no run-around, and the card
+  says why.
 - If a game update ever moves the game's train sound script, trains go quiet
   instead of filling the log with errors.
 - The invisible stand-ins have their icons registered and carry the mod's

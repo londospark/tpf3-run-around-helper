@@ -36,6 +36,7 @@ api = {
     get = function(m)
       local L = MODEL_LEN[m]
       return { metadata = { transportVehicle = { compartments = { { loadConfigs = { {} } } } },
+    landVehicle = { engines = (m == 4225) and { { power = 700 } } or {} },
         extent = L and { bbMin = { x = -L / 2 }, bbMax = { x = L / 2 } } or nil } }
     end } },
   engine = { getComponent = function(e, c)
@@ -93,7 +94,7 @@ end
 print = (function(op) return function(...) local t = {} for i = 1, select("#", ...) do t[i] = tostring(select(i, ...)) end log[#log + 1] = table.concat(t, " ") end end)(print)
 local say = io.write
 
-local loop = { id = 1, name = "Test", speed = 10, accel = 2, routeLength = 100,
+local loop = { id = 1, name = "Test", lineEntity = 7, stopIndex = 0, speed = 10, accel = 2, routeLength = 100,
   loopEdges = { { entity = 1, index = 0, forward = true } }, waypoints = {} }
 
 -- The original train: loco, coach, boxcar (turned), coach; each with its own paint.
@@ -270,5 +271,47 @@ sent, saved.runs = {}, {}
 start()
 assert(#saved.runs == 1 and loop.lastProblem == nil, "a started run clears the note")
 say("N2 then a good start: note cleared\n")
+
+-- LIVE: straight after a run-around the game reported the train arriving at the
+-- same stop again; the second run turned a coach into the "loco". Now: the
+-- repeat is ignored, and arriving anywhere else clears it.
+local function arrive(stop)
+  script.handleEvent(nil, state, nil, "TransportVehicleSystem", "OnArriveAtStop", { vehicleEntity = 1, lineEntity = 7, stopIndex = stop })
+end
+fresh()
+start()
+for _ = 1, 400 do tick(0.5) if #saved.runs == 0 then break end end
+assert(#saved.runs == 0 and lastHold() == false, "(setup) the run completed")
+arrive(0)
+assert(#saved.pending == 0, "the repeat arrival at the same stop is ignored")
+arrive(1)
+arrive(0)
+assert(#saved.pending == 1, "after arriving at another stop, the next arrival here runs around again")
+say("re-arrival straight after a run-around: ignored; after another stop: runs again\n")
+
+-- LIVE: never a coach as the loco, even when the coach end is nearer the first point.
+fresh()
+local loco = train.parts[1]
+train.parts = { train.parts[2], train.parts[3], train.parts[4], loco } -- loco at the rear
+TRACK.x0, TRACK.dx = 20, 100 -- the route sets off from the loco's end (+x)
+start()
+assert(#saved.runs == 1, "runs with the loco at the rear")
+assert(saved.runs[1].locoPart.modelId == 4225, "the loco, not a coach: " .. tostring(saved.runs[1].locoPart.modelId))
+say("loco at the rear: the loco is chosen, not the nearer coach\n")
+
+-- No loco at either end: not started, and the card says why.
+fresh()
+train.parts = { train.parts[2], train.parts[1], train.parts[3], train.parts[4] }
+start()
+assert(#saved.runs == 0 and #sent == 0, "no loco at an end: not started")
+assert(loop.lastProblem == "there is no loco at either end of the train", tostring(loop.lastProblem))
+say("no loco at either end: " .. loop.lastProblem .. "\n")
+
+-- The route starts at the coaches' end of the platform: the loco is at the wrong end.
+fresh()
+TRACK.x0, TRACK.dx = 30, -45 -- under the coaches only, stopping 18 m short of the loco
+start()
+assert(#saved.runs == 0 and loop.lastProblem and loop.lastProblem:find("at the other end of the train", 1, true), tostring(loop.lastProblem))
+say("loco at the wrong end: " .. loop.lastProblem .. "\n")
 
 say("failures ok\n")

@@ -153,6 +153,12 @@ So that nobody repeats them:
 
 These were just changed and pass offline, but haven't been seen in game:
 
+- **Repeat arrival and loco choice (N5, N6, seen in the first smoke test):**
+  after a run, the log should show `reported at the stop it has just run around
+  at - ignored`, and no second run. `loco chosen automatically` must name a loco.
+- **The owner's game has the *devers* mod,** which replaces every train's
+  transformator, so nothing can be its own ghost there. Test the draw-forward
+  step with *devers* off.
 - **The start check (N1, N2):** the log should say
   `ghost starts on route piece N, M m along it (0.x m from the route)`. A
   normal arrival must NOT log `run-around NOT started`. If it does, the reason

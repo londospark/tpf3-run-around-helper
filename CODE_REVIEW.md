@@ -161,6 +161,43 @@ One line is printed at load. `test_hide.lua` loads the script with both
 missing; the old script fails it with `attempt to call a nil value (field
 'useFn')`.
 
+
+### Found in the first smoke test (2026-10-07) — high
+
+#### N5. The game reports the train arriving again straight after a run-around — seen live
+
+The log shows `run-around complete`, then, in the same second and with the
+train not having moved, `arrival: ... stop= 0` again. Nothing ignored it, so a
+second run started on the train that had just been turned. **Fixed:**
+`finalizeRun` records the line and stop per vehicle (`data.ranAt`), and
+`handleEvent` ignores an arrival there until the train has arrived at another
+stop. `test_failures.lua` replays it.
+
+#### N6. The automatic loco choice could pick a coach — seen live
+
+"The part nearest the first route point" took no account of engines. On the
+turned train from N5 it picked `streamlined_nyc` (a coach), ran its copy around
+the route and coupled it on as the loco. From then on the train was coach-first.
+**Fixed:** `isPowered` reads `landVehicle.engines[1].power` (**checked**: locos
+list engines with a power, coaches `engines = { }`). The automatic choice
+considers only powered parts at either end of the train; a manual choice must
+be powered too. If it can't be told, or there's no loco at an end, there's no
+run, and the card says why. `checkStartOnRoute` also now says "the loco is at the
+other end of the train" when another part of the train is on the route but the
+loco isn't. `test_failures.lua` covers each case; the old script fails the N5
+replay.
+
+#### Also learned from the smoke test
+
+- **The other mods' mod IDs** (`~/mod.io/common/10640/mods/<n>/mod.json`, 40
+  installs): the folder is the mod.io number, the ID is the mod's own `modId`.
+  So the case behind M3 and N3 doesn't arise with mod.io. The safety net stays.
+- **`0 can be their own ghost`** at load came from the *devers* mod, which
+  replaces every rail vehicle's transformator through
+  `addModifier("loadModel", ...)`. That is M2's conflict, seen for real. The run
+  falls back to plain copies and the creep, which is correct but not the smooth
+  sequence. The log now names the transformator it found.
+
 ### Low
 
 - **`releaseTrain` isn't guarded** (line 1379). Its first command is sent
@@ -324,7 +361,7 @@ little as possible.
 
 ## Suggested order
 
-1. ~~N1-N4~~ (done; N3 made explicit, answered by the first mod.io install).
+1. ~~N1-N6~~ (done; N5 and N6 seen in the smoke test).
 2. **The `releaseTrain`/`holdTrain` guard.** A small robustness fix.
 3. A relative `filePath` for the card, only if a live test shows it works.
 4. **M5.** Check copies against their coaches' models.

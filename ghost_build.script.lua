@@ -124,7 +124,10 @@ local function patchLoco(modelId, modelName, src)
 	local soundName = md.soundConfig and md.soundConfig.soundSet and md.soundConfig.soundSet.name
 	local wrappedSound = wrappedSoundSet(soundName)
 	local trfOk = wrappedTrf ~= nil
-	if not trfOk then note(modelName, "has its own transformator, left alone") end
+	if not trfOk then
+		local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
+		note(modelName, "has its own transformator, left alone:", tostring(trf))
+	end
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end
 	if not trfOk and wrappedSound == nil then return false end
 	if trfOk then md.transformatorConfig.transformator.name = wrappedTrf end

@@ -77,8 +77,9 @@ In the train window, one card per run-around on the train's line.
   - **Name**: click the pencil to rename.
   - **Speed** and **Acceleration** of the loco while it runs around.
   - **Loco**: *automatic* (the default) or a chosen part of the train.
-    Automatic picks the part standing nearest the first route point, which works
-    for trains with different locos on the same line.
+    Automatic picks the loco at whichever end of the train has one (a part with
+    an engine, never a coach or wagon). With a loco at each end, it picks the
+    one nearer the first route point. A chosen part must have an engine too.
   - **Delete run-around**: asks for confirmation first.
 - **Add a run-around at...**: buttons for the line's other stops.
 
@@ -126,6 +127,11 @@ A train is never left stuck or broken by a run-around:
 
 ## Tips and limitations
 
+- **Other mods.** A mod that replaces every train's animation script (the
+  transformator) at load, such as *devers*, stops this mod preparing any
+  vehicle. Run-arounds still happen, but with plain copies, and the coaches use
+  the creep instead of drawing forward. The load log then reports
+  `0 can be their own ghost`.
 - **The card shows what's happening:** turning the train, drawing forward,
   uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
   be coupled back on.
@@ -210,6 +216,8 @@ Useful log lines:
 | `train put back as it was ...` | a run couldn't start and the train was restored |
 | `loco setup: SKIPPED ...` | the mod was installed under an unexpected ID: no vehicle was patched, and the run-around card won't appear (run-arounds already in a save still run, with plain copies). Please report it |
 | `GUI registered` | the train-window card loaded; if it's missing from the log, the card failed to load |
+| `... reported at the stop it has just run around at - ignored` | the game's repeat arrival straight after a run-around, ignored (normal) |
+| `loco setup: ... has its own transformator, left alone: <name>` | another mod changed that vehicle's animation script, so it runs around as a copy. If every vehicle says this, a mod is replacing all train transformators (see "Other mods") |
 | `run-around NOT started ...` | the train didn't run around this time, and why (also shown on the card): it's at another platform than the route starts from, or the route sets off towards the coaches |
 
 ## Advanced settings
@@ -295,6 +303,11 @@ Learned while building this. The full write-up is in the modding guide.
   - Carriage positions are reported late for a tick or two after either.
   - A flip releases a held train. Hold it again with manual departure and
     `makeVehicleSetStoppedByUserCmd`.
+  - After a run-around, the game reports the train arriving at the same stop
+    again, in the same second, without it having moved. The mod ignores that
+    repeat.
+- **Mod IDs.** A mod.io install's folder is the mod.io number, but its mod ID is
+  the `modId` from its own `mod.json` (seen on 40 installed mods).
 - **Reversed flag.** A part's `reversed` flag is relative to the train's head.
 - **Lengths.** Vehicles are butted together by their `metadata.extent` along x,
   which need not be centred on the model's origin. The BR 75's is -6.42 to

@@ -76,6 +76,7 @@ end
 api.res.modelRep.get = function(m)
   local L = MODEL_LEN[m]
   return { metadata = { transportVehicle = { compartments = { { loadConfigs = { {} } } } },
+    landVehicle = { engines = (m == 4225) and { { power = 700 } } or {} },
     extent = L and { bbMin = { x = -L / 2 }, bbMax = { x = L / 2 } } or nil } }
 end
 M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround}", "s"))()

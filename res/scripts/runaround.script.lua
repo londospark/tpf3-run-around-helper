@@ -146,6 +146,18 @@ local function newLoopId(data)
 	return id
 end
 
+-- Whether a model has an engine: locos list theirs under landVehicle.engines
+-- (with a power), coaches and wagons have an empty list. nil if it can't be read.
+local function isPowered(modelId)
+	local ok, power = pcall(function() return api.res.modelRep.get(modelId).metadata.landVehicle.engines[1].power end)
+	if not ok then
+		local okE, n = pcall(function() return #api.res.modelRep.get(modelId).metadata.landVehicle.engines end)
+		if okE and n == 0 then return false end
+		return nil
+	end
+	return type(power) == "number" and power > 0
+end
+
 -- Finds the index (1-based) of the locomotive part inside a
 -- TransportVehicleConfig.vehicles array by modelId.
 local function findLocoIndex(tvc, loop)
@@ -155,25 +167,6 @@ local function findLocoIndex(tvc, loop)
 		end
 	end
 	return nil
-end
-
--- Index (into the train's parts) of the part standing nearest a world
--- position, or nil. Uses each carriage's model position; assumes the
--- CARRIAGE_LIST order matches the config's part order (unverified - the
--- result is logged so it can be checked).
-local function nearestCarriageIndex(vehicleEntity, pos)
-	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-	if cl == nil then return nil end
-	local best, bestD2 = nil, math.huge
-	for i, carriageEntity in ipairs(cl.carriages) do
-		local mil = api.engine.getComponent(carriageEntity, api.type.ComponentType.MODEL_INSTANCE_LIST)
-		if mil ~= nil and mil.fatInstances[1] ~= nil then
-			local c = mil.fatInstances[1].transf:cols(3)
-			local d2 = (c.x - pos.x) ^ 2 + (c.y - pos.y) ^ 2
-			if d2 < bestD2 then best, bestD2 = i, d2 end
-		end
-	end
-	return best, math.sqrt(bestD2)
 end
 
 -- Vehicle configs handed to makeVehicleReplaceCmd must be real game objects
@@ -1459,8 +1452,18 @@ local function destroyCoachGhosts(coaches)
 	end
 end
 
--- Ends a run: the ghost goes, the train is released.
-local function finalizeRun(run)
+-- Ends a run: the ghost goes, the train is released. The game reports the train
+-- arriving at the same stop again straight after (traced live: OnArriveAtStop at
+-- the same second, the train not having moved), so the stop is remembered and
+-- such an arrival ignored (see handleEvent) - it had turned the train, and the
+-- second run picked a coach as the loco.
+local function finalizeRun(state, run)
+	local data = state:get()
+	if data ~= nil and run.loop ~= nil then
+		data.ranAt = data.ranAt or {}
+		data.ranAt[tostring(run.vehicleEntity)] = { line = run.loop.lineEntity, stop = run.loop.stopIndex }
+		state:set(data)
+	end
 	if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
 	releaseTrain(run.vehicleEntity)
 	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
@@ -1521,7 +1524,7 @@ local function recouple(state, run, tv, atRear, locoReversed, why, origRev)
 			data.runs[#data.runs + 1] = run
 			state:set(data)
 		else
-			finalizeRun(run)
+			finalizeRun(state, run)
 		end
 	end)
 end
@@ -1706,13 +1709,13 @@ local function verifyRun(state, run)
 	end)
 	if not ok then
 		logInfo("verify: could not read the loco's facing (", tostring(yaw), ") - leaving it as it is")
-		finalizeRun(run)
+		finalizeRun(state, run)
 		return
 	end
 	local dot = math.cos(run.gyaw) * math.cos(yaw) + math.sin(run.gyaw) * math.sin(yaw)
 	logInfo(string.format("verify: loco facing against ghost facing, dot = %.2f", dot))
 	if dot >= 0 or run.corrected then
-		finalizeRun(run)
+		finalizeRun(state, run)
 		return
 	end
 	local okFix, cmd = pcall(function()
@@ -1726,13 +1729,13 @@ local function verifyRun(state, run)
 	end)
 	if not okFix then
 		logInfo("verify: could not turn the loco round:", tostring(cmd))
-		finalizeRun(run)
+		finalizeRun(state, run)
 		return
 	end
 	logInfo("verify: the loco faces the wrong way, flipping its reversed flag")
 	api.cmd.sendCommand(cmd, function(_, success)
 		if not success then logInfo("verify: the correction was refused") end
-		finalizeRun(run)
+		finalizeRun(state, run)
 	end)
 end
 
@@ -2069,7 +2072,7 @@ recoupleRake = function(state, run)
 			data.runs[#data.runs + 1] = run
 			state:set(data)
 		else
-			finalizeRun(run)
+			finalizeRun(state, run)
 		end
 	end)
 end
@@ -2118,6 +2121,21 @@ local function checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, partC
 	local okL, k, off, dist = pcall(locateOnRoute, loop, { x = c.x, y = c.y })
 	if not okL or k == nil then return nil, nil, "the route could not be read: " .. tostring(k) end
 	if dist > ON_ROUTE_M then
+		-- another part of the train on the route: the loco is at the wrong end
+		local okO, other = pcall(function()
+			local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+			for i = 1, partCount do
+				if i ~= locoIdx then
+					local p = carriagePos(cl.carriages[i])
+					local _, _, d = locateOnRoute(loop, { x = p.x, y = p.y })
+					if d ~= nil and d <= ON_ROUTE_M then return true end
+				end
+			end
+			return false
+		end)
+		if okO and other then
+			return nil, nil, string.format("the loco is at the other end of the train from where the route starts (it is %d m from the route)", math.floor(dist + 0.5))
+		end
 		return nil, nil, string.format("the train is not at the platform the route starts from (the loco is %d m from the route)", math.floor(dist + 0.5))
 	end
 	-- away from the coaches: from the neighbouring carriage to the loco
@@ -2148,29 +2166,40 @@ local function startRunAround(state, vehicleEntity, loop)
 		logInfo("vehicle", vehicleEntity, "is a light engine: nothing to run around")
 		return
 	end
+	local function refuse(why)
+		logInfo("run-around NOT started for vehicle", vehicleEntity, "loop", loopLabel(loop), "-", why, "- the train leaves the normal way")
+		setLoopProblem(state, loop.id, why)
+	end
+	local n = #tvc.vehicles
 	local locoIdx = nil
 	if loop.locoManual then
 		locoIdx = findLocoIndex(tvc, loop)
+		if locoIdx == nil then return refuse("the chosen loco is not on this train") end
+		if isPowered(tvc.vehicles[locoIdx].part.modelId) ~= true then return refuse("the chosen part has no engine") end
 	else
-		-- Automatic: the part of the train nearest the first route point is
-		-- the one at the front for the run-around.
-		local first = loop.waypoints and loop.waypoints[1]
-		local okPos, pos = pcall(function() return first and piecePos(first, 0.5) end)
-		if okPos and pos ~= nil then
-			local okN, idx, dist = pcall(nearestCarriageIndex, vehicleEntity, pos)
-			if okN and idx ~= nil and tvc.vehicles[idx] ~= nil then
-				locoIdx = idx
-				logInfo("loco chosen automatically: part", idx, "of", #tvc.vehicles, "- model", tvc.vehicles[idx].part.modelId, "- about", math.floor(dist), "m from the first route point")
-			end
+		-- Automatic: a powered part at an end of the train (a loco can only run
+		-- around from an end); with one at each end, the one nearer the first route
+		-- point. Never a coach or wagon, whatever is nearest.
+		local ends = {}
+		for _, i in ipairs(n > 1 and { 1, n } or { 1 }) do
+			local powered = isPowered(tvc.vehicles[i].part.modelId)
+			if powered == nil then return refuse("could not tell which part of the train is the loco") end
+			if powered then ends[#ends + 1] = i end
 		end
-		if locoIdx == nil then
-			logInfo("automatic loco choice failed; using the first part of the train")
-			locoIdx = 1
+		if #ends == 0 then return refuse("there is no loco at either end of the train") end
+		locoIdx = ends[1]
+		if #ends == 2 then
+			local first = loop.waypoints and loop.waypoints[1]
+			local okD, nearer = pcall(function()
+				local pos = piecePos(first, 0.5)
+				local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+				local a, b = carriagePos(cl.carriages[1]), carriagePos(cl.carriages[n])
+				return ((b.x - pos.x) ^ 2 + (b.y - pos.y) ^ 2 < (a.x - pos.x) ^ 2 + (a.y - pos.y) ^ 2) and n or 1
+			end)
+			if okD then locoIdx = nearer end
 		end
-	end
-	if locoIdx == nil then
-		logInfo("startRunAround: no vehicle part with modelId", loop.locoModelId, "found on", vehicleEntity, "loop", loopLabel(loop))
-		return
+		logInfo("loco chosen automatically: part", locoIdx, "of", n, "- model", tvc.vehicles[locoIdx].part.modelId,
+			#ends == 2 and "(a loco at each end; the one nearer the first route point)" or "(the powered end of the train)")
 	end
 	if #loop.loopEdges == 0 then
 		logInfo("startRunAround: no route for loop", loopLabel(loop), "- nothing to animate (" .. tostring(loop.pathStatus) .. ")")
@@ -2187,11 +2216,7 @@ local function startRunAround(state, vehicleEntity, loop)
 	local okT, locoTransf = pcall(captureLocoTransform, vehicleEntity, locoIdx)
 	if not okT then locoTransf = nil end
 	local startCursor, startOffset, where = checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, #tvc.vehicles)
-	if startCursor == nil then
-		logInfo("run-around NOT started for vehicle", vehicleEntity, "loop", loopLabel(loop), "-", where, "- the train leaves the normal way")
-		setLoopProblem(state, loop.id, where)
-		return
-	end
+	if startCursor == nil then return refuse(where) end
 	logInfo(string.format("ghost starts on route piece %d, %d m along it (%s)", startCursor, math.floor(startOffset), where))
 	local locoLength = modelLength(tvc.vehicles[locoIdx].part.modelId)
 	local lengthFrom = "its model"
@@ -2670,6 +2695,19 @@ return {
 			local data = ensureData(state)
 			if CONFIG.LOG_ARRIVALS then
 				logInfo("arrival: vehicle=", param.vehicleEntity, "line=", param.lineEntity, "stop=", param.stopIndex)
+			end
+
+			-- The arrival the game reports again straight after a run-around (see
+			-- finalizeRun) is ignored; arriving anywhere else clears the record.
+			local key = tostring(param.vehicleEntity)
+			local ran = data.ranAt and data.ranAt[key]
+			if ran ~= nil then
+				if ran.line == param.lineEntity and ran.stop == param.stopIndex then
+					logInfo("vehicle", param.vehicleEntity, "reported at the stop it has just run around at - ignored")
+					return
+				end
+				data.ranAt[key] = nil
+				state:set(data)
 			end
 
 			local loop = findLoopForArrival(data.loops, param.lineEntity, param.stopIndex)

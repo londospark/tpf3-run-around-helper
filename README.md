@@ -131,9 +131,11 @@ A train is never left stuck or broken by a run-around:
   transformator), such as *devers* (Real Track Cant), is chained: this mod hides
   the coaches and drives the copies, and otherwise calls that mod's script, so
   both work. The load log counts them ("N through another mod's
-  transformator"). If that script can't be found, the game's own train
-  animation stands in, and the log says so once
-  (`chained transformator not found`).
+  transformator"). That's done only when this mod can load that script at start
+  and it does nothing beyond animating and smoke. Anything else, such as a
+  script that also adds extra models (like `mcs_basisset`'s), is left alone
+  exactly as it is, and that vehicle runs around as a copy. Without such mods,
+  nothing changes.
 - **The card shows what's happening:** turning the train, drawing forward,
   uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
   be coupled back on.

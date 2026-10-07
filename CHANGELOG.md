@@ -37,7 +37,8 @@
   leaves the normal way, and the card says why.
 - Works alongside mods that give trains their own animation script, such as
   *devers*: the coaches are hidden and the train draws forward, with no flashing,
-  and the other mod's animation is kept.
+  and the other mod's animation is kept. Only scripts that this mod can check at
+  start are chained; anything else is left exactly as it was.
 - Fixed: straight after a run-around, the game reports the train arriving
   again, and a second run-around started on the turned train, running a coach
   around as the "loco". Repeat arrivals at the same stop are now ignored.

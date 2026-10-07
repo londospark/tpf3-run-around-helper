@@ -206,6 +206,17 @@ replay.
   the name arrives as `devers_1::/vehicle/train/devers/devers_train.trf`. If the
   original isn't found, the stock animation is used and logged once.
   `test_chain.lua` and `test_build.lua` cover it. Not yet seen live.
+- **Chaining is checked at load** (after the owner asked what happens without
+  *devers*). `chain.trf` passes on only the update and particle scripts. Of 521
+  rail models across the owner's 40 mods, 498 use the stock transformator (no
+  change), but `mcs_basisset`'s 15 use their own, which also declares
+  `getEmittableModelsScript` and `computeEmittedModelsScript`. Chaining those
+  would drop the extra hooks on every such train. So `ghost_build` chains only
+  after loading the original in its own scope (`ug_require`): it must declare no
+  hooks beyond those two, and its update function must be found. Otherwise the
+  vehicle is left alone, with the reason logged. Without `ug_require` at load,
+  nothing is chained. The resolver rules exist in both scripts (separate
+  scopes); `test_resolve.lua` checks they agree.
 - **A mod can `ug_require` its own module:** *devers* loads
   `devers_1::/vehicle/train/devers/devers_core.lua` that way, and it runs in the
   owner's game. That answers the "Structure" section's open question. The live

@@ -116,14 +116,126 @@ local function wrappedTransformator(meta)
 	return MOD_ID .. "::/res/models/runaround_ghost/" .. file
 end
 
+-- Whether another transformator can be chained, checked here by loading it the
+-- way ghost_real's chain functions will at run time (the same rules: keep the two
+-- in step; dev/tests check they agree). Only one that declares nothing but an
+-- update and a particle script, and whose update function is found, is chained:
+-- chain.trf passes on just those two, so a transformator with more hooks (e.g.
+-- getEmittableModelsScript) would lose them, and one that can't be found would
+-- lose its own animation. Anything else is left alone, as before chaining existed.
+local CHAINABLE_HOOKS = { updateScript = true, updateParticleSystemScript = true }
+
+local function ownerOf(res)
+	return string.match(res, "^([%w_%-%.]*::)") or "::"
+end
+
+local function folderOf(res)
+	local path = string.gsub(res, "^[%w_%-%.]*::", "")
+	return string.match(path, "^(.*/)") or "/"
+end
+
+-- Runs a resource file and returns what it defines (its returned table, or the
+-- result of the data() it defines); this script's own data() is put back.
+local loaded = {}
+local function loadResource(file)
+	if loaded[file] ~= nil then return loaded[file] or nil end
+	local saved = data
+	local ok, ret = pcall(ug_require, file)
+	local defined = data
+	data = saved
+	local result = nil
+	if ok and type(ret) == "table" then
+		result = ret
+	elseif ok and type(defined) == "function" and defined ~= saved then
+		local okD, d = pcall(defined)
+		if okD and type(d) == "table" then result = d end
+	end
+	loaded[file] = result or false
+	return result
+end
+
+local function trfFiles(name, modelName)
+	local list
+	if string.find(name, "::", 1, true) then
+		list = { name }
+	elseif string.sub(name, 1, 1) == "/" then
+		list = { ownerOf(modelName) .. name, "::" .. name }
+	else
+		list = { ownerOf(modelName) .. folderOf(modelName) .. name }
+	end
+	for i, f in ipairs(list) do
+		if not string.find(f, "%.lua$") then list[i] = f .. ".lua" end
+	end
+	return list
+end
+
+local function scriptFunction(ref, trfFile)
+	if type(ref) ~= "string" then return nil end
+	local file, path = string.match(ref, "^(.-)@(.+)$")
+	if file == nil then return nil end
+	local bases
+	if string.find(file, "::", 1, true) then
+		bases = { file }
+	elseif string.sub(file, 1, 1) == "/" then
+		bases = { ownerOf(trfFile) .. file, "::" .. file }
+	else
+		bases = { ownerOf(trfFile) .. folderOf(trfFile) .. file }
+	end
+	for _, base in ipairs(bases) do
+		for _, ext in ipairs({ ".lua", ".tl" }) do
+			local t = loadResource(base .. ext)
+			if type(t) == "table" then
+				local fn = t
+				for key in string.gmatch(path, "[^%.]+") do fn = type(fn) == "table" and fn[key] or nil end
+				if type(fn) == "function" then return fn end
+			end
+		end
+	end
+	return nil
+end
+
+-- true, or false and why, per transformator name (many vehicles share one).
+local chainChecks = {}
+local function chainable(name, modelName)
+	local c = chainChecks[name]
+	if c == nil then
+		local why = nil
+		if type(ug_require) ~= "function" then
+			why = "can't load other scripts here"
+		else
+			local cfg, file = nil, nil
+			for _, f in ipairs(trfFiles(name, modelName)) do
+				cfg = loadResource(f)
+				if type(cfg) == "table" then file = f break end
+			end
+			if type(cfg) ~= "table" or type(cfg.updateScript) ~= "table" then
+				why = "its transformator could not be read"
+			else
+				for key in pairs(cfg) do
+					if string.find(key, "Script$") and not CHAINABLE_HOOKS[key] then why = "its transformator also has " .. key end
+				end
+				if why == nil and scriptFunction(cfg.updateScript.fileName, file) == nil then
+					why = "its transformator's update function was not found"
+				end
+			end
+		end
+		c = why == nil and true or why
+		chainChecks[name] = c
+	end
+	if c == true then return true end
+	return false, c
+end
+
 -- Points a vehicle with another transformator at the chaining one, keeping the
 -- original's name (and any params it already has) for ghost_real to call. False
--- when it can't be chained.
+-- and why when it isn't chained.
 local CHAIN_TRF = MOD_ID .. "::/res/models/runaround_ghost/chain.trf"
 local function chainTransformator(md, modelName)
 	local tc = md.transformatorConfig
 	local name = tc and tc.transformator and tc.transformator.name
-	if not CHAIN_TRANSFORMATORS or type(name) ~= "string" or name == "" or string.find(name, "runaround_ghost/", 1, true) then return false end
+	if not CHAIN_TRANSFORMATORS or type(name) ~= "string" or name == "" or string.find(name, "runaround_ghost/", 1, true) then return false, "not chainable" end
+	local ok, why = chainable(name, modelName)
+	if not ok then return false, why end
 	if type(tc.params) ~= "table" then tc.params = {} end
 	tc.params.runaround_trf = name
 	tc.params.runaround_mdl = modelName
@@ -151,12 +263,13 @@ local function patchLoco(modelId, modelName, src)
 		md.transformatorConfig.transformator.name = wrappedTrf
 	else
 		local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
-		chained = chainTransformator(md, modelName)
+		local why
+		chained, why = chainTransformator(md, modelName)
 		if chained then
 			trfOk = true
 			if stats.chained < 3 then note(modelName, "has another mod's transformator, chained:", tostring(trf)) end
 		else
-			note(modelName, "has its own transformator, left alone:", tostring(trf))
+			note(modelName, "has its own transformator, left alone:", tostring(trf), "-", tostring(why))
 		end
 	end
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end

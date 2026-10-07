@@ -1,297 +1,299 @@
 # Code review — Runaround Railways 0.1.0-alpha
 
-Reviewed: every script in the mod (`res/scripts/runaround.script.lua`,
-`runaround_gui.script.lua`, `ghost_real.script.lua`, `ghost_build.script.lua`,
-the `.gs.lua`/`.res.lua`/`.trf.lua` descriptors), at commit `5c10bed`, on
-2026-10-07. Line numbers refer to that commit.
+Two reviews so far:
 
-Each finding says how it was established: **reproduced** (shown with the offline
-mock), **checked** (against game files), or **by reading** (traced through the
-code, not yet run).
+- **First review** at `5c10bed`. Its findings and how each was resolved are
+  summarised below. The full text is in git history (this file at `4230bc1`).
+- **Second review** at `4230bc1` (2026-10-07). It covers every script in the
+  mod (`runaround.script.lua` 2655 lines, `runaround_gui.script.lua` 583,
+  `ghost_real.script.lua` 264, `ghost_build.script.lua` 225, and the
+  `.gs.lua`/`.res.lua`/`.trf.lua` descriptors), checked against the game's files
+  and type definitions where possible. Line numbers refer to `4230bc1`.
 
-H1-H4, M1, M3, M4, the `hiddenLoads` part of M6 and most of the low items are fixed
-(each says how; tests in `dev/tests/`). The rest is still open. The run-around works end to end live; most of
-the findings are about what happens when something goes wrong.
+Each finding says how it was established: **reproduced** (offline mock),
+**checked** (against the game's files or type definitions), or **by reading**
+(traced through the code, not run).
+
+The run-around works end to end live. The second review found no high-severity
+problems. Its findings are about unusual set-ups (alternative platforms, routes
+that start backwards, a mismatched mod ID), robustness against game updates,
+and tidiness. It also answers whether the mod should be split up (see
+[Structure](#structure-one-file-or-several)).
 
 ---
 
-## High: failure paths can leave a train broken
+## First review: status
 
-### H1. Coach copies are left behind when a run doesn't start — reproduced
+| | Finding | Status |
+|---|---|---|
+| H1 | Coach copies left behind when a run doesn't start, or the train is deleted | Fixed: `destroyCoachGhosts` on every path (`test_failures.lua`) |
+| H2 | Failed loco copy leaves the coaches hidden and back to front | Fixed: a restore run goes through `finishRun` / `buildRealRakeConfig` |
+| H3 | Failed recouple releases the train on the stand-in | Fixed: held and retried; "Stuck" on the card |
+| H4 | No watchdog for stalled runs | Fixed: `watchdog`, time limit from route length and speed |
+| M1 | Markers and copies collide on file name | Fixed: rail vehicles sharing a file name are left alone. Full-path keys were **not** used, because nothing shows `getAll` names match between load and game script |
+| M2 | Every rail vehicle's scripts are replaced | Open (design). The copied transformators were **checked** identical to the game's current `transformator_train.script.tl` and `transformator_tiltingTrain.script.tl` |
+| M3 | Mod ID hard-coded in generated files | Made safe for trains: `ghost_build` patches nothing under another ID. See N3: the GUI isn't covered |
+| M4 | Coach copies don't turn on curves | Fixed: `pullFrame`, Hermite curve (`test_curve.lua`) |
+| M5 | Copies not checked against the coaches they're matched to | Open |
+| M6 | Hiding relies on the undocumented `vehicle.color` | `hiddenLoads` leak fixed; the field is still relied on |
+| M7 | Saving or removing the mod mid-run | Open, untested |
+| M8 | Only a loco at the front gets the smooth sequence | Open, documented in the README |
+| Low | Leftover code, stale comments, `isStandIn` scan, card stages, light engine, `_content.json` | Fixed |
+| Low | Route-planning cost on dense networks; `LOG_TRACES` on by default | Open |
 
-`startRunAround` (`runaround.script.lua:2106-2145`) shows the coach copies
-first, then sends the detach. If the detach is refused (`sendReplace`, line
-2125), or the loco copy can't be created (line 2134), the train is released but
-the coach copies are never destroyed. They stay in the world as free entities,
-probably for good.
+---
 
-Reproduced with the start-up mock (detach callback reporting failure):
-`3 coach ghosts created, 0 destroyed, runs started: 0`.
+## Second review: new findings
 
-`finishRun` (line 1662) has the same gap: if the train has been sold or deleted
-mid-run, only the loco copy is destroyed.
+### Medium
 
-**Fix:** one `destroyCoachGhosts(rakeInfo)` helper, called on every failure path
-and in `finishRun` when the train is gone.
+#### N1. A train at an alternative platform runs the route from the wrong platform — checked (types), by reading
 
-**Fixed:** `destroyCoachGhosts(coaches)` is called when a coach copy or the
-detach fails, in `finishRun` when the train has gone, and in `recoupleRake`. The
-watchdog (H4) notices a train that has gone mid-run.
+Line stops can have `alternativeTerminals` (`api/engine.d.tl:533`), and the
+game may send a train to any of them. `getStopNode` (line 960) plans the route
+from `stop.terminal` only. When a train stops at an alternative platform:
 
-### H2. A failed loco copy in ghost-rake mode leaves the coaches invisible — by reading
+- `locateOnRoute` finds the loco more than 40 m from the route (line 2328). The
+  run carries on anyway: "the ghost starts at the route's first piece", on the
+  planned platform.
+- The loco copy runs the route over there, then `advanceApproach` glides it in a
+  straight line across the tracks to the stand-in on the real platform.
+- With the ghost rake, the coach copies are pulled on the real platform while
+  the loco copy draws forward on the other one.
 
-When the loco copy can't be created (line 2134), the loco is put back with
-`buildConfigWithLocoReattached(..., false, standId)`, with no `origRev`. In
-ghost-rake mode the train at that point is the *hidden* rake: the coaches are in
-reverse order, turned, and painted the hide colour. That restore keeps all of
-that. The train leaves with coaches that are invisible (or teal, if the mod is
-later removed), back to front, and with their own paint lost.
+The train ends up correct, because the recouple uses the real stand-in, but the
+run looks broken. The check also happens too late: line 2328 runs inside the
+loco-copy callback, after the detach.
 
-**Fix:** in ghost-rake mode, restore with `buildRealRakeConfig(..., flipped = false)`,
-which already puts the coaches back in order with their paint.
+**Fix:** call `locateOnRoute` in `startRunAround` before the train is held, as
+the other preparation does. If the loco isn't on the route, skip the run with a
+log line ("not at the platform the route was planned from"). Optionally, plan
+one route per terminal later.
 
-**Fixed:** a failed loco copy now queues a run with no ghost, `restore = true`
-and phase `"finish"`. `finishRun` then restores the train the way it does at
-the end of any run: `recoupleRake` with `flipped = false` for the ghost rake, or
-the loco back where it was, facing as it did, otherwise. The retries from H3
-apply to it as well.
+#### N2. The pull assumes the route leaves forwards, away from the coaches — by reading
 
-### H3. A failed recouple leaves the train running on the stand-in — by reading
+The ghost rake's pull (`advanceGhost` lines 1242-1256 and 1302-1313, `advanceRake` settle)
+moves the coach copies towards their targets. The engine fixes that direction:
+the turned train's coaches sit a loco length towards where the loco was. The
+loco copy, meanwhile, moves `pullLen` along the **route**. Nothing checks that
+the route's first move goes the same way. The planner can start in either
+direction (`STATES`, `leg0`), so a route that first goes back past the train
+would make the loco copy drive into the coach copies during the pull. The
+`loco ghost N m from where it would be coupled` line would then read about
+2 × `pullLen`. `AGENTS.md` lists this as an assumption; there is no guard.
 
-If the final replace is refused (`recoupleRake`, lines 1924-1934, and `recouple`,
-1412-1430), the train is released as it is: a 1 kW invisible stand-in pulling
-(in ghost-rake mode) hidden, hide-coloured coaches. The loco copy is left
-standing where it stopped. This is deliberate ("the ghost is the only copy of the
-loco"), but the train is effectively broken and the player has no way to recover
+**Fix:** at settle, compare the route's initial direction at the ghost's start
+(`pos` minus the loco position, after its first steps) with the coaches' shift
+(`target - start`). If they point opposite ways, skip the pull: set stage
+`"done"`, and the copies take their places at the uncouple, the old jump. Log
 it.
 
-**Fix:** retry the replace a few times. If it still fails, keep the train held
-and say so on the run-around card, rather than releasing a broken train.
+#### N3. Under another mod ID, the train-window card doesn't load — by reading
 
-**Fixed:** `recoupleFailed` keeps the train held and puts the run back with
-phase `"retry"`. It is retried `recoupleRetries` times, `recoupleRetrySeconds`
-apart, then goes to phase `"stuck"` and is retried every `stuckRetrySeconds`.
-The card shows "Stuck" with a warning icon. Selling the train ends it, through
-`finishRun`.
+M3's fix stops `ghost_build` touching trains when the mod is loaded under an
+unexpected ID, and the review said "the run-around still works". Two more
+hard-coded references undo part of that claim:
 
-### H4. No watchdog: a stalled run holds the train for ever — by reading
+- `runaround_vehicle.res.lua` has `filePath = "runaround_helper_1::/res/scripts/runaround_gui.script@..."`.
+  Under another ID the card doesn't load, so no run-around can be set up or
+  edited.
+- `runaround_gui.script.lua:57` looks the game script up as
+  `runaround_helper_1::/res/scripts/runaround.gs` first, though it falls back
+  to `"runaround"`.
 
-Every stage waits for a command callback (`busy` flags in `advanceRake` and
-`advanceLayout`, `flipSent`, the settle tick counts). If a callback never arrives,
-or a stage never reaches its exit condition, the train stays held (manual
-departure plus stopped-by-user) indefinitely, and nothing tells the player.
-Examples: a vehicle deleted while `busy`, or a route the ghost can't finish.
+Existing run-arounds in a save still run. Nothing breaks, but the mod is
+unusable for new set-ups. The tests' mod-ID check passes because these use the
+same ID; it guards consistency, not this case.
 
-**Fix:** record a start time per run. After a generous limit (for example
-route length ÷ speed × 3 + 60 s), put the real train back with
-`buildRealRakeConfig` or the plain restore, destroy every copy and release the
-train, with a log line.
+**Fix:** make the `SKIPPED` log line and the README say so: "the run-around card
+won't appear". Whether a `.res.lua` `filePath` can be written relatively (like
+`runaround.gs.lua`'s `res/scripts/...`) is untested. Try it in a live test
+before relying on it.
 
-**Fixed:** `watchdog(run, dt)` runs every tick before `advanceGhost`. It
-accumulates game time in `run.age` and works out `run.timeLimit` lazily, so runs
-in old saves get one too. It sends a run to `"finish"` with `aborted = true`
-once the limit passes, or at once if the train has gone. The settings are
-`watchdogFactor` and `watchdogExtraSeconds`. `updateRun` ignores aborted runs,
-and the creep and rake `done()` callbacks only hold the train again if a live
-run was found, so a late callback can't hold a train that has been released.
+#### N4. A missing stock sound function would raise errors on every train — by reading
 
----
+`ghost_real.script.lua:24-34` looks up the game's `soundset_default.script.tl`,
+with `util.useFn` as a fallback. If both fail, `baseUpdateSoundSet` is nil.
+`updateSoundSet` (line 234) then calls nil for **every patched vehicle, every
+frame**: an error stream and no train sound anywhere. Today the file exists
+(**checked**: `base/content/scripts.zip`), so this only matters after a game
+update moves or renames it. That is exactly M2's risk, but louder.
 
-## Medium
+**Fix:** if `baseUpdateSoundSet` is nil, return without doing anything (silence)
+and print one line at load. Better still, `ghost_build` could check it too and
+not patch sound sets at all, but it runs in another scope, so the check would
+have to be repeated there.
 
-### M1. Models are identified by file name only — by reading; checked for base game
+### Low
 
-`ghost_build.script.lua` names its markers and copies
-`runaround_ghost_real/<file>.mdl` and `runaround_ghost_dyn/<file>.mdl`, using
-the model's file name without its folder. `addGhostModel` returns early when that
-name already exists (line 132). `realModelReady` and `findGhostModelId` look
-models up by the same file name.
+- **`releaseTrain` isn't guarded** (line 1379). Its first command is sent
+  outside `pcall`, unlike the second. In `verifyRun` → `finalizeRun`, a train
+  deleted during the four verify ticks would make the command maker throw
+  inside a callback. `holdTrain` has the same shape. Wrap both like the
+  stopped-by-user line.
+- **The progress bar stops short on routes with reversals.** `routeLength`
+  (line 1012) counts every route piece in full, so a reversal piece counts
+  twice. The ghost only drives `CLEAR_M` (10 m) into a reversal piece, and
+  starts part-way along the route (`locateOnRoute`). The card's bar
+  (`gdist / routeLength`, GUI line 389) then reaches maybe 60-80% and jumps to
+  100% at "Coupling on". The watchdog limit also uses `routeLength`, where
+  overestimating is harmless. **Fix:** record the length actually driven while
+  planning (reversal pieces as `2 × CLEAR_M`), and use that for the bar.
+- **The GUI's numbers are trusted.** `SetLoopNumberField` stores `speed` and
+  `accel` unchecked. The sliders bound them (10-100 km/h, 0.5-4 m/s²), but a
+  command from the console or another mod could set 0, and the ghost would
+  never move until the watchdog stepped in. Clamp them in the handler.
+- **Stale comments.**
+  - Line 1423, "Puts the real loco back. attachAtRear/why say where", is a
+    leftover above `traceNow`.
+  - `runaround_vehicle.res.lua` mentions `runaround_button.res.lua`, a "capture
+    edge" action and a "dev-console fallback in the GUI header", none of which
+    exist any more.
+  - `captureLocoTransform`'s "ASSUMES ... verify this the first time you run
+    it" was verified long ago (live runs start where the loco stood).
+- **Repeated carriage reads.** `getComponent(c, MODEL_INSTANCE_LIST).fatInstances[1].transf`
+  appears 11 times in `runaround.script.lua` (`carriagePos`, `carriageFrames`,
+  `headDirection`, `chooseAttachEnd`, `traceNow`, `verifyRun`, ...). One
+  `carriageTransf(c)` helper would do. There are also three copies of the
+  `[RunAroundHelper]` log function, one per script, which is unavoidable while
+  they run in separate scopes (see below).
+- **A run strategy reachable only by settings.** `reverseBeforeRecouple = false`
+  leads to `chooseAttachEnd` and the no-flip recouple. It isn't the default, was
+  last used live before the flip was added, and no test covers it. Either test
+  it or remove it, together with the setting.
+- **Speed and acceleration in the run's own copy.** A run keeps the loop as it
+  was at the start (`run.loop`), so changing the speed or route mid-run has no
+  effect until the next arrival. That's reasonable, but worth one line in the
+  README.
 
-Two mods that both ship, say, `.../foo/loco.mdl` collide. Whichever loads second
-gets no copy of its own, and the marker can say "ready" for a model that was
-never patched. Using an unpatched model as a free entity is the
-`attempt to index local 'vehicleInfo'` error, raised every frame.
+### Checked and fine
 
-The base game and DLC have no duplicate vehicle file names (checked), so this
-only happens with mods.
-
-**Fix:** key the markers and copies by the full model path (escaped), or by a
-hash of it.
-
-**Fixed, without the full-path key:** keying by full model name would need
-`getAll` to give the same name at load and in the game script. That isn't
-shown: the API docs only say resources are static after start, and the test
-mocks list added models with a prefix they weren't added with. The file name
-*is* shown to match, since the lookup by file name works live. So the names
-stay by file name, and `ghost_build` first counts the rail vehicles per file
-name. Any rail vehicle whose file name is shared gets no marker and no copy,
-and isn't patched. It's left exactly as it was, and the run-around gives it the
-generic ghost (its coaches use the creep). A marker named `<file>.mdl`
-therefore belongs to exactly one rail vehicle, and resources don't change after
-start. The load summary counts them ("N left alone (file name shared)").
-`test_build.lua` covers it. The plain shipped copies (`runaround_ghost/`) are
-still matched by file name; they are a last-resort look-alike.
-
-### M2. The mod replaces every rail vehicle's scripts — by reading
-
-At load, every loco, coach and wagon is pointed at the mod's transformator and
-sound wrappers (`ghost_build`, `patchLoco`). Three consequences:
-
-- A bug in `ghost_real.script.lua` affects every train in the game, not only
-  ones running around.
-- `stockTrainUpdate` and the 15 files in `res/audio/ghostwrap/` are copies of
-  the game's own. When Urban Games changes those, the copies go out of date
-  silently. Regenerate them after game updates: see `dev/tools/gen_snd.py`.
-- Another mod that also changes vehicle transformators or sound sets conflicts
-  with this one; whichever loads last wins.
-
-`PATCH_LOCOS = false` turns the patching off.
-
-### M3. The mod ID is hard-coded in generated files — by reading
-
-`res/models/runaround_ghost/real*.trf.lua` and all 15 `ghostwrap/*.snd.lua`
-reference `runaround_helper_1::/res/scripts/ghost_real.script@...`. If a mod.io
-install ends up with a different mod ID or folder, every patched vehicle's
-transformator and sound script fails to resolve, which would affect every train.
-`ghost_build` already works out its own ID with `getCurrentModId()`, but these
-files can't. Check this on the first mod.io install, before announcing it.
-
-**Fixed (made safe):** the game takes a mod's ID from its `mod.json`, which
-ships with it. The staging folder is `runaround_helper` and the ID
-`runaround_helper_1` resolves live, and Urban Games' own DLC hard-codes its ID
-the same way (`urbangames_deluxe_upgrade_pack::/...`). So the hard-coded ID is
-kept. `resolve()` would avoid it, but the base game only calls it in GUI and
-construction resources, never in a `.trf` or `.snd`, so relying on it there
-untested could break every train. Instead:
-
-- `ghost_build` compares `getCurrentModId()` with `MOD_ID`. If they differ, it
-  patches nothing, logs `loco setup: SKIPPED ...` and returns. The run-around
-  then uses the plain shipped copies, which don't reference the wrappers, and
-  the creep. A mismatched install loses a feature but can't break the game's
-  trains.
-- `dev/run_tests.sh` fails if any `<id>::` path in the shipped files, or
-  `MOD_ID`, differs from `mod.json`'s `modId`. `gen_snd.py` reads it from
-  `mod.json`. `dev/tests/build/test_build.lua` covers both IDs.
-
-Still worth checking the first mod.io install's log for `SKIPPED`.
-
-### M4. Coach copies don't turn on curves — by reading
-
-The copies are placed with `rotZTransl(c.start.yaw, ...)` throughout
-(lines 1857-1859, 2117). On a curved platform the train draws forward along the
-curve, but each copy keeps its starting angle. Afterwards the copies sit at a
-slightly different angle from the hidden real coaches beneath them, so any
-bogie that still shows won't line up.
-
-The copies also move along the straight line between start and target, while
-the loco copy follows the track. On a tight curve the coupled train therefore
-separates a little during the pull.
-
-**Fix:** interpolate the angle from `c.start.yaw` to `c.target.yaw` (the shortest
-way round) together with the position.
-
-**Fixed (both parts):** `pullFrame` moves each copy along a cubic Hermite curve.
-The curve leaves the start along the start's axis and arrives along the
-target's, with tangents scaled by the chord. The copy's yaw is the curve's
-direction, plus half a turn for a coach that faced backwards. On a 150 m radius
-curve the copy stays within 5 mm of the arc and 0.2 degrees of its direction
-(`test_curve.lua`). On straight track it's exactly the old straight line. Only
-the target's axis is used, since the hidden coach may face either way. An axis
-more than 45 degrees off the chord is ignored. The pull's log line gives the
-largest turn.
-
-### M5. Copies aren't checked against the coaches they're matched to — by reading
-
-`advanceRake`'s settle step (lines 1816-1828) pairs copies with hidden coaches by
-distance from the loco's old position. It only checks that the counts match. A
-`coachFrames[i].modelId == c.snap.modelId` check would catch a mismatch (for
-example from a wrong assumption about the flip) and fail safely, instead of
-loading a wagon's load onto the wrong copy.
-
-### M6. Hiding relies on an undocumented field — by reading
-
-`ghost_real.script.lua`'s `isHidden` reads `currentInfo.vehicle.color`.
-`VehicleScriptingInfo` in the game's type definitions has no `color` field. It
-works live (coach bodies did vanish), but it could disappear in a game update.
-`hiddenLoads` is also never cleared, which is small but grows over a long session.
-
-**Fixed (`hiddenLoads`):** a real carriage drawn normally again forgets its
-entry. The lookup only runs while something is hidden. The undocumented
-`color` field is still relied on.
-
-### M7. Saving, or removing the mod, mid-run — by reading
-
-Runs are kept in the script state, so they continue after a reload. Whether the
-game saves the free entities (the copies) is unknown. If the mod is removed while
-a run is in progress, the train is left with the stand-in and with coaches
-painted the hide colour, which shows as teal because the hiding wrapper is gone.
-Untested.
-
-### M8. Only a loco at the front of the train gets the smooth sequence — by reading
-
-The ghost rake and the creep both require `locoIdx == 1`. A loco elsewhere (for
-example, propelling from the rear, or chosen manually) falls back to the old
-method, where the coaches jump at the flip. (The README now says so, under
-"Tips and limitations".)
+- **Watchdog ages** use game `dt`, so they scale with game speed, like the
+  ghost.
+- **A restore run with the creep active** (H2's path) goes straight to
+  `finishRun`. `advanceLayout` isn't called once a run is in `finishes`, and
+  `buildConfigWithLocoReattached` removes both creep stand-ins.
+- **A recouple retry after the train is sold:** `finishRun`'s `tv == nil` branch
+  clears every ghost.
+- **Late callbacks after the watchdog:** `updateRun` skips aborted runs, and the
+  `done()` callbacks only re-hold a live run (`test_failures.lua`).
+- **Both copied transformators** match the game's current ones (see M2 above).
 
 ---
 
-## Low
+## Structure: one file or several?
 
-- **Leftover code.** `AddLoopFromVehicle`, `AddLoopEdgeFromVehicle` and
-  `readVehicleCurrentEdge` (lines 2235-2307, 2313-2339, 2389-2404) are never sent
-  by the current GUI. `noDepartNow` (line 1404) is never set any more.
-  `buildConfigWithStandIn`'s `addTail` is always false. **Fixed:** all removed,
-  along with `noFlip` (set, never read), `hasTail`, and `edgeGeometry` in the GUI
-  (unused).
-- **Out-of-date comments.** **Fixed.**
-  - The header (steps 3-4) describes the old glide.
-  - `creepLayout` says "1 m steps"; the step is 0.25 m.
-  - `carriageLength` says metadata can't be read here; `modelLength` now reads
-    it.
-- **`isStandIn`** scans all 176 stand-in IDs on every call, and it's called in
-  loops. Invert the map once. **Fixed:** `standInLength` (id to length);
-  `readStandInPosition` uses it too.
-- **Route planning cost.** A click with no direct route can mean up to
-  100 candidates × 2 pathfinder calls, per leg and direction pair, with
-  `estimateEdgeLength` recomputed each time. On a dense network this may cause a
-  hitch on click. Cache the edge lengths.
-- **Run-around card.** The pull and uncouple stages show as "Running around",
-  and the progress bar counts the pull distance as route distance. **Fixed:** the
-  card says "Turning the train", "Drawing forward" and "Uncoupling". The pull
-  runs along the route's first piece, so counting it as route distance is right.
-- **`LOG_TRACES = true`** by default is useful during the alpha but noisy;
-  turn it off for a non-alpha release.
-- **Light engine.** A train that's only a loco "runs around" nothing, through the
-  plain path. Harmless, but pointless: skip it. **Fixed:** skipped, with a log line.
-- **Found while tidying.** `_content.json`, the file list the game reads (the DLCs
-  ship one too), was missing the 176 stand-in icons, which may be why the icon
-  warnings persisted. It is now generated (`dev/tools/gen_content.py`), and the
-  tests fail when it's out of date. The stand-ins' player-visible description
-  still said "Run Around Helper". `gen_snd.py` also used the old name.
+### What there is now
+
+Four scripts, and they are split the way TpF3 requires. Each one runs in a
+**different scope** and can't share code with the others at run time:
+
+| Script | Scope | Lines |
+|---|---|---|
+| `ghost_build.script.lua` | load time (`postRunScript`) | 225 |
+| `runaround.script.lua` | game script (`.gs.lua`) | 2655 |
+| `runaround_gui.script.lua` | GUI (`react-plugin`) | 583 |
+| `ghost_real.script.lua` | transformator and sound, every rail vehicle, every frame | 264 |
+
+That part is right and should stay. The question is
+`runaround.script.lua`. At 2655 lines it holds about eight separate concerns:
+
+| Concern | Lines (approx.) | Depends on |
+|---|---|---|
+| settings, logging, loop lookup | 30-180 | — |
+| consists: snapshots, load configs, stand-ins, `build*Config`, model lookup | 180-600 | settings |
+| route planning: pathfinder legs, reversal search, `planRoute`, `locateOnRoute` | 600-1060 | geometry helpers only |
+| ghost motion: segments, ghost state, `advanceGhost`, approach | 440-480, 1090-1370 | route, settings |
+| run lifecycle: hold, release, recouple, retries, watchdog, finish, verify | 1370-1770 | consists, ghost |
+| creep | 510-530, 1580-1690 | consists, lifecycle |
+| ghost rake: hidden consist, `pullFrame`, `advanceRake`, `recoupleRake` | 1770-2075 | consists, lifecycle |
+| start-up, GUI commands, entry points | 2075-2655 | everything |
+
+### Recommendation
+
+**Yes, split it, but only after one live check, and not before the alpha
+feedback is in.**
+
+Why split:
+
+- **Route planning** (about 450 lines) is self-contained: it needs only the
+  pathfinder and edge geometry, and its tests (`test_plan3.lua`,
+  `test_locate.lua`) already treat it as a unit. It's the clearest module.
+- **Consist building** (about 400 lines) is the other clean unit. It's pure
+  apart from `api.type` constructors, and both the creep and the rake use it.
+- The rest would read better as lifecycle, ghost, rake and creep files. There,
+  the boundaries follow how a run proceeds.
+- The tests reach internal functions by appending
+  `return {startRunAround = startRunAround, ...}` to the file's text. Modules
+  with real exports would make that explicit, and less fragile.
+
+Why not yet:
+
+- **Loading a mod's own module is unproven.** The base game splits its game
+  scripts (`company.script.tl` uses `company.tl`, `company_legacy_util.tl`) and
+  loads them with `ug_require "::/..."` or `"/..."`. But `::/` means the base
+  game, and the DLC (**checked**) never loads a module of its own: every DLC
+  script is self-contained. For this mod, the working form would be either
+  `ug_require "runaround_helper_1::/res/scripts/runaround/route.lua"` (yet
+  another hard-coded ID, see M3/N3), or `"/res/scripts/..."`, whose meaning
+  inside a mod is unknown. A failed require at start-up would stop the whole
+  game script.
+- **Dependency cycles have to be untangled.** `finishRun` calls `recoupleRake`,
+  which calls `recoupleFailed` and `finalizeRun`, which belong to the lifecycle.
+  `recoupleRake` is forward-declared today. Modules would need the lifecycle
+  functions passed in, or one shared `run` module. That's not hard, but every
+  call path changes.
+- **Players see no benefit, and there's a load-time risk**, while the alpha's
+  live tests are still pending.
+
+### How to do it safely
+
+1. **Live probe.** Add a one-line module, say
+   `res/scripts/runaround/probe.lua` returning `{ ok = true }`, and
+   `ug_require` it from the game script in both path forms, logging which one
+   works. Note the result in the README's engine findings. Prefer a form
+   without the mod ID.
+2. **Move route planning first**, unchanged. Its tests switch from text-append
+   to the module's exports. The test harness would need a `ug_require` that
+   reads from `res/scripts/`.
+3. **Move consist building next.**
+4. Only then the run parts, with `CONFIG` and `logInfo` in a small shared module
+   (`runaround/common.lua`). Keep `CONFIG` easy to find, since the README sends
+   tinkerers to it.
+
+Keep `ghost_real.script.lua` exactly as one small file. It runs for every rail
+vehicle in the game every frame, so it should stay minimal and depend on as
+little as possible.
 
 ---
 
 ## What's solid
 
-- The engine rules the mod depends on are written down where they're used and
+- The engine rules the mod depends on are written down where they're used, and
   were traced live: replace keeps the middle fixed, flip mirrors, positions lag,
   a flip releases the hold.
-- Everything that can fail before the train is held is prepared first
-  (`startRunAround`, "can't leave it stuck at the station").
+- Everything that can fail before the train is held is prepared first. N1 is
+  the one check that still happens too late.
+- Every failure path ends in one place, `finishRun`, which puts the real train
+  back. The watchdog makes sure every run gets there.
 - Vehicle configs are always built from real game objects, with load configs
-  matched to each model's compartments, which avoids the asserts the game
-  enforces.
+  matched to each model's compartments.
 - Facing comes from start geometry, not from carriage positions, which lag after
   a flip.
-- The offline suite (`dev/run_tests.sh`) covers planning, detach, creep, the
-  ghost rake (start, pull, uncouple, recouple), facing, wheels, hiding and the
-  GUI, plus a check for stray global reads (the class of bug that crashed live).
+- The offline suite covers planning, detach, creep, the ghost rake (start, pull,
+  curve, uncouple, recouple), every failure path, facing, wheels, hiding, the
+  load script, the GUI, mod-ID consistency, the file list, and stray global
+  reads.
 
 ## Suggested order
 
-1. ~~H1-H4~~ (done).
-2. ~~M3~~ (done; check the first mod.io install's log).
-3. ~~M1 and M4~~ (done; waiting for a live test).
-4. Remaining low items: route-planning cost, `LOG_TRACES` off for a non-alpha
-   release.
+1. **N1 and N2.** Both are cheap guards on the start of a run, and both
+   unusual set-ups are likely to come up in alpha feedback.
+2. **N4 and the `releaseTrain` guard.** Small robustness fixes.
+3. **N3.** Update the `SKIPPED` message and the README now; try a relative
+   `filePath` in a live test.
+4. **M5.** Check copies against their coaches' models.
+5. The low items as tidying.
+6. The module split, after the live probe and the alpha feedback.
+7. Later: route-planning cost, `LOG_TRACES` off for a non-alpha release, M7
+   (test a save and a mod removal mid-run).

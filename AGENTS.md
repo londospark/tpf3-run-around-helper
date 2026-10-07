@@ -183,8 +183,12 @@ These were just changed and pass offline, but haven't been seen in game:
 
 ### Bugs found in review
 
-H1-H4, M1, M3, M4 and most low items in `CODE_REVIEW.md` are fixed. Still open:
-M2, M5, M6 (the undocumented `color` field), M7, M8, route-planning cost.
+`CODE_REVIEW.md` has two reviews. From the first, H1-H4, M1, M3, M4 and most
+low items are fixed; M2, M5-M8 and the route-planning cost are open. The second
+review (at `4230bc1`) adds N1-N4: alternative platforms, a route that starts
+backwards, the card under another mod ID, and a missing stock sound function. It
+also recommends splitting `runaround.script.lua` into modules, but only after a
+live probe of how a mod `ug_require`s its own files (see "Structure" there).
 
 On the first mod.io install, check the log for `loco setup: SKIPPED`. If it's
 there, the game loaded the mod under a different ID from `mod.json`'s (see M3).

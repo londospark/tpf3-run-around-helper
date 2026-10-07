@@ -369,21 +369,12 @@ local function modelLength(modelId)
 	return len
 end
 
--- The name a loco's marker and ghost copy are filed under: its full model name
--- (folders and mod prefix included, so two mods' "loco.mdl" don't collide), with
--- every character but letters and digits written as _xx (hex), which keeps it
--- unique and a plain file name. ghost_build.script.lua and runaround.script.lua
--- each have this function; they must stay the same (dev/tests check).
-local function modelKey(modelName)
-	return (string.gsub(modelName, "[^%w]", function(ch) return string.format("_%02x", string.byte(ch)) end))
-end
-
 -- Ghost copies, used when the loco's own model cannot be: first the copy built at
 -- load time from the loco itself (runaround_ghost_dyn/, with its smoke and sound),
 -- then the plain silent copy of a base-game loco shipped with the mod
 -- (runaround_ghost/), then a base-game loco of the same engine type.
-local ghostIdsByFile = nil    -- plain shipped copies, by base-game file name
-local dynGhostIdsByKey = nil  -- copies built at load, by modelKey of the loco's name
+local ghostIdsByFile = nil
+local dynGhostIdsByFile = nil
 local GHOST_FALLBACK = { STEAM = "mogul_2_6_0.mdl", ELECTRIC = "br_e94.mdl", DIESEL = "alco_hh600.mdl" }
 -- Returns the ghost's model id and whether it is an effects ghost (smoke and
 -- sound driven by the ghost's state, built at load time from the loco's own
@@ -392,12 +383,11 @@ local function findGhostModelId(locoModelId)
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then return nil end
 	if ghostIdsByFile == nil then
-		ghostIdsByFile, dynGhostIdsByKey = {}, {}
+		ghostIdsByFile, dynGhostIdsByFile = {}, {}
 		for id, name in pairs(all) do
 			if type(name) == "string" then
-				local key = string.match(name, "runaround_ghost_dyn/([%w_]+)%.mdl$")
-				if key ~= nil then
-					dynGhostIdsByKey[key] = id
+				if string.find(name, "runaround_ghost_dyn/", 1, true) then
+					dynGhostIdsByFile[string.match(name, "([^/]+)%.mdl$") or name] = id
 				elseif string.find(name, "runaround_ghost/", 1, true) then
 					ghostIdsByFile[string.match(name, "([^/]+)$")] = id
 				end
@@ -406,10 +396,10 @@ local function findGhostModelId(locoModelId)
 	end
 	local locoName = all[locoModelId]
 	local file = type(locoName) == "string" and string.match(locoName, "([^/]+)$") or nil
-	local key = type(locoName) == "string" and modelKey(locoName) or nil
-	if CONFIG.useEffectGhosts and key ~= nil and dynGhostIdsByKey[key] ~= nil then
+	local base = file and string.match(file, "^(.*)%.mdl$") or nil
+	if CONFIG.useEffectGhosts and base ~= nil and dynGhostIdsByFile[base] ~= nil then
 		logInfo("ghost model: effects ghost (smoke and sound) for", locoName)
-		return dynGhostIdsByKey[key], true
+		return dynGhostIdsByFile[base], true
 	end
 	if file ~= nil and ghostIdsByFile[file] ~= nil then
 		logInfo("ghost model: plain ghost (no effects) for", locoName)
@@ -426,23 +416,24 @@ end
 -- transformator must already point at the wrappers (ghost_build.script.lua does
 -- that at load). If not, using it would raise Lua errors every frame ("attempt to
 -- index local 'vehicleInfo'").
-local realMarkers = nil -- set of modelKeys with a marker (the models do not change once loaded)
+local realMarkers = nil -- set of model file names with a marker (the models do not change once loaded)
 local function realModelReady(locoModelId)
 	-- Model metadata cannot be read from a game script, so ghost_build.script.lua
-	-- leaves a marker model, "runaround_ghost_real/<key>.mdl", for every loco whose
+	-- leaves a marker model, "runaround_ghost_real/<file>.mdl", for every loco whose
 	-- sound set and transformator it has wrapped.
 	local okAll, all = pcall(api.res.modelRep.getAll, true)
 	if not okAll or all == nil then return false, "models not listable" end
 	local locoName = all[locoModelId]
-	if type(locoName) ~= "string" then return false, "model name unknown" end
+	local base = type(locoName) == "string" and string.match(locoName, "([^/]+)%.mdl$") or nil
+	if base == nil then return false, "model name unknown" end
 	if realMarkers == nil then
 		realMarkers = {}
 		for _, name in pairs(all) do
-			local marked = type(name) == "string" and string.match(name, "runaround_ghost_real/([%w_]+)%.mdl$")
+			local marked = type(name) == "string" and string.match(name, "runaround_ghost_real/(.+)%.mdl$")
 			if marked then realMarkers[marked] = true end
 		end
 	end
-	if realMarkers[modelKey(locoName)] then return true end
+	if realMarkers[base] then return true end
 	return false, "its sound set or transformator was not wrapped at load"
 end
 

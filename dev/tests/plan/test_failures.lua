@@ -8,10 +8,9 @@ local names = {}
 local id = 5000
 for cm = 25, 4400, 25 do names[id] = "m::/res/models/runaround_standin/standin_cm" .. cm .. ".mdl"; STAND[id] = cm / 100; id = id + 1 end
 names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; names[8] = "vehicle/waggon/boxcar.mdl"
-local function key(n) return (n:gsub("[^%w]", function(ch) return string.format("_%02x", ch:byte()) end)) end
-names[9000] = "m::/res/models/runaround_ghost_real/" .. key("vehicle/train/loco.mdl") .. ".mdl"
-names[9001] = "m::/res/models/runaround_ghost_real/" .. key("vehicle/waggon/coach.mdl") .. ".mdl"
-names[9002] = "m::/res/models/runaround_ghost_real/" .. key("vehicle/waggon/boxcar.mdl") .. ".mdl"
+names[9000] = "m::/res/models/runaround_ghost_real/loco.mdl"
+names[9001] = "m::/res/models/runaround_ghost_real/coach.mdl"
+names[9002] = "m::/res/models/runaround_ghost_real/boxcar.mdl"
 local MODEL_LEN = { [4225] = 12.8, [7] = 23.4, [8] = 20.0 }
 local HIDE = 0.1234567
 local function lenOf(mid) return STAND[mid] or MODEL_LEN[mid] end

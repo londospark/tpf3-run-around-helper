@@ -18,11 +18,19 @@
 --    copies are shipped as files, generated from the game's own.)
 --
 -- A loco for which both went through is marked with a marker model,
--- "runaround_ghost_real/<key>.mdl", which the run-around script looks for (a game
+-- "runaround_ghost_real/<file>.mdl", which the run-around script looks for (a game
 -- script cannot read model metadata). For every loco a ghost COPY is also built,
--- "runaround_ghost_dyn/<key>.mdl" (its meshes, particles, the wrapped sound set if
+-- "runaround_ghost_dyn/<file>.mdl" (its meshes, particles, the wrapped sound set if
 -- there is one, and the wrapped transformator), used when the loco's own model
 -- cannot be: e.g. a modded loco with its own sound set or transformator script.
+--
+-- Markers and copies are named by the model's FILE name, because that is what is
+-- known to match between here and the game script (the run-around looks them up
+-- by the file name of a train's loco, which works live; whether full model names
+-- read the same in both places has not been shown). So a file name that two or
+-- more rail vehicles share (two mods' "loco.mdl", say) would be ambiguous: those
+-- vehicles are left exactly as they are, with no marker and no copy, and the
+-- run-around gives them the generic ghost (and their coaches the creep).
 --
 -- Everything is wrapped in pcall: a loco the game will not let us change is left
 -- exactly as it was.
@@ -62,15 +70,6 @@ local function log(...)
 	local parts = {}
 	for i = 1, select("#", ...) do parts[i] = tostring(select(i, ...)) end
 	print("[RunAroundHelper] " .. table.concat(parts, " "))
-end
-
--- The name a loco's marker and ghost copy are filed under: its full model name
--- (folders and mod prefix included, so two mods' "loco.mdl" don't collide), with
--- every character but letters and digits written as _xx (hex), which keeps it
--- unique and a plain file name. ghost_build.script.lua and runaround.script.lua
--- each have this function; they must stay the same (dev/tests check).
-local function modelKey(modelName)
-	return (string.gsub(modelName, "[^%w]", function(ch) return string.format("_%02x", string.byte(ch)) end))
 end
 
 local function clone(v)
@@ -183,28 +182,40 @@ mod.postRunFn = function(_configDict, _allModParams)
 		log("loco setup: could not list models -", tostring(all))
 		return
 	end
+	-- Every rail vehicle first, to find the file names that are shared.
+	local rail, perFile = {}, {}
 	for id, name in pairs(all) do
 		if type(name) == "string" and not string.find(name, "runaround_", 1, true) then
 			local ok, src = pcall(api.res.modelRep.getAsTable, id)
-			if ok and type(src) == "table" and string.find(name, "%.mdl$") and isRailVehicle(src.metadata) then
-				local key = modelKey(name)
-				stats.locos = stats.locos + 1
-				-- the copy is built from the unchanged metadata, before patching
-				if addGhostModel("runaround_ghost_dyn/" .. key .. ".mdl", src, name, true) then
-					stats.copies = stats.copies + 1
-				end
-				local ready = false
-				if PATCH_LOCOS then
-					local okP, res = pcall(patchLoco, id, name, clone(src))
-					ready = okP and res == true
-					if not okP then note(name, "error:", tostring(res)) end
-				end
-				if ready then addGhostModel("runaround_ghost_real/" .. key .. ".mdl", src, name, false) end
+			local file = string.match(name, "([^/]+)%.mdl$")
+			if ok and type(src) == "table" and file ~= nil and isRailVehicle(src.metadata) then
+				rail[#rail + 1] = { id = id, name = name, file = file, src = src }
+				perFile[file] = (perFile[file] or 0) + 1
 			end
 		end
 	end
-	log(string.format("loco setup: %d rail vehicles; %d can be their own ghost, %d partly wrapped, %d could not be changed; %d ghost copies built",
-		stats.locos, stats.patched, stats.partly, stats.failed, stats.copies))
+	local shared = 0
+	for _, v in ipairs(rail) do
+		stats.locos = stats.locos + 1
+		if perFile[v.file] > 1 then
+			shared = shared + 1
+			note(v.name, "shares its file name with", perFile[v.file] - 1, "other rail vehicle(s): left alone, the run-around uses the generic ghost")
+		else
+			-- the copy is built from the unchanged metadata, before patching
+			if addGhostModel("runaround_ghost_dyn/" .. v.file .. ".mdl", v.src, v.name, true) then
+				stats.copies = stats.copies + 1
+			end
+			local ready = false
+			if PATCH_LOCOS then
+				local okP, res = pcall(patchLoco, v.id, v.name, clone(v.src))
+				ready = okP and res == true
+				if not okP then note(v.name, "error:", tostring(res)) end
+			end
+			if ready then addGhostModel("runaround_ghost_real/" .. v.file .. ".mdl", v.src, v.name, false) end
+		end
+	end
+	log(string.format("loco setup: %d rail vehicles; %d can be their own ghost, %d partly wrapped, %d could not be changed, %d left alone (file name shared); %d ghost copies built",
+		stats.locos, stats.patched, stats.partly, stats.failed, shared, stats.copies))
 end
 
 -- A .script.lua file must define data() and return its functions from it

@@ -118,16 +118,19 @@ only happens with mods.
 **Fix:** key the markers and copies by the full model path (escaped), or by a
 hash of it.
 
-**Fixed:** both scripts file a loco's marker and copy under `modelKey(name)`:
-the full model name from `modelRep.getAll`, with every character but letters
-and digits written as `_xx` (hex). That keeps the key unique and a plain file
-name. `dev/tests/build/test_build.lua` checks that two mods' `loco.mdl` get one
-each, and that both scripts compute the same key. This relies on `getAll`
-giving the same name at load and in the game script. It's the same call in the
-same session, but waiting for a live test. The plain shipped copies
-(`runaround_ghost/<file>.mdl`, base-game locos only) are still found by file
-name. They are a last-resort look-alike, so a match by file name is what they
-are for.
+**Fixed, without the full-path key:** keying by full model name would need
+`getAll` to give the same name at load and in the game script. That isn't
+shown: the API docs only say resources are static after start, and the test
+mocks list added models with a prefix they weren't added with. The file name
+*is* shown to match, since the lookup by file name works live. So the names
+stay by file name, and `ghost_build` first counts the rail vehicles per file
+name. Any rail vehicle whose file name is shared gets no marker and no copy,
+and isn't patched. It's left exactly as it was, and the run-around gives it the
+generic ghost (its coaches use the creep). A marker named `<file>.mdl`
+therefore belongs to exactly one rail vehicle, and resources don't change after
+start. The load summary counts them ("N left alone (file name shared)").
+`test_build.lua` covers it. The plain shipped copies (`runaround_ghost/`) are
+still matched by file name; they are a last-resort look-alike.
 
 ### M2. The mod replaces every rail vehicle's scripts — by reading
 

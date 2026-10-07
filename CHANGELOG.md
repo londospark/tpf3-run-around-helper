@@ -28,7 +28,8 @@
 - On a curved platform, the coaches follow the curve as the train draws
   forward, instead of sliding straight.
 - Two mods with a loco of the same file name no longer get in each other's way:
-  each loco is prepared under its full name.
+  such locos are left untouched and run around as a generic copy, rather than
+  one taking the other's place.
 - Safe if installed under an unexpected mod ID: trains are then left untouched,
   and the run-around uses plain copies of the loco.
 - The invisible stand-ins have their icons registered and carry the mod's

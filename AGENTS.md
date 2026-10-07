@@ -168,10 +168,11 @@ These were just changed and pass offline, but haven't been seen in game:
 - **Failure handling (H1-H4)**, tested offline only (`test_failures.lua`): the
   restore after a failed start, recouple retries and "Stuck" on the card, the
   watchdog. None of these paths has been hit live.
-- **Markers and copies by full model name (M1).** If `getAll` gave different
-  names at load and in the game script, every loco would fall back to the plain
-  copies. The log would show `ghost model: the loco's own model cannot be used`
-  for base-game locos.
+- **Shared file names (M1):** the load summary now ends with
+  `N left alone (file name shared)`. It should be 0 with no other mods. Markers
+  and copies are still named by file name: that's proven live, while full names
+  are not shown to match between load and game script, so don't switch to them
+  without a live check.
 - **Coach copies follow a curved platform (M4)** during the pull. The log line
   `ghost rake: the train draws forward ... (coaches turn up to N degrees)` gives
   the turn. On a curve, check the copies line up with the hidden coaches when

@@ -28,14 +28,12 @@ api = {
     Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end }, Mat4f = { rotZTransl = function() return {} end } },
   cmd = { sendCommand = function() end, makeCustomEntityUpdateStateCmd = function() return {} end, makeCustomEntityUpdateTransformationCmd = function() return {} end },
 }
-local function key(n) return (n:gsub("[^%w]", function(ch) return string.format("_%02x", ch:byte()) end)) end
-local FULL = { loco = "vehicle/train/loco.mdl", coach = "vehicle/waggon/coach.mdl", boxcar = "vehicle/waggon/boxcar.mdl" }
 -- Drives startRunAround through the ghost-rake path with the mock above.
 local function run(markers)
   for k in pairs(names) do if string.find(names[k], "runaround_ghost_real/", 1, true) then names[k] = nil end end
   names[4225] = "vehicle/train/loco.mdl"; names[7] = "vehicle/waggon/coach.mdl"; names[8] = "vehicle/waggon/boxcar.mdl"
   local mid = 9000
-  for _, f in ipairs(markers) do names[mid] = "m::/res/models/runaround_ghost_real/" .. key(FULL[f]) .. ".mdl"; mid = mid + 1 end
+  for _, f in ipairs(markers) do names[mid] = "m::/res/models/runaround_ghost_real/" .. f .. ".mdl"; mid = mid + 1 end
   local pt = 0
   local function part(m) pt = pt + 1; return { part = { modelId = m, reversed = false, compartment2loadConfig = { {} }, color = { x = 0.1 * pt, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1000 + pt } end
   train.mid, train.dir = 0.0, -1

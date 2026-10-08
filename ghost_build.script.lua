@@ -309,8 +309,12 @@ local function lodPartsSpec(root, axleNames, fakes)
 		local a = byName[name]
 		if a ~= nil and a.at ~= nil then
 			place(a.parent, a.at[1])
-			if type(a.node.animations) ~= "table" or next(a.node.animations) == nil then
-				axles[#axles + 1] = { a.idx, math.min(math.max(a.at[3], 0.3), 1.5), math.cos(a.at[4]) < 0 and -1 or 1 }
+			local own = false -- an animation of its own (not one of ours, if the model is read again)
+			for name in pairs(type(a.node.animations) == "table" and a.node.animations or {}) do
+				if type(name) ~= "string" or string.sub(name, 1, 10) ~= "runaround_" then own = true end
+			end
+			if not own then
+				axles[#axles + 1] = { a.idx, math.min(math.max(a.at[3], 0.3), 1.5), math.cos(a.at[4]) < 0 and -1 or 1, rec = a }
 			end
 		end
 	end
@@ -334,15 +338,82 @@ local function lodPartsSpec(root, axleNames, fakes)
 			out[#out + 1] = v
 		end
 	end
-	for _, ax in ipairs(axles) do for _, v in ipairs(ax) do out[#out + 1] = v end end
+	for _, ax in ipairs(axles) do for i = 1, 3 do out[#out + 1] = ax[i] end end
 	if #order == 0 and #axles == 0 then return nil end
 	local parts = {}
 	for i, v in ipairs(out) do parts[i] = (math.floor(v) == v) and tostring(v) or string.format("%.4f", v) end
-	return table.concat(parts, " ")
+	-- the nodes, in the spec's order, for their animations (partsAtLoad)
+	local nodesOut = { groups = {}, axles = {} }
+	for _, p in ipairs(order) do nodesOut.groups[#nodesOut.groups + 1] = { node = p.rec.node, x = p.rec.model[1] } end
+	for _, ax in ipairs(axles) do nodesOut.axles[#nodesOut.axles + 1] = { node = ax.rec.node, x = ax.rec.at[1], z = ax.rec.at[3] } end
+	return table.concat(parts, " "), nodesOut
+end
+
+-- A free entity has no user transforms (seen live: none listed, writes do
+-- nothing), but its animations play (the driving wheels). So each part gets an
+-- animation of its own that only the copy plays: runaround_yawJ turns part J
+-- of the full-detail spec about its centre, -30 to +30 degrees over 0 to 6000
+-- ms; runaround_spinK turns axle K a full turn over 3600 ms. An animation
+-- applies on top of the node's rest transform (the game's wheel animations
+-- are pure rotations about the wheel). Lower levels of detail get the same
+-- names on the parts at the same place on the vehicle.
+local YAW_MAX, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 100, 10
+local function keyframes(n, step, ms, mat)
+	local k = {}
+	for i = 0, n do
+		local deg = (i * step)
+		k[#k + 1] = { time = i * step * ms, transf = mat(math.rad(deg)) }
+	end
+	return k
+end
+local function yawAnimation()
+	local k = {}
+	for i = 0, 2 * YAW_MAX do
+		local a = math.rad(i - YAW_MAX)
+		local c, s = math.cos(a), math.sin(a)
+		k[#k + 1] = { time = i * YAW_MS_PER_DEG, transf = { c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } }
+	end
+	return { type = "KEYFRAME_MATRIX", params = { keyframes = k } }
+end
+local function spinAnimation()
+	local k = keyframes(36, 10, SPIN_MS_PER_DEG, function(a)
+		local c, s = math.cos(a), math.sin(a)
+		return { c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1 }
+	end)
+	return { type = "KEYFRAME_MATRIX", params = { keyframes = k } }
+end
+local function addAnimation(node, name, ani)
+	if type(node.animations) ~= "table" then node.animations = {} end
+	node.animations[name] = ani
+end
+-- names from the first level's parts; other levels' parts matched by place
+local function animateParts(lodNodes)
+	local first = lodNodes[1]
+	if first == nil then return 0 end
+	local n = 0
+	for li, ln in ipairs(lodNodes) do
+		for j, g in ipairs(first.groups) do
+			for _, h in ipairs(ln.groups) do
+				if (li == 1 and h == g) or (li > 1 and math.abs(h.x - g.x) < 0.3) then
+					addAnimation(h.node, "runaround_yaw" .. j, yawAnimation()); n = n + 1
+					break
+				end
+			end
+		end
+		for k, a in ipairs(first.axles) do
+			for _, b in ipairs(ln.axles) do
+				if (li == 1 and b == a) or (li > 1 and math.abs(b.x - a.x) < 0.05 and math.abs(b.z - a.z) < 0.05) then
+					addAnimation(b.node, "runaround_spin" .. k, spinAnimation()); n = n + 1
+					break
+				end
+			end
+		end
+	end
+	return n
 end
 -- runaround_partsN strings for a rail vehicle model; {} when there is nothing to place
-local function partsSpecs(src)
-	local out = {}
+local function partsSpecs(src, animate)
+	local out, lodNodes = {}, {}
 	local rv = src.metadata and src.metadata.railVehicle
 	if type(rv) ~= "table" or type(src.lods) ~= "table" then return out end
 	for li, lod in ipairs(src.lods) do
@@ -353,16 +424,20 @@ local function partsSpecs(src)
 			local fakes = cfg.fakeBogies
 			local flat = type(fakes) == "table" and type(fakes[1]) == "table" and fakes[1].group ~= nil
 			local f = flat and fakes or (type(fakes) == "table" and type(rv.configs) ~= "table" and fakes[li]) or nil
-			local ok, spec = pcall(lodPartsSpec, lod.node, cfg.axles, f)
-			if ok and spec ~= nil then out[#out + 1] = spec end
+			local ok, spec, nodes = pcall(lodPartsSpec, lod.node, cfg.axles, f)
+			if ok and spec ~= nil then
+				out[#out + 1] = spec
+				lodNodes[#lodNodes + 1] = nodes
+			end
 		end
 	end
+	if animate then pcall(animateParts, lodNodes) end
 	return out
 end
 local partsLogged = 0
 local function addPartsParams(tc, src, modelName)
 	if type(tc) ~= "table" then return end
-	local ok, specs = pcall(partsSpecs, src)
+	local ok, specs = pcall(partsSpecs, src, true)
 	-- (logged for the first steam locos: what the game handed over, and what came of it)
 	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
 	if partsLogged < 3 and type(snd) == "string" and string.find(snd, "steam", 1, true) then

@@ -308,6 +308,19 @@ Offline-tested only:
   driving wheels show; *devers* adds its roll the same way): a uniquely named
   yaw animation on each placed part and a spin on each small axle, added in
   `partsAtLoad`, played only by the copy.
+  **Done (2026-10-08):** `animateParts` adds `runaround_yawJ` (KEYFRAME_MATRIX,
+  -30..30 degrees over 0..6000 ms) to each placed part and `runaround_spinK`
+  (a turn over 3600 ms) to each small axle, J/K in the full-detail spec's
+  order, lower levels matched by place. `ghost_real.placeParts` plays them
+  (log: `loco copy parts: turning N part(s) and M axle(s) by animation`); no
+  more user-transform writes or index measuring. An animation applies on top
+  of the node's rest transform (the game's wheel .ani files are pure
+  rotations about the wheel). **Risk to check live:** the real models carry
+  these animations too (never played). If the engine stops placing an
+  animated part or turning an animated axle, real trains' tenders/bogies
+  would go rigid in normal running: check a real Su or Black 5 on a curve,
+  and with *devers* off the PROBE lines should still list the tender and
+  the small axles as moved.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

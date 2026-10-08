@@ -42,6 +42,17 @@ local loaded = partsAtLoad("loco.mdl", { metadata = { railVehicle = model.metada
   transformatorConfig = { transformator = { name = "::/vehicle/train/shared/default_train.trf" }, params = { other = 1 } } }, lods = model.lods })
 local p = loaded.metadata.transformatorConfig.params
 assert(p.runaround_parts1 == specs[1] and p.runaround_parts2 == specs[2] and p.other == 1, "at load: specs added, other params kept")
+-- the parts got their animations, named after the full-detail spec's order
+-- (1 body, 2 pony, 3 tender; axles 1 pony, 2-3 tender), the far tender by place
+local L1, L2 = model.lods[1].node, model.lods[2].node
+local body, pony, tender = L1.children[1], L1.children[1].children[1], L1.children[2]
+assert(body.animations.runaround_yaw1 and pony.animations.runaround_yaw2 and tender.animations.runaround_yaw3, "yaw animations on the parts")
+local kf = tender.animations.runaround_yaw3.params.keyframes
+assert(tender.animations.runaround_yaw3.type == "KEYFRAME_MATRIX" and #kf == 61 and kf[1].time == 0 and kf[61].time == 6000, "-30..30 degrees over 0..6000 ms")
+assert(math.abs(kf[31].transf[1] - 1) < 1e-9 and math.abs(kf[61].transf[2] - math.sin(math.rad(30))) < 1e-9, "a turn about z")
+assert(pony.children[1].animations.runaround_spin1 and tender.children[1].animations.runaround_spin2 and tender.children[2].animations.runaround_spin3, "spin on the small axles")
+assert(not body.children[2].animations.runaround_spin1 and body.children[2].animations.wheels, "the driving wheel keeps only its own")
+assert(L2.children[2].animations.runaround_yaw3 and not (L2.children[1].animations or {}).runaround_yaw1, "far tender matched by place")
 -- no transformator declared: the game's default one, as the game would add it
 loaded = partsAtLoad("loco2.mdl", { metadata = { railVehicle = model.metadata.railVehicle, transportVehicle = { carrier = "RAIL" } }, lods = model.lods })
 assert(loaded.metadata.transformatorConfig.transformator.name == "::/vehicle/train/shared/default_train.trf" and loaded.metadata.transformatorConfig.skipFromLod == 1, "default transformator")

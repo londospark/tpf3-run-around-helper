@@ -280,86 +280,49 @@ local function matrixCols(m)
 	return nil
 end
 
--- Which index setUserTransf gives the list's first entry (0 or 1): measured once
--- (a marker written and read back, then put back), as devers does; the parts
--- are placed only once it is known.
-local indexBase = nil
-local function measureIndexBase(transfsOutput)
-	local V4 = api.type.Vec4f.new
-	local marker = api.type.Mat4f.new(V4(1, 0, 0, 0), V4(0, 1, 0, 0), V4(0, 0, 1, 0), V4(0, 0, 1234.5, 1))
-	local first = transfsOutput:getUserTransfs()[1]
-	local saved, savedAbs = first.transf, first.type == 2
-	for _, b in ipairs({ 0, 1 }) do
-		local okSet = pcall(transfsOutput.setUserTransf, transfsOutput, b, marker, false)
-		local e = transfsOutput:getUserTransfs()[1]
-		local c = okSet and e and matrixCols(e.transf) or nil
-		if c ~= nil and math.abs(c[4][3] - 1234.5) < 1e-3 then
-			pcall(transfsOutput.setUserTransf, transfsOutput, b, saved, savedAbs)
-			return b
-		end
-	end
-	pcall(transfsOutput.setUserTransf, transfsOutput, 0, saved, savedAbs)
-	return false
-end
-
+-- Places the copy's parts as the engine would for a real train: each part's
+-- centre kept where it is on the vehicle, turned to follow the track under its
+-- axles; the small axles turned by the distance rolled (signed: backwards when
+-- the copy runs backwards). A free entity has no user transforms (seen live:
+-- none listed, and writing them does nothing), so this plays the animations
+-- ghost_build gave those parts at load: runaround_yawJ (-30..+30 degrees over
+-- 0..6000 ms) and runaround_spinK (a turn over 3600 ms), J and K counting the
+-- full-detail spec's parts and axles. A part's turn is relative to its parent:
+-- node = parent * rest * turn.
+local YAW_MAX, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 100, 10
+local SPIN_OFFSET_DEG = 360000 -- (a thousand turns, so that the frame stays positive going backwards)
 local copyReported = false
 local function placeParts(params, st, transfsOutput, signedDist)
-	local n = userTransfCount(transfsOutput)
-	local spec
-	if n ~= nil then
-		spec = partsFor(params, n)
-	else
-		-- No user transforms listed for the copy (a free entity may get none):
-		-- the full-detail spec, the one drawn close up, written counting from 0
-		-- (as hide() does on real vehicles, which works live).
-		local tcp = params.transformatorConfigParams
-		local okS, s = pcall(function() return tcp.runaround_parts1 end)
-		if okS and type(s) == "string" then
-			if partsCache[s] == nil then partsCache[s] = decodeParts(s) end
-			spec = partsCache[s] or nil
-		end
-		if indexBase == nil then indexBase = 0 end
-	end
-	if not copyReported then
-		copyReported = true
-		local raw = "unreadable"
-		pcall(function() raw = tostring(#transfsOutput:getUserTransfs()) end)
-		print("[RunAroundHelper] loco copy parts: " .. raw .. " user transforms listed; parts spec "
-			.. (spec and ("for " .. tostring(spec.n) .. " nodes, " .. #spec.groups .. " parts, " .. #spec.axles .. " axles") or "none"))
-	end
-	if spec == nil then return end
-	if indexBase == nil then
-		local ok, b = pcall(measureIndexBase, transfsOutput)
-		indexBase = ok and b or false
-		print("[RunAroundHelper] loco copy parts: user transform indices start at " .. tostring(indexBase)
-			.. (indexBase == false and " (not measurable: tender and bogies stay rigid)" or ""))
-	end
-	if indexBase == false then return end
-	local base = indexBase
-	local wrote, err = 0, nil
-	local function write(i, m)
-		local ok, e = pcall(transfsOutput.setUserTransf, transfsOutput, i, m, false)
-		if ok then wrote = wrote + 1 elseif err == nil then err = tostring(e) end
-	end
+	local tcp = params.transformatorConfigParams
+	local okS, s = pcall(function() return tcp.runaround_parts1 end)
+	if not okS or type(s) ~= "string" then return end
+	if partsCache[s] == nil then partsCache[s] = decodeParts(s) end
+	local spec = partsCache[s]
+	if not spec then return end
 	local tr = st.track
-	if tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0 then
+	local trackKnown = tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0
+	local turned = 0
+	if trackKnown then
 		local poses = {}
-		for _, g in ipairs(spec.groups) do
+		for j, g in ipairs(spec.groups) do
 			local m = g.model
 			local want = { m[1], m[2], m[3], m[4] + trackYaw(tr, g.a, g.b) }
 			local parent = poses[g.parent] or g.parentModel
-			local u = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))
+			local turn = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))[4]
+			turn = atan2(math.sin(turn), math.cos(turn)) -- (-pi..pi)
 			poses[g.idx] = want
-			write(g.idx + base, poseMat(u))
+			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn)))
+			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, (deg + YAW_MAX) * YAW_MS_PER_DEG, false, false)
+			turned = turned + 1
 		end
 	end
-	for _, a in ipairs(spec.axles) do
-		write(a.idx + base, axleMat(a.sign * signedDist / a.r))
+	for k, a in ipairs(spec.axles) do
+		local deg = math.deg(a.sign * signedDist / a.r) + SPIN_OFFSET_DEG
+		transfsOutput:addAnimationState("runaround_spin" .. k, -1, deg * SPIN_MS_PER_DEG, true, false)
 	end
-	if copyReported ~= "written" and (wrote > 0 or err ~= nil) then
-		copyReported = "written"
-		print("[RunAroundHelper] loco copy parts: wrote " .. wrote .. " part transforms"
-			.. (tr and " (track under the copy known)" or " (no track yet)") .. (err and ("; refused: " .. err) or ""))
+	if not copyReported and trackKnown then
+		copyReported = true
+		print("[RunAroundHelper] loco copy parts: turning " .. turned .. " part(s) and " .. #spec.axles .. " axle(s) by animation")
 	end
 end
 

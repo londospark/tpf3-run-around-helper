@@ -8,77 +8,63 @@ math.atan2 = math.atan2 or math.atan
 local tu = setmetatable({ colorAttributePostition = 0, getEntityTime = function() return 0 end },
   { __index = function() return function() end end })
 api = { type = {
-  Mat4f = { scale = function(v) return { s = v } end,
-    rotZTransl = function(yaw, p) return { yaw = yaw, x = p.x, y = p.y, z = p.z } end,
-    new = function(a, b, c, d) return { cols = { a, b, c, d } } end,
-    cols = function(m, j) return m.cols[j + 1] end },
-  Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end },
-  Vec4f = { new = function(x, y, z, w) return { x = x, y = y, z = z, w = w } end } } }
+  Mat4f = { scale = function(v) return { s = v } end },
+  Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end } } }
 local env = setmetatable({ ug_require = function(p) if p:find("transformator_util") then return tu end return {} end }, { __index = _G })
 assert(load(io.open(arg[1]):read("*a"), "g", "t", env))()
 local fns = env.data()
-local set = {}
-local list = {} for i = 1, 41 do list[i] = { type = 1 } end
+-- a free entity: no user transforms; its animations are what can be played
+local played, wrote = {}, 0
 local out = setmetatable({
-  getUserTransfs = function() return list end,
-  setUserTransf = function(_, i, m, abs) set[i] = { m = m, abs = abs }; if list[i + 1] then list[i + 1].transf = m end end,
+  getUserTransfs = function() return {} end,
+  setUserTransf = function() wrote = wrote + 1 end,
+  addAnimationState = function(_, name, start, param, loop, rev) played[name] = { start = start, param = param, loop = loop, rev = rev } end,
 }, { __index = function() return function() end end })
 
 -- a left-hand curve of radius 150 m, the copy's origin on it, facing along it
 local R = 150
 local pts = {}
 for x = -16, 16, 2 do local th = x / R; pts[#pts + 1] = R * math.sin(th); pts[#pts + 1] = R * (1 - math.cos(th)) end
-local function ghost(params, dist)
+local function ghost(params, dist, withTrack)
   return { entityId = 500, transformatorConfigParams = params,
-    currentInfo = { world = { gameTime = 0 }, customState = { state = { dist = dist, dir = 1, track = { s0 = -16, ds = 2, pts = pts } } } } }
+    currentInfo = { world = { gameTime = 0 }, customState = { state = { dist = dist, dir = 1, track = withTrack ~= false and { s0 = -16, ds = 2, pts = pts } or nil } } } }
 end
-fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
-assert(set[0] and list[1].transf == nil, "the index measurement puts back what it wrote")
-
 local function near(a, b, tol) return math.abs(a - b) < (tol or 1e-3) end
 local function chord(a, b) -- the track's direction between model x = a and b
   local function at(x) local th = x / R; return R * math.sin(th), R * (1 - math.cos(th)) end
   local ax, ay = at(a); local bx, by = at(b)
   return math.atan2(ay - by, ax - bx)
 end
--- the tender: turned about its own centre to the track under its wheels
-local t = set[29]
-assert(t and t.abs == false, "tender placed, relative to its parent")
-print(string.format("tender turned %.2f degrees (track under its wheels: %.2f)", math.deg(t.m.yaw), math.deg(chord(-6.9152, -11.3528))))
-assert(near(t.m.yaw, chord(-6.9152, -11.3528), 1e-3) and t.m.yaw < -0.04, "tender follows the curve")
-assert(near(t.m.x, 0) and near(t.m.y, 0), "tender centre stays where it is on the loco")
--- the body by its driving wheels, and the pony truck inside it: its centre stays
--- at 3.6 m on the loco, turned to the track under its wheels
-local b, p = set[1], set[12]
-assert(near(b.m.yaw, chord(0.8272, -3.6627)), "body by its driving wheels")
-local yb = b.m.yaw
-local ux, uy = math.cos(yb) * (3.6 + p.m.x) - math.sin(yb) * p.m.y, math.sin(yb) * (3.6 + p.m.x) + math.cos(yb) * p.m.y
-assert(near(ux, 3.6) and near(uy, 0), string.format("pony truck centre kept at 3.6, 0 (got %.4f, %.4f)", ux, uy))
-assert(near(yb + p.m.yaw, chord(4.6, 2.6)), "pony truck follows the track under its wheels")
--- small axles turn by the distance rolled over their radius; the driving wheels are left to their animation
-local a = set[14]
-local phi = math.atan2(-a.m.cols[1].z, a.m.cols[1].x)
-assert(near(phi, 2.0 / 0.4611 - 2 * math.pi, 1e-3) or near(phi, 2.0 / 0.4611, 1e-3), "pony axle turned by 2 m / 0.4611 m, got " .. phi)
-assert(set[32] and set[33] and set[34] and not set[26] and not set[27] and not set[28], "tender axles turn, driving wheels don't")
--- other levels of detail, or no spec: nothing placed
-set = {}
-list = {} for i = 1, 33 do list[i] = { type = 1 } end
+local function yawOf(name) return played[name].param / 100 - 30 end -- degrees
+
 fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
-assert(next(set) == nil, "a level of detail with another node count is left alone")
+assert(wrote == 0, "no user transforms written on a copy")
+-- parts in the spec's order: 1 the body, 2 the pony truck in it, 3 the tender
+local tender = yawOf("runaround_yaw3")
+print(string.format("tender turned %.2f degrees (track under its wheels: %.2f)", tender, math.deg(chord(-6.9152, -11.3528))))
+assert(near(tender, math.deg(chord(-6.9152, -11.3528)), 0.01) and tender < -2, "tender follows the curve")
+assert(played["runaround_yaw3"].start == -1 and played["runaround_yaw3"].loop == false, "a set frame, not looped")
+local body = yawOf("runaround_yaw1")
+print(string.format("body %.3f (track %.3f), pony %.3f (track %.3f)", body, math.deg(chord(0.8272, -3.6627)), body + yawOf("runaround_yaw2"), math.deg(chord(4.6, 2.6))))
+assert(near(body, math.deg(chord(0.8272, -3.6627)), 0.05), "body by its driving wheels (track sampled every 2 m)")
+assert(near(body + yawOf("runaround_yaw2"), math.deg(chord(4.6, 2.6)), 0.01), "pony truck, relative to the body, follows the track under its wheels")
+-- axles: a turn over 3600 ms, by the distance rolled over the radius
+local spin = played["runaround_spin1"]
+assert(spin.loop == true and near(spin.param, (math.deg(2.0 / 0.4611) + 360000) * 10, 0.01), "pony axle turned by 2 m / 0.4611 m")
+assert(played["runaround_spin5"] and not played["runaround_spin6"], "5 small axles (pony 2, tender 3), not the driving wheels")
+-- going backwards: the axles turn back (the frame goes down)
+played = {}
+local back = ghost({ runaround_parts1 = SPEC }, 2.0)
+back.currentInfo.customState.state.dir = -1
+fns.train.updateFn(nil, back, out)
+assert(played["runaround_spin1"].param < 360000 * 10, "backwards: turned back")
+-- a sharp curve: the turn is held at 30 degrees
+-- no track yet: the axles turn, the parts are left as they are
+played = {}
+fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0, false), out)
+assert(played["runaround_spin1"] and not played["runaround_yaw1"], "no track: only the axles")
+-- no spec: nothing
+played = {}
 fns.train.updateFn(nil, ghost(nil, 2.0), out)
-assert(next(set) == nil, "no spec: nothing placed")
--- devers wraps everything under the root in a node of its own: one node more,
--- every index after the root one further on
-set = {}
-list = {} for i = 1, 42 do list[i] = { type = 1 } end
-fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC, devers_trf = "x" }, 2.0), out)
-assert(set[30] and set[30].abs == false and not set[29] or (set[29] and set[29].m.yaw == nil), "tender at 30 under devers' wrapper")
-assert(near(set[30].m.yaw, t.m.yaw), "same turn")
-assert(set[33] and set[34] and set[35], "tender axles at 33-35")
--- a copy with no user transforms listed (a free entity may get none): the
--- full-detail spec, counted from 0
-set = {}
-list = {}
-fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
-assert(set[29] and near(set[29].m.yaw, t.m.yaw) and set[32], "tender and axles placed from the full-detail spec")
+for name in pairs(played) do assert(not name:find("^runaround_"), "no spec: nothing played") end
 print("parts ok")

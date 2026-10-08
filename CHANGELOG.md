@@ -61,6 +61,9 @@
   across points and curves). The card's route summary ends with "back to the
   station". Routes made with an earlier version are planned again the next
   time a train arrives.
+- While the loco runs around, its tender, pony truck and bogies follow the
+  track on curves, and their wheels turn. Before, the moving loco was one rigid
+  piece, with the tender's wheels off the rails on curves.
 - Planned routes no longer double back from one branch of a set of points to
   the other (a move no train can make).
 - Fixed: the wheels turned the wrong way on the last stretch back to the

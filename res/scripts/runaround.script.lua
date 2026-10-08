@@ -425,7 +425,11 @@ end
 -- ghost_real.script.lua): from the distance travelled so far, speed v0,
 -- acceleration acc (negative to brake), up to vmax.
 local function startSegment(run, v0, acc, vmax)
-	run.seg = { d0 = run.gdist or 0.0, v0 = v0, acc = acc, vmax = vmax, t0 = gameTimeMs() }
+	-- s0: the distance along the copy's facing so far (backwards counts down), for
+	-- the axles ghost_real turns; each segment runs one way (run.pushedDir)
+	local prev, s0 = run.seg, 0.0
+	if prev ~= nil then s0 = (prev.s0 or 0.0) + (run.pushedDir or 1) * ((run.gdist or 0.0) - (prev.d0 or 0.0)) end
+	run.seg = { d0 = run.gdist or 0.0, v0 = v0, acc = acc, vmax = vmax, t0 = gameTimeMs(), s0 = s0 }
 	run.segChanged = true
 end
 
@@ -446,6 +450,7 @@ local function pushGhostState(run, speed, vx, vy, dt)
 		-- reverse back to the coaches that was never clicked is driven only here)
 		backwards = run.approachBackwards and 1 or 0
 	end
+	local dir = (backwards % 2 == 1) and -1 or 1
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
@@ -454,9 +459,11 @@ local function pushGhostState(run, speed, vx, vy, dt)
 			color = run.color,
 			dist = run.gdist or 0.0,
 			seg = run.seg,
-			dir = (backwards % 2 == 1) and -1 or 1,
+			dir = dir,
+			track = run.track,
 		},
 	})
+	run.pushedDir = dir
 	if ok then
 		api.cmd.sendCommand(cmd)
 		run.lastSpeed = speed
@@ -1276,6 +1283,82 @@ local function watchdog(run, dt)
 	end
 end
 
+-- The track under the loco copy, for ghost_real to put its tender and bogies on
+-- (a free entity gets no help from the engine there): points every TRACK_STEP
+-- metres from -TRACK_HALF to +TRACK_HALF along the copy's facing, in its own
+-- frame. They follow the route both ways from where the copy is, onto the next
+-- or previous piece where that joins on (not across a reversal: there the
+-- piece the copy is on goes on, and beyond its ends the track runs straight).
+local TRACK_HALF, TRACK_STEP = 16.0, 2.0
+local pieceLengths = {}
+local function pieceLength(e)
+	local key = tostring(e.entity) .. ":" .. tostring(e.index)
+	local len = pieceLengths[key]
+	if len == nil then
+		len = estimateEdgeLength(getEdgeGeometry(e))
+		pieceLengths[key] = len
+	end
+	return len
+end
+-- t metres along piece e in its direction of travel
+local function piecePoint(e, len, t)
+	local u = len > 0 and t / len or 0.0
+	return api.engine.util.transport.calcPosition(getEdgeGeometry(e), e.forward and u or (1.0 - u))
+end
+local function beyondPiece(e, len, t0, extra)
+	local p = piecePoint(e, len, t0)
+	local q = piecePoint(e, len, (t0 > 0) and math.max(t0 - 1.0, 0.0) or math.min(1.0, len))
+	local dx, dy = p.x - q.x, p.y - q.y
+	if t0 <= 0 then dx, dy = -dx, -dy end
+	local d = math.sqrt(dx * dx + dy * dy)
+	if d < 1e-6 then return p end
+	local sign = (t0 > 0) and 1 or -1
+	return { x = p.x + dx / d * extra * sign, y = p.y + dy / d * extra * sign, z = p.z }
+end
+local function joins(a, b) return (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 < 0.25 end
+-- The point d metres on (back, if negative) along the route from piece k, p
+-- metres into it.
+local function routePointFrom(edges, k, p, d)
+	for _ = 1, 32 do
+		local e = edges[k]
+		local len = pieceLength(e)
+		local t = p + d
+		if t >= 0.0 and t <= len then return piecePoint(e, len, t) end
+		if t > len then
+			local j = k + 1
+			while edges[j] ~= nil and sameEdge(edges[j], e) do j = j + 1 end
+			local nxt = edges[j]
+			if nxt == nil or not joins(piecePoint(nxt, pieceLength(nxt), 0.0), piecePoint(e, len, len)) then
+				return beyondPiece(e, len, len, t - len)
+			end
+			k, p, d = j, 0.0, t - len
+		else
+			local j = k - 1
+			while edges[j] ~= nil and sameEdge(edges[j], e) do j = j - 1 end
+			local prv = edges[j]
+			if prv == nil or not joins(piecePoint(prv, pieceLength(prv), pieceLength(prv)), piecePoint(e, len, 0.0)) then
+				return beyondPiece(e, len, 0.0, -t)
+			end
+			k, p, d = j, pieceLength(prv), t
+		end
+	end
+	return nil
+end
+local function trackStrip(run, loop, facingSign)
+	local edges = loop.loopEdges
+	if run.gx == nil or run.gyaw == nil or edges[run.edgeCursor] == nil then return nil end
+	local c, s = math.cos(run.gyaw), math.sin(run.gyaw)
+	local pts = {}
+	for x = -TRACK_HALF, TRACK_HALF + 1e-6, TRACK_STEP do
+		local w = routePointFrom(edges, run.edgeCursor, run.edgeProgress or 0.0, x * facingSign)
+		if w == nil then return nil end
+		local dx, dy = w.x - run.gx, w.y - run.gy
+		pts[#pts + 1] = math.floor((c * dx + s * dy) * 1000 + 0.5) / 1000
+		pts[#pts + 1] = math.floor((-s * dx + c * dy) * 1000 + 0.5) / 1000
+	end
+	return { s0 = -TRACK_HALF, ds = TRACK_STEP, pts = pts }
+end
+
 -- Advances one run by dt seconds. Returns true when the run needs its next
 -- step done in postUpdate (recouple, or the facing check after it).
 local function advanceGhost(run, dt)
@@ -1472,6 +1555,10 @@ local function advanceGhost(run, dt)
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
 	run.gdist = (run.gdist or 0.0) + (run.edgeProgress - before)
 	run.loopSpeed = loop.speed
+	-- the facing against the way of travel: driving backwards, or facing back
+	local against = ((run.headingFlipped and 1 or 0) + (((run.yawOffset or 0) > 1) and 1 or 0)) % 2 == 1
+	local okT, strip = pcall(trackStrip, run, loop, against and -1 or 1)
+	run.track = okT and strip or nil
 	pushGhostState(run, run.speed, pvx, pvy, dt)
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
@@ -2186,6 +2273,7 @@ local function checkStartOnRoute(vehicleEntity, loop, locoIdx, locoTransf, partC
 end
 
 local function startRunAround(state, vehicleEntity, loop)
+	pieceLengths = {} -- (the track may have been rebuilt since the last run)
 	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
 		return

@@ -72,7 +72,7 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <li><strong>Modded locos</strong> that use the game's own sound sets and train animation script run around as themselves. Those with their own sound or animation scripts run around as a copy of themselves, with their smoke, wheels and paint, but without sound unless they use one of the game's sound sets. A loco this mod can't hide doesn't run around (the card says so).</li>
 <li><strong>Works alongside mods that change trains' animation</strong>, such as Real Track Cant: those trains still lean on curves.</li>
 <li><strong>Nothing is left stuck.</strong> If a run-around can't start or stalls, the train is put back as it was and goes on its way. If the loco can't couple back on, the train waits and the card says so.</li>
-<li><strong>Steam locos, known in this alpha:</strong> no chuffing while the loco runs around (the rest of its sound plays), and the tender's wheels can sit slightly off the track.</li>
+<li><strong>Steam locos, known in this alpha:</strong> no chuffing while the loco runs around (the rest of its sound plays).</li>
 <li>Run-arounds belong to a line and a stop. If you insert or remove stops earlier in the line, check the run-around still points at the right station.</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
 <li><strong>Don't remove the mod while a run-around is happening.</strong> The train is hidden at that moment and would stay hidden (it shows up teal without the mod). Let the run-around finish first.</li>

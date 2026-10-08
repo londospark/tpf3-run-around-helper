@@ -241,6 +241,130 @@ local function chainable(name, modelName)
 	return false, c
 end
 
+-- The parts the engine places on the track for a real train, and the axles it
+-- turns: a free entity (the run-around's copy) gets neither, so its tender and
+-- bogies stay rigid and its small wheels still. Traced live (PROBE, 2026-10-08,
+-- an A4 and a Black 5) and in devers' notes: every node that directly holds an
+-- axle (the loco body, the tender, a pony truck or bogie) and every fake bogie
+-- group is placed by the engine, its centre kept where it is on the vehicle and
+-- turned to follow the track under its axles (or its fake bogie positions);
+-- axles without an animation of their own (not the driving wheels) are turned
+-- as they roll. ghost_real does the same for the copy, from track points the
+-- run-around sends. One string per level of detail, as the transformator's
+-- parameter runaround_partsN, matched by node count (the order of user
+-- transforms: the root 0, then depth first):
+--   "n G A  (G times) idx parent x y z yaw  lx ly lz lyaw  px py pz pyaw  a b
+--            (A times) idx r sign"
+-- (rest pose in the model, rest pose in the parent, the parent's rest pose in
+-- the model, the reference points' x in the model; a == b: one point). Only
+-- nodes turned about the vertical (or not at all) are included.
+local IDENT16 = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }
+local function nodeTransf(node)
+	local t = type(node.transf) == "table" and node.transf or nil
+	if t == nil or #t ~= 16 then return IDENT16 end
+	for i = 1, 16 do if type(t[i]) ~= "number" then return IDENT16 end end
+	return t
+end
+-- (x, y, z, yaw) of a column-major 4x4, or nil if it isn't a turn about z
+local function poseOf(t)
+	local c, s = t[1], t[2]
+	if math.abs(t[3]) > 1e-3 or math.abs(t[7]) > 1e-3 or math.abs(t[9]) > 1e-3 or math.abs(t[10]) > 1e-3
+		or math.abs(t[11] - 1) > 1e-3 or math.abs(c * c + s * s - 1) > 1e-3 then return nil end
+	return { t[13], t[14], t[15], math.atan2 and math.atan2(s, c) or math.atan(s, c) }
+end
+local function composePose(a, b)
+	local c, s = math.cos(a[4]), math.sin(a[4])
+	return { a[1] + c * b[1] - s * b[2], a[2] + s * b[1] + c * b[2], a[3] + b[3], a[4] + b[4] }
+end
+local function lodPartsSpec(root, axleNames, fakes)
+	local nodes, byName = {}, {}
+	local function walk(node, parent, parentPose)
+		local idx = #nodes
+		local t = nodeTransf(node)
+		local lp = poseOf(t)
+		local mp = (lp and parentPose) and composePose(parentPose, lp) or nil
+		-- where the node is (also for a scaled one, such as an axle drawn 7% larger)
+		local at = parentPose and composePose(parentPose, { t[13], t[14], t[15], math.atan2 and math.atan2(t[2], t[1]) or math.atan(t[2], t[1]) }) or nil
+		local rec = { idx = idx, node = node, parent = parent, local_ = lp, model = mp, at = at }
+		nodes[#nodes + 1] = rec
+		if type(node.name) == "string" then byName[node.name] = rec end
+		for _, c in ipairs(type(node.children) == "table" and node.children or {}) do
+			if type(c) == "table" then walk(c, rec, mp) end
+		end
+	end
+	walk(root, nil, { 0, 0, 0, 0 })
+	local placed, order = {}, {}
+	local function place(rec, x)
+		if rec == nil or rec.parent == nil or rec.model == nil or rec.local_ == nil or rec.parent.model == nil then return end
+		local p = placed[rec.idx]
+		if p == nil then
+			p = { rec = rec, xs = {} }
+			placed[rec.idx] = p
+			order[#order + 1] = p
+		end
+		p.xs[#p.xs + 1] = x
+	end
+	local axles = {}
+	for _, name in ipairs(axleNames or {}) do
+		local a = byName[name]
+		if a ~= nil and a.at ~= nil then
+			place(a.parent, a.at[1])
+			if type(a.node.animations) ~= "table" or next(a.node.animations) == nil then
+				axles[#axles + 1] = { a.idx, math.min(math.max(a.at[3], 0.3), 1.5), math.cos(a.at[4]) < 0 and -1 or 1 }
+			end
+		end
+	end
+	for _, fb in ipairs(fakes or {}) do
+		local g = type(fb) == "table" and byName[fb.group] or nil
+		if g ~= nil and g.model ~= nil and type(fb.position) == "number" then
+			local p = placed[g.idx]
+			if p ~= nil and not p.fake then p.xs = {} end -- the fake bogie positions, not its axles
+			place(g, g.model[1] + fb.position)
+			if placed[g.idx] then placed[g.idx].fake = true end
+		end
+	end
+	table.sort(order, function(u, v) return u.rec.idx < v.rec.idx end)
+	local out = { #nodes, #order, #axles }
+	for _, p in ipairs(order) do
+		local r = p.rec
+		local a, b = math.max(table.unpack(p.xs)), math.min(table.unpack(p.xs))
+		local par = r.parent
+		for _, v in ipairs({ r.idx, par.idx, r.model[1], r.model[2], r.model[3], r.model[4],
+			r.local_[1], r.local_[2], r.local_[3], r.local_[4], par.model[1], par.model[2], par.model[3], par.model[4], a, b }) do
+			out[#out + 1] = v
+		end
+	end
+	for _, ax in ipairs(axles) do for _, v in ipairs(ax) do out[#out + 1] = v end end
+	if #order == 0 and #axles == 0 then return nil end
+	local parts = {}
+	for i, v in ipairs(out) do parts[i] = (math.floor(v) == v) and tostring(v) or string.format("%.4f", v) end
+	return table.concat(parts, " ")
+end
+-- runaround_partsN strings for a rail vehicle model; {} when there is nothing to place
+local function partsSpecs(src)
+	local out = {}
+	local rv = src.metadata and src.metadata.railVehicle
+	local cfg = rv and (rv.config or (type(rv.configs) == "table" and rv.configs[1])) or nil
+	if type(cfg) ~= "table" or type(src.lods) ~= "table" then return out end
+	local fakes = cfg.fakeBogies
+	local flat = type(fakes) == "table" and type(fakes[1]) == "table" and fakes[1].group ~= nil
+	for li, lod in ipairs(src.lods) do
+		if type(lod) == "table" and type(lod.node) == "table" then
+			local f = flat and fakes or (type(fakes) == "table" and fakes[li]) or nil
+			local ok, spec = pcall(lodPartsSpec, lod.node, cfg.axles, f)
+			if ok and spec ~= nil then out[#out + 1] = spec end
+		end
+	end
+	return out
+end
+local function addPartsParams(tc, src)
+	if type(tc) ~= "table" then return end
+	local ok, specs = pcall(partsSpecs, src)
+	if not ok or #specs == 0 then return end
+	if type(tc.params) ~= "table" then tc.params = {} end
+	for i, spec in ipairs(specs) do tc.params["runaround_parts" .. i] = spec end
+end
+
 -- Points a vehicle with another transformator at the chaining one, keeping the
 -- original's name (and any params it already has) for ghost_real to call. False
 -- and why when it isn't chained.
@@ -298,6 +422,7 @@ local function patchLoco(modelId, modelName, src)
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end
 	if not trfOk and wrappedSound == nil then return false end
 	if wrappedSound ~= nil then md.soundConfig.soundSet.name = wrappedSound end
+	if trfOk then addPartsParams(md.transformatorConfig, src) end
 	local ok, res = pcall(api.res.modelRep.setAsTable, modelId, src)
 	if not ok or res == false then
 		stats.failed = stats.failed + 1
@@ -320,6 +445,7 @@ local function addGhostModel(name, src, modelName, withEffects)
 			transformator = { name = wrappedTransformator(meta) or (MOD_ID .. "::/res/models/runaround_ghost/real.trf") },
 		},
 	}
+	if withEffects then addPartsParams(md.transformatorConfig, src) end
 	if withEffects then
 		if meta.particleSystem ~= nil then md.particleSystem = clone(meta.particleSystem) end
 		local soundName = meta.soundConfig and meta.soundConfig.soundSet and meta.soundConfig.soundSet.name

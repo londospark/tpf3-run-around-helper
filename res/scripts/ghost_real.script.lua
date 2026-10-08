@@ -67,6 +67,8 @@ local function carriageOf(params)
 end
 
 -- How many nodes the model has, or nil if the output will not say.
+local atan2 = math.atan2 or math.atan -- (Lua 5.1's math.atan takes one argument)
+
 local function userTransfCount(transfsOutput)
 	local ok, n = pcall(function() return #transfsOutput:getUserTransfs() end)
 	if ok and type(n) == "number" and n > 0 then return n end
@@ -141,6 +143,154 @@ local function applyColor(st, transfsOutput)
 	end
 end
 
+-- The parts the engine would place for a real train (the loco body, tender,
+-- pony truck or bogies) and the axles it would turn: decoded from the model's
+-- runaround_partsN parameters (see ghost_build's partsSpecs), the one whose node
+-- count is the level of detail being drawn.
+local partsCache = {}
+local function decodeParts(s)
+	local v = {}
+	for w in string.gmatch(s, "%S+") do v[#v + 1] = tonumber(w) end
+	local n, G, A = v[1], v[2], v[3]
+	if n == nil or G == nil or A == nil or #v ~= 3 + G * 16 + A * 3 then return false end
+	local out, k = { n = n, groups = {}, axles = {} }, 4
+	for _ = 1, G do
+		out.groups[#out.groups + 1] = { idx = v[k], parent = v[k + 1], model = { v[k + 2], v[k + 3], v[k + 4], v[k + 5] },
+			lcl = { v[k + 6], v[k + 7], v[k + 8], v[k + 9] }, parentModel = { v[k + 10], v[k + 11], v[k + 12], v[k + 13] },
+			a = v[k + 14], b = v[k + 15] }
+		k = k + 16
+	end
+	for _ = 1, A do
+		out.axles[#out.axles + 1] = { idx = v[k], r = v[k + 1], sign = v[k + 2] }
+		k = k + 3
+	end
+	return out
+end
+local function partsFor(params, n)
+	local tcp = params.transformatorConfigParams
+	if tcp == nil or n == nil then return nil end
+	for i = 1, 8 do
+		local s = tcp["runaround_parts" .. i]
+		if type(s) ~= "string" then break end
+		local r = partsCache[s]
+		if r == nil then
+			r = decodeParts(s)
+			partsCache[s] = r
+		end
+		if r and r.n == n then return r end
+	end
+	return nil
+end
+
+-- (x, y, z, yaw) poses: composed, inverted, as a matrix
+local function composeP(a, b)
+	local c, s = math.cos(a[4]), math.sin(a[4])
+	return { a[1] + c * b[1] - s * b[2], a[2] + s * b[1] + c * b[2], a[3] + b[3], a[4] + b[4] }
+end
+local function inverseP(a)
+	local c, s = math.cos(a[4]), math.sin(a[4])
+	return { -(c * a[1] + s * a[2]), -(-s * a[1] + c * a[2]), -a[3], -a[4] }
+end
+local function poseMat(p)
+	return api.type.Mat4f.rotZTransl(p[4], api.type.Vec3f.new(p[1], p[2], p[3]))
+end
+-- turned phi about the axle (y): the top moves forwards (+x) for phi > 0
+local function axleMat(phi)
+	local c, s = math.cos(phi), math.sin(phi)
+	local V4 = api.type.Vec4f.new
+	return api.type.Mat4f.new(V4(c, 0, -s, 0), V4(0, 1, 0, 0), V4(s, 0, c, 0), V4(0, 0, 0, 1))
+end
+
+-- The track under the copy, as the run-around sends it: points at model x =
+-- s0, s0 + ds, ... in the copy's own frame (x forwards, y left). Between and
+-- beyond them, straight lines.
+local function trackPoint(tr, x)
+	local pts = tr.pts
+	local count = math.floor(#pts / 2)
+	local f = (x - tr.s0) / tr.ds
+	local i = math.max(0, math.min(count - 2, math.floor(f)))
+	local t = f - i
+	local x1, y1, x2, y2 = pts[2 * i + 1], pts[2 * i + 2], pts[2 * i + 3], pts[2 * i + 4]
+	return x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+end
+local function trackYaw(tr, a, b)
+	if a - b < 0.5 then a, b = a + 1.0, b - 1.0 end -- one point: the direction there
+	local ax, ay = trackPoint(tr, a)
+	local bx, by = trackPoint(tr, b)
+	return atan2(ay - by, ax - bx)
+end
+
+-- Places the copy's parts as the engine would for a real train: each part's
+-- centre kept where it is on the vehicle, turned to follow the track under its
+-- axles; the small axles turned by the distance rolled (signed: backwards when
+-- the copy runs backwards). As user transforms relative to the parent node:
+-- node = parent * rest * U, so U = rest^-1 * parent^-1 * wanted.
+-- The columns of a matrix from the engine ({x, y, z} each), whichever way it
+-- reads in this context, or nil.
+local function matrixCols(m)
+	local tries = {
+		function() local o = {} for j = 1, 4 do local v = api.type.Mat4f.cols(m, j - 1) o[j] = { v.x, v.y, v.z } end return o end,
+		function() local o = {} for j = 1, 4 do local v = m:cols(j - 1) o[j] = { v.x, v.y, v.z } end return o end,
+		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2], m[(j - 1) * 4 + 3] } end return o end,
+		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4], m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2] } end return o end,
+	}
+	for _, f in ipairs(tries) do
+		local ok, c = pcall(f)
+		if ok and type(c[4][1]) == "number" and type(c[1][1]) == "number" then return c end
+	end
+	return nil
+end
+
+-- Which index setUserTransf gives the list's first entry (0 or 1): measured once
+-- (a marker written and read back, then put back), as devers does; the parts
+-- are placed only once it is known.
+local indexBase = nil
+local function measureIndexBase(transfsOutput)
+	local V4 = api.type.Vec4f.new
+	local marker = api.type.Mat4f.new(V4(1, 0, 0, 0), V4(0, 1, 0, 0), V4(0, 0, 1, 0), V4(0, 0, 1234.5, 1))
+	local first = transfsOutput:getUserTransfs()[1]
+	local saved, savedAbs = first.transf, first.type == 2
+	for _, b in ipairs({ 0, 1 }) do
+		local okSet = pcall(transfsOutput.setUserTransf, transfsOutput, b, marker, false)
+		local e = transfsOutput:getUserTransfs()[1]
+		local c = okSet and e and matrixCols(e.transf) or nil
+		if c ~= nil and math.abs(c[4][3] - 1234.5) < 1e-3 then
+			pcall(transfsOutput.setUserTransf, transfsOutput, b, saved, savedAbs)
+			return b
+		end
+	end
+	pcall(transfsOutput.setUserTransf, transfsOutput, 0, saved, savedAbs)
+	return false
+end
+
+local function placeParts(params, st, transfsOutput, signedDist)
+	local spec = partsFor(params, userTransfCount(transfsOutput))
+	if spec == nil then return end
+	if indexBase == nil then
+		local ok, b = pcall(measureIndexBase, transfsOutput)
+		indexBase = ok and b or false
+		print("[RunAroundHelper] loco copy parts: user transform indices start at " .. tostring(indexBase)
+			.. (indexBase == false and " (not measurable: tender and bogies stay rigid)" or ""))
+	end
+	if indexBase == false then return end
+	local base = indexBase
+	local tr = st.track
+	if tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0 then
+		local poses = {}
+		for _, g in ipairs(spec.groups) do
+			local m = g.model
+			local want = { m[1], m[2], m[3], m[4] + trackYaw(tr, g.a, g.b) }
+			local parent = poses[g.parent] or g.parentModel
+			local u = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))
+			poses[g.idx] = want
+			transfsOutput:setUserTransf(g.idx + base, poseMat(u), false)
+		end
+	end
+	for _, a in ipairs(spec.axles) do
+		transfsOutput:setUserTransf(a.idx + base, axleMat(a.sign * signedDist / a.r), false)
+	end
+end
+
 -- Free entity: paint, drive and wheel animation from the ghost's state.
 local function ghostUpdate(params, transfsOutput)
 	local ci = params.currentInfo
@@ -157,6 +307,10 @@ local function ghostUpdate(params, transfsOutput)
 	-- turn made the renderer blend backwards through a whole turn at every wrap.
 	local frame = math.floor(dist / (2.0 * math.pi * WHEEL_RADIUS) * WHEEL_ANIMATION_MS + 0.5)
 	transfsOutput:addAnimationState("wheels", -1, frame, true, reversed)
+	-- distance along the copy's own facing (the segment's start, s0, and its direction)
+	local seg = st.seg
+	local signed = ((seg and seg.s0) or 0.0) + (reversed and -1 or 1) * (dist - ((seg and seg.d0) or 0.0))
+	pcall(placeParts, params, st, transfsOutput, signed)
 end
 
 -- The stock train transformator (vehicle/train/shared/transformator_train.script.tl),
@@ -180,20 +334,6 @@ end
 -- 20 s per carriage while moving, at most 6 times: the user transforms that
 -- aren't the identity, as index:type x,y,z heading(degrees).
 local probeSeen = {}
-local function probeCols(m)
-	local tries = {
-		function() local o = {} for j = 1, 4 do local v = api.type.Mat4f.cols(m, j - 1) o[j] = { v.x, v.y, v.z } end return o end,
-		function() local o = {} for j = 1, 4 do local v = m:cols(j - 1) o[j] = { v.x, v.y, v.z } end return o end,
-		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2], m[(j - 1) * 4 + 3] } end return o end,
-		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4], m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2] } end return o end,
-	}
-	for _, f in ipairs(tries) do
-		local ok, c = pcall(f)
-		if ok and type(c[4][1]) == "number" and type(c[1][1]) == "number" then return c end
-	end
-	return nil
-end
-local atan2 = math.atan2 or math.atan
 local function probe(params, transfsOutput)
 	local p = params.transformatorConfigParams
 	if p == nil or p.runaround_probe ~= true then return end
@@ -212,7 +352,7 @@ local function probe(params, transfsOutput)
 	local parts, unread = {}, 0
 	for k = 1, n do
 		local e = list[k]
-		local c = e and probeCols(e.transf) or nil
+		local c = e and matrixCols(e.transf) or nil
 		if c == nil then
 			unread = unread + 1
 		else

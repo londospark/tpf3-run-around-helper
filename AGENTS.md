@@ -249,13 +249,26 @@ Offline-tested only:
   axles 32-34) and the loco body `group_1` (pony truck `group_12`); see
   `lua dev/tools/node_index.lua <model.mdl>`. User transform numbering: root 0,
   then depth first.
-  **Probe in place (temporary, remove after):** `ghost_build` sets
-  `runaround_probe` on steam locos (stock-wrapped path only, so *devers* must
-  be off), and `ghost_real` logs `PROBE <model> ... moved: index:type x,y,z
-  heading` lines: the parts the engine moved, every 20 s while moving, 6 times
-  per carriage. Next: read those lines, then pass the placed parts' indices and
-  rest poses from `ghost_build` to the copy's transformator and place them from
-  track points the game script sends with the ghost's state.
+  **Probed live (2026-10-08, *devers* off; A4 and Black 5):** the engine
+  places, as absolute (type 2) user transforms in world coordinates, every node
+  that directly holds an axle (A4: `front_grp`, `front_b1_grp`, `back_grp`;
+  Black 5: `group_1`, `group_12`, `group_29`) and every fake bogie group; it
+  turns (relative, type 1) every axle without its own animation (not the
+  driving wheels). Each placed part keeps its centre where it is on the vehicle
+  and only turns to the track (A4 tender centre = loco centre; Black 5 tender
+  9.15 m back on the loco's axis), as *devers*' notes say.
+  **Done (offline-tested, needs a live look):** `ghost_build`'s `partsSpecs`
+  writes `runaround_partsN` (one string per level of detail, matched by node
+  count) on every rail vehicle's own model and dyn copy; `ghost_real`'s
+  `placeParts` turns those parts on the copy, relative to their parents, from
+  `state.track` (17 points, ±16 m, in the copy's frame; `trackStrip` in the
+  game script), and turns the axles by a signed distance (`seg.s0`). It
+  measures once whether `setUserTransf` counts from 0 or 1 (log: `loco copy
+  parts: user transform indices start at N`). Coach copies get turning axles
+  (no track is sent for them, so their bogies stay straight; they only move
+  during the pull).
+  The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
+  the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line

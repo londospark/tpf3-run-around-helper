@@ -181,7 +181,18 @@ end
 local partsMissLogged = {}
 local function partsFor(params, n)
 	local tcp = params.transformatorConfigParams
-	if tcp == nil or n == nil then return nil end
+	if n == nil then return nil end
+	local okP, has = pcall(function() return tcp ~= nil and tcp.runaround_parts1 ~= nil end)
+	if not (okP and has) then
+		if (partsMissLogged.none or 0) < 5 then
+			partsMissLogged.none = (partsMissLogged.none or 0) + 1
+			local mdl = nil
+			pcall(function() mdl = tcp and tcp.runaround_mdl end)
+			print("[RunAroundHelper] loco copy parts: " .. tostring(mdl) .. " (" .. tostring(n) .. " nodes) has no parts spec;"
+				.. " its parameters are " .. type(tcp) .. " - tender and bogies stay rigid")
+		end
+		return nil
+	end
 	local seen, wrapped = {}, (tcp.devers_trf ~= nil or tcp.devers_rest1 ~= nil)
 	for i = 1, 8 do
 		local s = tcp["runaround_parts" .. i]

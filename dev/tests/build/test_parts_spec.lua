@@ -2,7 +2,7 @@
 -- axle, every fake bogie group) and which axles it turns (those without an
 -- animation), with their rest poses, in the game's node order.
 api = { res = { modelRep = {} } }
-local partsSpecs, partsAtLoad = assert(load(io.open(arg[1]):read("*a") .. "\nreturn partsSpecs, partsAtLoad", "gb"))()
+local partsSpecs, partsAtLoad, plainParams = assert(load(io.open(arg[1]):read("*a") .. "\nreturn partsSpecs, partsAtLoad, plainParams", "gb"))()
 local function T(x, y, z, s) s = s or 1 return { s, 0, 0, 0, 0, 1, 0, 0, 0, 0, s, 0, x, y, z, 1 } end
 local model = {
   metadata = { railVehicle = { config = {
@@ -53,4 +53,12 @@ assert(loaded.metadata.transformatorConfig.params.runaround_parts1 == specs[1] a
 -- not a rail vehicle, or broken data: left alone, no error
 assert(partsAtLoad("tree.mdl", { metadata = {} }).metadata.transformatorConfig == nil)
 assert(partsAtLoad("odd.mdl", 5) == 5)
+-- the parameters, as the load step may get them back: a plain table, or an
+-- engine object that can only be indexed; either way every one is kept
+local plain = plainParams({ runaround_parts1 = "a", devers_rest1 = "r", custom = 3 })
+assert(plain.runaround_parts1 == "a" and plain.devers_rest1 == "r" and plain.custom == 3, "a table: all kept")
+local obj = setmetatable({}, { __index = function(_, k) return ({ runaround_parts1 = "a", runaround_parts2 = "b", devers_rest1 = "r", devers_flip = -1 })[k] end })
+plain = plainParams(obj)
+assert(type(plain) == "table" and rawget(plain, "runaround_parts1") == "a" and plain.runaround_parts2 == "b" and plain.devers_rest1 == "r" and plain.devers_flip == -1, "an indexable object: the known ones kept")
+assert(plainParams(nil) == nil and plainParams({}) == nil, "none: nil")
 print("parts spec ok")

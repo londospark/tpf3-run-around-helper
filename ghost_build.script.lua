@@ -380,6 +380,36 @@ local function addPartsParams(tc, src, modelName)
 	tc.params.runaround_mdl = tc.params.runaround_mdl or modelName
 end
 
+-- A model's transformator parameters as a plain table, whatever shape
+-- getAsTable gives them in (a table, or an engine object that can be indexed
+-- or iterated): the parts specs set at load and other mods' (devers') must
+-- survive the setAsTable below. nil when there are none.
+local KNOWN_PARAMS = { "runaround_trf", "runaround_mdl", "runaround_probe", "devers_trf", "devers_mdl", "devers_carrier", "devers_flip" }
+for i = 1, 8 do KNOWN_PARAMS[#KNOWN_PARAMS + 1] = "runaround_parts" .. i; KNOWN_PARAMS[#KNOWN_PARAMS + 1] = "devers_rest" .. i end
+local function plainParams(p)
+	if p == nil then return nil end
+	local out, any = {}, false
+	local okIter = pcall(function()
+		for k, v in pairs(p) do out[k] = v; any = true end
+	end)
+	if not okIter or not any then
+		for _, k in ipairs(KNOWN_PARAMS) do
+			local ok, v = pcall(function() return p[k] end)
+			if ok and v ~= nil then out[k] = v; any = true end
+		end
+	end
+	return any and out or nil
+end
+local paramsLogged = 0
+local function logParams(modelName, raw, plain)
+	if paramsLogged >= 6 then return end
+	paramsLogged = paramsLogged + 1
+	local n = 0
+	for _ in pairs(plain or {}) do n = n + 1 end
+	log("loco params at setup:", tostring(modelName), "- given as", type(raw), "with", n, "entries; parts spec:",
+		(plain and plain.runaround_parts1) and "yes" or "NO", "; devers rest poses:", (plain and plain.devers_rest1) and "yes" or "no")
+end
+
 -- Points a vehicle with another transformator at the chaining one, keeping the
 -- original's name (and any params it already has) for ghost_real to call. False
 -- and why when it isn't chained.
@@ -391,7 +421,7 @@ local function chainTransformator(md, modelName)
 	if not CHAIN_TRANSFORMATORS or type(name) ~= "string" or name == "" or string.find(name, "runaround_ghost/", 1, true) then return false, "not chainable" end
 	local ok, res = chainable(name, modelName)
 	if not ok then return false, res end
-	if type(tc.params) ~= "table" then tc.params = {} end
+	tc.params = plainParams(tc.params) or {}
 	tc.params.runaround_trf = name
 	tc.params.runaround_mdl = modelName
 	tc.transformator.name = res and CHAIN_EMIT_TRF or CHAIN_TRF
@@ -415,6 +445,11 @@ local function patchLoco(modelId, modelName, src)
 	local wrappedSound = wrappedSoundSet(soundName)
 	local trfOk = wrappedTrf ~= nil
 	local chained = false
+	if type(md.transformatorConfig) == "table" then
+		local raw = md.transformatorConfig.params
+		md.transformatorConfig.params = plainParams(raw)
+		if type(soundName) == "string" and string.find(soundName, "steam", 1, true) then logParams(modelName, raw, md.transformatorConfig.params) end
+	end
 	if trfOk then
 		md.transformatorConfig.transformator.name = wrappedTrf
 		-- PROBE (temporary): log where the engine puts a steam loco's parts
@@ -460,7 +495,7 @@ local function addGhostModel(name, src, modelName, withEffects)
 		},
 	}
 	-- the parts spec worked out when the loco's model loaded (partsAtLoad)
-	local srcParams = meta.transformatorConfig and meta.transformatorConfig.params
+	local srcParams = plainParams(meta.transformatorConfig and meta.transformatorConfig.params)
 	if withEffects and type(srcParams) == "table" then
 		for k, v in pairs(srcParams) do
 			if type(k) == "string" and string.find(k, "^runaround_parts%d+$") then

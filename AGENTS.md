@@ -282,6 +282,14 @@ Offline-tested only:
   *devers* does; copies take the loaded model's `runaround_partsN`. Whether
   our modifier runs before or after *devers*' (its wrapper node) is unknown;
   both are handled.
+  **Third live test (*devers* on, Su):** specs are made at load (`loco parts:
+  ... specs ...` for every steam loco), but no copy logged anything, so no copy
+  carried them. Suspect: `getAsTable` returns `transformatorConfig.params` as
+  something other than a plain table, and the setup replaced it with `{}`
+  (losing our specs and *devers*' params). Now `plainParams` keeps them in
+  either shape, and the log says `loco params at setup: ... given as <type>
+  with N entries; parts spec: yes/NO` and, in a copy without a spec, `loco
+  copy parts: ... has no parts spec; its parameters are <type>`.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

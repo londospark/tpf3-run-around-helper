@@ -2,6 +2,10 @@
 
 ## 0.1.0-alpha (first public test release)
 
+- Made with a lot of help from AI: most of the code, tests and documentation
+  were written by an AI assistant (Anthropic's Claude, using Claude Code),
+  directed and tested in game by LondoSpark.
+
 - Locos run around their train at any terminus you set up, instead of the
   instant flip.
 - Set up in the train window. Click a few points on the track: the route and the
@@ -39,6 +43,10 @@
   *devers*: the coaches are hidden and the train draws forward, with no flashing,
   and the other mod's animation is kept. Only scripts that this mod can check at
   start are chained; anything else is left exactly as it was.
+- Also works with animation scripts that add extra models to a vehicle, such as
+  `mcs_basisset`'s (used by its goods wagons): those vehicles can now be hidden
+  too, their extra models are kept, and they vanish with the vehicle while it is
+  hidden.
 - Fixed: a run-around sold the loco and bought it back each time (it was taken
   off the train for an invisible stand-in), with the money shown in the world.
   The loco now stays on the train, hidden, like the coaches. Nothing is bought

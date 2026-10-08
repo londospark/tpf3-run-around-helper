@@ -309,8 +309,17 @@ local function scriptFunction(ref, trfFile)
 	return nil
 end
 
+-- One of a transformator's hooks: its function and capture params, or nil.
+local function hookOf(cfg, key, file)
+	local h = type(cfg[key]) == "table" and cfg[key] or nil
+	local fn = h and scriptFunction(h.fileName, file) or nil
+	if fn == nil then return nil end
+	return { fn = fn, capture = type(h.params) == "table" and h.params or {} }
+end
+
 -- The original transformator of a chained vehicle: { update, capture, particles,
--- particlesCapture }, or false when it can't be found (then the stock one is used).
+-- particlesCapture, emittable, emitted }, or false when it can't be found (then
+-- the stock one is used).
 local origins = {}
 local function originOf(params)
 	local okP, name, modelName = pcall(function()
@@ -333,6 +342,8 @@ local function originOf(params)
 					capture = type(us.params) == "table" and us.params or {},
 					particles = ps and scriptFunction(ps.fileName, file) or nil,
 					particlesCapture = ps and type(ps.params) == "table" and ps.params or {},
+					emittable = hookOf(cfg, "getEmittableModelsScript", file),
+					emitted = hookOf(cfg, "computeEmittedModelsScript", file),
 				}
 				break
 			end
@@ -360,6 +371,35 @@ local function chainParticleFn(captureParams, params, particleSystem)
 		if o and o.particles then return o.particles(o.particlesCapture, params, particleSystem) end
 	end
 	return particleFn(captureParams, params, particleSystem)
+end
+
+-- The models the original may emit (the game asks this to know which to load):
+-- always all of them, hidden or not.
+local function chainEmittableFn(_captureParams, params)
+	local o = originOf(params)
+	if o and o.emittable then return o.emittable.fn(o.emittable.capture, params) end
+	return {}
+end
+
+-- The models the original emits now. None while the vehicle is hidden (they
+-- would stand at the platform with nothing under them). A ghost copy calls the
+-- original too, guarded: another mod's script may expect vehicle data a free
+-- entity doesn't have, and then the ghost simply shows none (said once).
+local emitFailed = {}
+local function chainEmittedFn(_captureParams, params, modelEmitter)
+	local ci = params.currentInfo
+	if ci ~= nil and ci.vehicle ~= nil and isHidden(ci.vehicle) then return end
+	local o = originOf(params)
+	if not (o and o.emitted) then return end
+	if ci ~= nil and ci.vehicle ~= nil then return o.emitted.fn(o.emitted.capture, params, modelEmitter) end
+	local ok, err = pcall(o.emitted.fn, o.emitted.capture, params, modelEmitter)
+	if not ok then
+		local name = tostring(params.transformatorConfigParams and params.transformatorConfigParams.runaround_trf)
+		if not emitFailed[name] then
+			emitFailed[name] = true
+			print("[RunAroundHelper] " .. name .. " emits no extra models on a ghost copy: " .. tostring(err))
+		end
+	end
 end
 
 -- A stand-in params table: the same currentInfo with vehicle data on top.
@@ -429,6 +469,11 @@ function data()
 		sound = { updateSoundSet = updateSoundSet },
 		train = { updateFn = trainUpdateFn, updateParticleSystemFn = particleFn },
 		tiltingTrain = { updateFn = tiltingTrainUpdateFn, updateParticleSystemFn = particleFn },
-		chain = { updateFn = chainUpdateFn, updateParticleSystemFn = chainParticleFn },
+		chain = {
+			updateFn = chainUpdateFn,
+			updateParticleSystemFn = chainParticleFn,
+			getEmittableModelsFn = chainEmittableFn,
+			computeEmittedModelsFn = chainEmittedFn,
+		},
 	}
 end

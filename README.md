@@ -19,6 +19,12 @@ engine that arrived bunker-first leaves chimney-first, as it would for real.
 - Works with every base-game and DLC loco. Works with modded locos too; see
   [Modded locos](#modded-locos).
 
+> **Made with a lot of help from AI.** Most of the code, tests and documentation
+> for this mod were written by an AI assistant (Anthropic's Claude, using Claude
+> Code). I set the direction, made the decisions and tested it in game. I'm
+> saying so up front so that nobody downloads it under a false impression; if
+> you'd rather not use AI-assisted mods, that's completely fair.
+
 > **ALPHA — an early test release.** It works end to end in a live game, but
 > it has only been tried on a few layouts. Expect rough edges, and please tell
 > me what breaks. See [Reporting a problem](#reporting-a-problem). Saves with
@@ -130,10 +136,10 @@ A train is never left stuck or broken by a run-around:
   the coaches and drives the copies, and otherwise calls that mod's script, so
   both work. The load log counts them ("N through another mod's
   transformator"). That's done only when this mod can load that script at start
-  and it does nothing beyond animating and smoke. Anything else, such as a
-  script that also adds extra models (like `mcs_basisset`'s), is left alone
-  exactly as it is, and that vehicle runs around as a copy. Without such mods,
-  nothing changes.
+  and it does nothing beyond animating, smoke and adding extra models (as
+  `mcs_basisset`'s does). Extra models are passed on as well, and vanish with the
+  vehicle while it's hidden. Anything else is left alone exactly as it is, and
+  that vehicle runs around as a copy. Without such mods, nothing changes.
 - **The card shows what's happening:** turning the train, drawing forward,
   uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
   be coupled back on.

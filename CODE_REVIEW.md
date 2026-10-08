@@ -244,7 +244,13 @@ and drops one-off events. `test_sound.lua` fails on the crashing version
   after loading the original in its own scope (`ug_require`): it must declare no
   hooks beyond those two, and its update function must be found. Otherwise the
   vehicle is left alone, with the reason logged. Without `ug_require` at load,
-  nothing is chained. The resolver rules exist in both scripts (separate
+  nothing is chained. **Since extended (2026-10-08):** the two extra-model hooks
+  are allowed too, through `chain_emit.trf`, which passes them on, and a hidden
+  vehicle emits nothing. Their signatures were **checked** against the game's
+  hot-air balloon and `transformator_util.tl`, and against `mcs_basisset`'s
+  `maikc_train_all.script.tl`. Every declared hook's function must be found.
+  In the owner's mods, the 15 users are all goods wagons in `mcs_gtw1_base`, and
+  none sets `randomGroups`, so they emit nothing today. The resolver rules exist in both scripts (separate
   scopes); `test_resolve.lua` checks they agree.
 - **A mod can `ug_require` its own module:** *devers* loads
   `devers_1::/vehicle/train/devers/devers_core.lua` that way, and it runs in the

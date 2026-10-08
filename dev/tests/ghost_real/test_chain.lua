@@ -23,6 +23,25 @@ local files = {
       updateParticleSystemFn = function() calls[#calls + 1] = { "originParticles" } end,
     } }
   end,
+  -- as mcs_basisset's maikc_train_all.trf: the two extra-model hooks as well
+  ["mcs_1::/vehicle/mcs/scripts/train_all.trf.lua"] = function()
+    env.data = function() return {
+      updateScript = { fileName = "train_all.script@train.updateFn", params = {} },
+      getEmittableModelsScript = { fileName = "train_all.script@train.getEmittableModelsFn", params = { cap = "e" } },
+      computeEmittedModelsScript = { fileName = "train_all.script@train.computeEmittedModelsFn", params = { cap = "c" } },
+    } end
+  end,
+  ["mcs_1::/vehicle/mcs/scripts/train_all.script.tl"] = function()
+    return { train = {
+      updateFn = function() calls[#calls + 1] = { "mcsUpdate" } end,
+      getEmittableModelsFn = function(capture, _params) return { "lamp.mdl", capture.cap } end,
+      computeEmittedModelsFn = function(capture, params, emitter)
+        if params.currentInfo.vehicle == nil then error("attempt to index a nil value (field 'vehicle')") end
+        emitter:emitModel(1, nil, {}, "loc", false)
+        calls[#calls + 1] = { "emitted", capture.cap }
+      end,
+    } }
+  end,
 }
 env = setmetatable({
   ug_require = function(p)
@@ -82,4 +101,27 @@ local stock = 0 for _, c in ipairs(calls) do if c[1] == "stock" then stock = sto
 assert(stock == 2, "falls back to the stock animation")
 assert(#printed == 1 and printed[1]:find("chained transformator not found", 1, true), "said once")
 print("chain: missing original -> stock animation, logged once")
+-- extra models (chain_emit.trf): passed on; none while hidden; a ghost guarded
+local MCS = "mcs_1::/vehicle/mcs/scripts/train_all.trf"
+local emitter = { emitModel = function() calls[#calls + 1] = { "emitModel" } end }
+local list = fns.chain.getEmittableModelsFn(nil, real(MCS))
+assert(list[1] == "lamp.mdl" and list[2] == "e", "the original's emittable models, with its capture params")
+local hiddenList = fns.chain.getEmittableModelsFn(nil, real(MCS, { x = 0.1234567, y = 0.7654321, z = 0.3141593 }))
+assert(#hiddenList == 2, "the emittable list is the same while hidden (the game loads them)")
+calls = {}
+fns.chain.computeEmittedModelsFn(nil, real(MCS), emitter)
+assert(#calls == 2 and calls[1][1] == "emitModel" and calls[2][1] == "emitted" and calls[2][2] == "c", "a real vehicle emits the original's models")
+calls = {}
+fns.chain.computeEmittedModelsFn(nil, real(MCS, { x = 0.1234567, y = 0.7654321, z = 0.3141593 }), emitter)
+assert(#calls == 0, "a hidden vehicle emits nothing")
+calls, printed = {}, {}
+local ghost = { entityId = 500, transformatorConfigParams = { runaround_trf = MCS }, currentInfo = { world = { gameTime = 0 }, customState = {} } }
+fns.chain.computeEmittedModelsFn(nil, ghost, emitter)
+fns.chain.computeEmittedModelsFn(nil, ghost, emitter)
+assert(#printed == 1 and printed[1]:find("emits no extra models on a ghost copy", 1, true), "a ghost's failing original is caught and said once")
+assert(#fns.chain.getEmittableModelsFn(nil, real(DEVERS)) == 0, "an original without the hooks: no extra models")
+calls = {}
+fns.chain.computeEmittedModelsFn(nil, real(DEVERS), emitter)
+assert(#calls == 0, "and emits none")
+print("chain: extra models passed on, none while hidden, a ghost's error caught")
 print("chain ok")

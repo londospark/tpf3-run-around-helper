@@ -30,7 +30,7 @@
 -- read the same in both places has not been shown). So a file name that two or
 -- more rail vehicles share (two mods' "loco.mdl", say) would be ambiguous: those
 -- vehicles are left exactly as they are, with no marker and no copy, and the
--- run-around gives them the generic ghost (and their coaches the creep).
+-- run-around gives them the generic ghost (and coaches stay in view).
 --
 -- Everything is wrapped in pcall: a loco the game will not let us change is left
 -- exactly as it was.
@@ -119,11 +119,17 @@ end
 -- Whether another transformator can be chained, checked here by loading it the
 -- way ghost_real's chain functions will at run time (the same rules: keep the two
 -- in step; dev/tests check they agree). Only one that declares nothing but an
--- update and a particle script, and whose update function is found, is chained:
--- chain.trf passes on just those two, so a transformator with more hooks (e.g.
--- getEmittableModelsScript) would lose them, and one that can't be found would
--- lose its own animation. Anything else is left alone, as before chaining existed.
-local CHAINABLE_HOOKS = { updateScript = true, updateParticleSystemScript = true }
+-- update and a particle script, and optionally the two extra-model hooks (as
+-- mcs_basisset's and the game's hot-air balloon declare), and whose every declared
+-- function is found, is chained: chain.trf passes on the first two, chain_emit.trf
+-- all four. A transformator with any other hook would lose it, and one whose
+-- functions can't be found would lose them. Anything else is left alone, as before
+-- chaining existed.
+local CHAINABLE_HOOKS = {
+	updateScript = true, updateParticleSystemScript = true,
+	getEmittableModelsScript = true, computeEmittedModelsScript = true,
+}
+local EMIT_HOOKS = { "getEmittableModelsScript", "computeEmittedModelsScript" }
 
 local function ownerOf(res)
 	return string.match(res, "^([%w_%-%.]*::)") or "::"
@@ -194,12 +200,13 @@ local function scriptFunction(ref, trfFile)
 	return nil
 end
 
--- true, or false and why, per transformator name (many vehicles share one).
+-- true and whether it has the extra-model hooks, or false and why, per
+-- transformator name (many vehicles share one).
 local chainChecks = {}
 local function chainable(name, modelName)
 	local c = chainChecks[name]
 	if c == nil then
-		local why = nil
+		local why, emit = nil, false
 		if type(ug_require) ~= "function" then
 			why = "can't load other scripts here"
 		else
@@ -217,12 +224,20 @@ local function chainable(name, modelName)
 				if why == nil and scriptFunction(cfg.updateScript.fileName, file) == nil then
 					why = "its transformator's update function was not found"
 				end
+				for _, hook in ipairs(EMIT_HOOKS) do
+					if why == nil and cfg[hook] ~= nil then
+						emit = true
+						if type(cfg[hook]) ~= "table" or scriptFunction(cfg[hook].fileName, file) == nil then
+							why = "its transformator's " .. hook .. " function was not found"
+						end
+					end
+				end
 			end
 		end
-		c = why == nil and true or why
+		c = why == nil and { emit = emit } or why
 		chainChecks[name] = c
 	end
-	if c == true then return true end
+	if type(c) == "table" then return true, c.emit end
 	return false, c
 end
 
@@ -230,16 +245,17 @@ end
 -- original's name (and any params it already has) for ghost_real to call. False
 -- and why when it isn't chained.
 local CHAIN_TRF = MOD_ID .. "::/res/models/runaround_ghost/chain.trf"
+local CHAIN_EMIT_TRF = MOD_ID .. "::/res/models/runaround_ghost/chain_emit.trf"
 local function chainTransformator(md, modelName)
 	local tc = md.transformatorConfig
 	local name = tc and tc.transformator and tc.transformator.name
 	if not CHAIN_TRANSFORMATORS or type(name) ~= "string" or name == "" or string.find(name, "runaround_ghost/", 1, true) then return false, "not chainable" end
-	local ok, why = chainable(name, modelName)
-	if not ok then return false, why end
+	local ok, res = chainable(name, modelName)
+	if not ok then return false, res end
 	if type(tc.params) ~= "table" then tc.params = {} end
 	tc.params.runaround_trf = name
 	tc.params.runaround_mdl = modelName
-	tc.transformator.name = CHAIN_TRF
+	tc.transformator.name = res and CHAIN_EMIT_TRF or CHAIN_TRF
 	return true
 end
 

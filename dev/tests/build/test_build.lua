@@ -13,6 +13,8 @@ local models = {
   [3] = { "mcs_1::/vehicle/mcs/loco.mdl", model("mcs_1::/vehicle/mcs/scripts/train_all.trf", "mymod/own.snd") },
   [6] = { "devers_1::/vehicle/train/x/caboose.mdl", model("devers_1::/vehicle/train/devers/devers_any.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
   [7] = { "gone_1::/vehicle/gone/tender.mdl", model("gone_1::/vehicle/gone/missing.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
+  [8] = { "half_1::/vehicle/half/van.mdl", model("half_1::/vehicle/half/half.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
+  [9] = { "odd_1::/vehicle/odd/van2.mdl", model("odd_1::/vehicle/odd/odd.trf", "/vehicle/waggon/shared/sound/waggon_old.snd") },
 }
 -- Other mods' transformator files, served the way ug_require runs them (a .trf
 -- defines a global data()). devers-style: an update and a particle script only.
@@ -25,14 +27,29 @@ local FILES = {
   ["devers_1::/vehicle/train/devers/devers_train.script.lua"] = function()
     return { any = { updateFn = function() end, updateParticleSystemFn = function() end } }
   end,
+  -- as mcs_basisset's maikc_train_all.trf: the two extra-model hooks as well
   ["mcs_1::/vehicle/mcs/scripts/train_all.trf.lua"] = function()
     data = function() return { updateScript = { fileName = "train_all.script@train.updateFn" },
       updateParticleSystemScript = { fileName = "train_all.script@train.updateParticleSystemFn" },
-      getEmittableModelsScript = { fileName = "train_all.script@train.getEmittableModelsFn" } } end
+      getEmittableModelsScript = { fileName = "train_all.script@train.getEmittableModelsFn" },
+      computeEmittedModelsScript = { fileName = "train_all.script@train.computeEmittedModelsFn" } } end
   end,
   ["mcs_1::/vehicle/mcs/scripts/train_all.script.tl"] = function()
-    return { train = { updateFn = function() end } }
+    return { train = { updateFn = function() end, updateParticleSystemFn = function() end,
+      getEmittableModelsFn = function() return {} end, computeEmittedModelsFn = function() end } }
   end,
+  -- an extra-model hook whose function isn't there
+  ["half_1::/vehicle/half/half.trf.lua"] = function()
+    data = function() return { updateScript = { fileName = "half.script@t.updateFn" },
+      computeEmittedModelsScript = { fileName = "half.script@t.computeEmittedModelsFn" } } end
+  end,
+  ["half_1::/vehicle/half/half.script.lua"] = function() return { t = { updateFn = function() end } } end,
+  -- a hook nothing passes on
+  ["odd_1::/vehicle/odd/odd.trf.lua"] = function()
+    data = function() return { updateScript = { fileName = "odd.script@t.updateFn" },
+      somethingElseScript = { fileName = "odd.script@t.updateFn" } } end
+  end,
+  ["odd_1::/vehicle/odd/odd.script.lua"] = function() return { t = { updateFn = function() end } } end,
 }
 ug_require = function(p) local f = FILES[p] if f == nil then error("module not found: " .. p) end return f() end
 api = { res = { modelRep = {
@@ -59,8 +76,16 @@ build("runaround_helper_1")
 assert(set[1] and set[1].metadata.transformatorConfig.transformator.name == "runaround_helper_1::/res/models/runaround_ghost/real.trf", "loco patched to the wrapped transformator")
 assert(set[1].metadata.soundConfig.soundSet.name == "runaround_helper_1::/res/audio/ghostwrap/train_electric_old.snd", "and the wrapped sound set")
 assert(set[2] ~= nil, "coach patched")
--- another mod's transformator with more hooks than chain.trf passes on: left alone
-assert(set[3] == nil, "a transformator with getEmittableModelsScript is not chained")
+-- mcs-style (the extra-model hooks too, all found): chained through chain_emit.trf
+assert(set[3] and set[3].metadata.transformatorConfig.transformator.name == "runaround_helper_1::/res/models/runaround_ghost/chain_emit.trf",
+  "an mcs-style transformator is chained through chain_emit.trf")
+assert(set[3].metadata.transformatorConfig.params.runaround_trf == "mcs_1::/vehicle/mcs/scripts/train_all.trf", "the original's name kept")
+assert(added["runaround_ghost_hide/loco.mdl"] ~= nil, "and it can be hidden")
+-- an extra-model hook not found, or a hook nothing passes on: left alone
+local function trfOf(i) return set[i] and set[i].metadata.transformatorConfig.transformator.name end
+assert((trfOf(8) == nil or trfOf(8) == "half_1::/vehicle/half/half.trf") and (trfOf(9) == nil or trfOf(9) == "odd_1::/vehicle/odd/odd.trf"),
+  "a missing hook function, or an unknown hook: not chained")
+assert(added["runaround_ghost_hide/van.mdl"] == nil and added["runaround_ghost_hide/van2.mdl"] == nil, "and not hideable")
 -- one that can't be found: left alone
 assert(set[7] == nil or set[7].metadata.transformatorConfig.transformator.name == "gone_1::/vehicle/gone/missing.trf", "a missing transformator is not chained")
 -- devers-style (update and particles only, update found): chained, its params kept
@@ -71,19 +96,20 @@ assert(chainedName(6) == "runaround_helper_1::/res/models/runaround_ghost/chain.
 local p6 = set[6] and set[6].metadata.transformatorConfig.params
 assert(p6 and p6.runaround_trf == "devers_1::/vehicle/train/devers/devers_any.trf" and p6.devers_trf == "x.trf" and p6.devers_carrier == "RAIL", "the other mod's own params are kept")
 assert(added["runaround_ghost_real/caboose.mdl"] ~= nil, "a chained vehicle with a wrapped sound set is marked ready")
-local whyMcs, whyGone = false, false
+local whyHalf, whyOdd, whyGone = false, false, false
 for _, l in ipairs(out) do
-  if l:find("left alone: mcs_1::/vehicle/mcs/scripts/train_all.trf - its transformator also has getEmittableModelsScript", 1, true) then whyMcs = true end
+  if l:find("left alone: half_1::/vehicle/half/half.trf - its transformator's computeEmittedModelsScript function was not found", 1, true) then whyHalf = true end
+  if l:find("left alone: odd_1::/vehicle/odd/odd.trf - its transformator also has somethingElseScript", 1, true) then whyOdd = true end
   if l:find("left alone: gone_1::/vehicle/gone/missing.trf - its transformator could not be read", 1, true) then whyGone = true end
 end
-assert(whyMcs and whyGone, "the log says why each was left alone:\n" .. table.concat(out, "\n"))
+assert(whyHalf and whyOdd and whyGone, "the log says why each was left alone:\n" .. table.concat(out, "\n"))
 -- no ug_require (the load scope might not have it): nothing is chained
 local saved_req = ug_require
 ug_require = nil
 build("runaround_helper_1")
 assert(chainedName(6) ~= "runaround_helper_1::/res/models/runaround_ghost/chain.trf", "without ug_require nothing is chained")
 ug_require = saved_req
-print("build: devers-style chained; more hooks, missing, or no ug_require -> left alone")
+print("build: devers-style chained, mcs-style through chain_emit; unknown hook, missing function, or no ug_require -> left alone")
 assert(added["runaround_ghost_real/br_e94.mdl"] and added["runaround_ghost_dyn/br_e94.mdl"], "marker and copy built")
 print("build: own ID - vehicles patched, markers and copies built")
 

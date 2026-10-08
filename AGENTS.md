@@ -298,6 +298,16 @@ Offline-tested only:
   the full-detail spec counted from 0, and logs once `loco copy parts: N user
   transforms listed; parts spec ...` and `wrote N part transforms ...
   refused: ...`.
+  **Fifth live test (*devers* on, Su):** `loco copy parts: 0 user transforms
+  listed; parts spec for 39 nodes, 3 parts, 6 axles` (39 = 38 + *devers*'
+  wrapper: the spec was made after *devers*' modifier) and `wrote 9 part
+  transforms (track under the copy known)`, no error; the tender still rigid.
+  So a free entity has no user transforms: setUserTransf on it is accepted and
+  does nothing (to confirm: did the pony/tender wheels turn?). Proposed next:
+  drive the parts with animations instead (they work on free entities, as the
+  driving wheels show; *devers* adds its roll the same way): a uniquely named
+  yaw animation on each placed part and a spin on each small axle, added in
+  `partsAtLoad`, played only by the copy.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

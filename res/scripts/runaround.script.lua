@@ -441,6 +441,11 @@ local function pushGhostState(run, speed, vx, vy, dt)
 	local power = math.min(0.25 + speed01, 1.0)
 	-- which way the wheels turn: backwards when the ghost drives against its facing
 	local backwards = (run.headingFlipped and 1 or 0) + (((run.yawOffset or 0) > 1) and 1 or 0)
+	if run.phase == "approach" and run.approachBackwards ~= nil then
+		-- the glide's own direction: the route may end facing either way (a last
+		-- reverse back to the coaches that was never clicked is driven only here)
+		backwards = run.approachBackwards and 1 or 0
+	end
 	local ok, cmd = pcall(api.cmd.makeCustomEntityUpdateStateCmd, run.ghost, {
 		speed01 = speed01,
 		power01 = power,
@@ -1068,6 +1073,7 @@ local function advanceApproach(run, dt)
 		-- hidden loco (the wheel animation follows the same motion).
 		local v0 = math.max(run.loopSpeed or CONFIG.defaultSpeed, 1.0)
 		run.approachDecel = (dist > 0.1) and (v0 * v0 / (2.0 * dist)) or 1.0
+		run.approachBackwards = (dx * math.cos(run.gyaw or 0.0) + dy * math.sin(run.gyaw or 0.0)) < 0.0
 		run.speed = v0
 		startSegment(run, v0, -run.approachDecel, 0.0)
 	end

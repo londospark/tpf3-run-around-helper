@@ -205,6 +205,12 @@ The wheels turn with the distance the loco travels. Scripts can't read a loco's
 driving-wheel radius, so a typical 0.9 m is assumed. Wheels on very large or
 very small driving wheels may turn a little too fast or too slow.
 
+Known in this alpha, both seen with a steam loco:
+
+- **No chuffing while the loco runs around.** The rest of its sound plays.
+- **The tender's wheels can sit slightly off the track** while the loco runs
+  around.
+
 ## Reporting a problem
 
 Please use the

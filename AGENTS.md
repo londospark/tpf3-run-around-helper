@@ -194,7 +194,7 @@ machine: `git pull`, then `dev/sync_staging.sh`, then restart the game.**
 
 ## Known issues
 
-### Seen working live (2026-10-07, owner's save with the *devers* mod)
+### Seen working live (2026-10-07, owner's save with the *devers* mod: Real Track Cant, mod ID `devers_1`, mod.io 6418700)
 
 - One run per arrival; the game's repeat arrival is ignored (N5); the loco, not
   a coach, is chosen (N6).
@@ -209,10 +209,19 @@ machine: `git pull`, then `dev/sync_staging.sh`, then restart the game.**
 
 Offline-tested only:
 
-- **Save and load mid-run (M7)**, and autosave landing mid-run. Do free entities
-  (the copies) survive a reload? Does the run finish?
-- **A steam loco:** its sound set has chuff tracks; the hidden loco's silenced
-  output must keep the track count (else the AudioEmitterBackend crash).
+- ~~Save and load mid-run (M7)~~: **passed live** (2026-10-08). Removing the
+  mod mid-run is still untested.
+- ~~A steam loco~~: **no crash live** (2026-10-08), so the silenced output keeps
+  the track count. Seen, both documented as known in the README and MODIO.md:
+  - **No chuffing** on the running copy; the rest of its sound plays. Not looked
+    into yet. A guess: the chuff needs state the copy's sound update doesn't get.
+  - **The tender's wheels don't follow the track exactly.** Not looked into yet.
+    Check whether it also happens without *devers*.
+  - Wheels turned backwards on the approach glide when the route ended past the
+    points with no reversal (the last reverse into the platform is the glide,
+    not a route reversal). **Fixed:** the glide sets the wheel direction from
+    its own movement against the loco's facing (`run.approachBackwards`,
+    `test_flow.lua`). Needs a live re-check.
 - **Goods wagons with loads:** the copies should show the loads
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line

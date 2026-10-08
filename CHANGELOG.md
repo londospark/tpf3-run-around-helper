@@ -55,6 +55,9 @@
 - Fixed: straight after a run-around, the game reports the train arriving
   again, and a second run-around started on the turned train, running a coach
   around as the "loco". Repeat arrivals at the same stop are now ignored.
+- Fixed: the wheels turned the wrong way on the last stretch back to the
+  coaches when the route ended past the points, beyond the end of the platform,
+  so the reverse back into the station wasn't one of the clicked reversals.
 - The automatic loco choice only ever picks a part with an engine, at an end of
   the train. With no loco at either end, there's no run-around, and the card
   says why.

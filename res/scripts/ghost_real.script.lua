@@ -174,10 +174,67 @@ local function stockTrainUpdate(params, transfsOutput)
 	transformator_util.scaleUserTransfIndicesLoadConfig(ci.vehicle.indicesLoadConfig, transfsOutput)
 end
 
+-- PROBE (temporary, logging only): for a real steam loco (runaround_probe set at
+-- load by ghost_build), which parts the engine places itself (tender, axles,
+-- bogies) and where, so that the loco's copy can place them the same way. Every
+-- 20 s per carriage while moving, at most 6 times: the user transforms that
+-- aren't the identity, as index:type x,y,z heading(degrees).
+local probeSeen = {}
+local function probeCols(m)
+	local tries = {
+		function() local o = {} for j = 1, 4 do local v = api.type.Mat4f.cols(m, j - 1) o[j] = { v.x, v.y, v.z } end return o end,
+		function() local o = {} for j = 1, 4 do local v = m:cols(j - 1) o[j] = { v.x, v.y, v.z } end return o end,
+		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2], m[(j - 1) * 4 + 3] } end return o end,
+		function() local o = {} for j = 1, 4 do o[j] = { m[(j - 1) * 4], m[(j - 1) * 4 + 1], m[(j - 1) * 4 + 2] } end return o end,
+	}
+	for _, f in ipairs(tries) do
+		local ok, c = pcall(f)
+		if ok and type(c[4][1]) == "number" and type(c[1][1]) == "number" then return c end
+	end
+	return nil
+end
+local atan2 = math.atan2 or math.atan
+local function probe(params, transfsOutput)
+	local p = params.transformatorConfigParams
+	if p == nil or p.runaround_probe ~= true then return end
+	local ci = params.currentInfo
+	local speed = ci.vehicle and ci.vehicle.speed or 0
+	if math.abs(speed) < 1.0 then return end
+	local key = carriageOf(params)
+	local now = ci.world and ci.world.gameTime or 0
+	local seen = probeSeen[key]
+	if seen ~= nil and (seen.n >= 6 or now - seen.t < 20000) then return end
+	probeSeen[key] = { n = (seen and seen.n or 0) + 1, t = now }
+	local okL, list = pcall(transfsOutput.getUserTransfs, transfsOutput)
+	if not okL or list == nil then print("[RunAroundHelper] PROBE " .. tostring(p.runaround_mdl) .. ": user transforms unreadable") return end
+	local n = 0
+	pcall(function() n = #list end)
+	local parts, unread = {}, 0
+	for k = 1, n do
+		local e = list[k]
+		local c = e and probeCols(e.transf) or nil
+		if c == nil then
+			unread = unread + 1
+		else
+			local ident = math.abs(c[1][1] - 1) + math.abs(c[1][2]) + math.abs(c[2][2] - 1) + math.abs(c[3][3] - 1)
+				+ math.abs(c[4][1]) + math.abs(c[4][2]) + math.abs(c[4][3])
+			if ident > 1e-4 then
+				parts[#parts + 1] = string.format("%d:%s %.2f,%.2f,%.2f %.1f", k, tostring(e.type), c[4][1], c[4][2], c[4][3],
+					math.deg(atan2(c[1][2], c[1][1])))
+			end
+		end
+	end
+	print(string.format("[RunAroundHelper] PROBE %s carriage %s speed %.1f reversed %s: %d user transforms (%d unreadable), moved: %s",
+		tostring(p.runaround_mdl), tostring(key), speed, tostring(ci.landVehicle and ci.landVehicle.reversed), n, unread,
+		#parts > 0 and table.concat(parts, " | ") or "none"))
+end
+
 local function trainUpdateFn(_captureParams, params, transfsOutput)
 	if params.currentInfo.landVehicle ~= nil then
 		if hideIfFlagged(params, transfsOutput) then return end
-		return stockTrainUpdate(params, transfsOutput)
+		stockTrainUpdate(params, transfsOutput)
+		pcall(probe, params, transfsOutput)
+		return
 	end
 	return ghostUpdate(params, transfsOutput)
 end

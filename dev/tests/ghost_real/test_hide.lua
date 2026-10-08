@@ -54,3 +54,29 @@ snd(nil, { currentInfo = { vehicle = { speed = 3 } } }, {})
 snd(nil, { currentInfo = { customState = { state = { speed = 3 } } } }, {})
 assert(#printed == 1 and printed[1]:find("not found", 1, true), "said once at load")
 print("hide ok")
+-- the probe (temporary): logs the moved parts of a real steam loco, and only that
+do
+  local printed = {}
+  local oldPrint = print
+  print = function(s) printed[#printed + 1] = s end
+  api.type.Mat4f.cols = function(m, j) return m[j + 1] end
+  local I = { { x = 1, y = 0, z = 0 }, { x = 0, y = 1, z = 0 }, { x = 0, y = 0, z = 1 }, { x = 0, y = 0, z = 0 } }
+  local M = { { x = 0, y = 1, z = 0 }, { x = -1, y = 0, z = 0 }, { x = 0, y = 0, z = 1 }, { x = -6, y = 0.5, z = 0 } }
+  local list = { { transf = I, type = 1 }, { transf = M, type = 2 }, { transf = I, type = 1 } }
+  local pout = setmetatable({ getUserTransfs = function() return list end }, { __index = function() return function() end end })
+  local function steam(speed, probeOn)
+    local r = real({ x = 0.5, y = 0.5, z = 0.5 }, {})
+    r.currentInfo.vehicle.speed = speed
+    r.transformatorConfigParams = probeOn and { runaround_probe = true, runaround_mdl = "black5.mdl" } or {}
+    return r
+  end
+  fns.train.updateFn(nil, steam(10, false), pout)
+  fns.train.updateFn(nil, steam(0, true), pout)
+  assert(#printed == 0, "no probe for other locos, or standing")
+  fns.train.updateFn(nil, steam(10, true), pout)
+  fns.train.updateFn(nil, steam(10, true), pout)
+  print = oldPrint
+  assert(#printed == 1, "once per 20 s: " .. #printed)
+  assert(printed[1]:find("black5.mdl", 1, true) and printed[1]:find("2:2 %-6.00,0.50,0.00 90.0") and not printed[1]:find("1:1"), printed[1])
+end
+print("probe ok")

@@ -239,9 +239,23 @@ Offline-tested only:
   (`hasHairpin`); the pathfinder starts from a node, so it never knew which
   piece the loco came in on. `findPath` (from an edge with direction) exists
   in the API but nothing uses it, so it wasn't relied on.
-- **The tender** (Black 5): the owner says the loco and tender move as one
-  rigid object; seen without *devers* too, so it's this mod. Not looked into
-  yet.
+- **The tender** (Black 5, and every tender loco): the loco and tender move as
+  one rigid object on the copy; seen without *devers* too, so it's this mod.
+  Cause, from *devers*' notes (tested live by its author) and the model files:
+  the engine places bogies, axles and fake bogies itself, as absolute user
+  transforms, only for a vehicle on the track. A free entity (the copy) gets
+  none, so its tender and wheels sit at their rest pose. In the Black 5
+  (`gr1m_LMSblack5`, mod.io 6392677) the tender is node `group_29` (x = -9.15,
+  axles 32-34) and the loco body `group_1` (pony truck `group_12`); see
+  `lua dev/tools/node_index.lua <model.mdl>`. User transform numbering: root 0,
+  then depth first.
+  **Probe in place (temporary, remove after):** `ghost_build` sets
+  `runaround_probe` on steam locos (stock-wrapped path only, so *devers* must
+  be off), and `ghost_real` logs `PROBE <model> ... moved: index:type x,y,z
+  heading` lines: the parts the engine moved, every 20 s while moving, 6 times
+  per carriage. Next: read those lines, then pass the placed parts' indices and
+  rest poses from `ghost_build` to the copy's transformator and place them from
+  track points the game script sends with the ghost's state.
 - **Goods wagons with loads:** the copies should show the loads
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line

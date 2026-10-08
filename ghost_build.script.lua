@@ -278,6 +278,12 @@ local function patchLoco(modelId, modelName, src)
 	local chained = false
 	if trfOk then
 		md.transformatorConfig.transformator.name = wrappedTrf
+		-- PROBE (temporary): log where the engine puts a steam loco's parts
+		if type(soundName) == "string" and string.find(soundName, "steam", 1, true) then
+			if type(md.transformatorConfig.params) ~= "table" then md.transformatorConfig.params = {} end
+			md.transformatorConfig.params.runaround_probe = true
+			md.transformatorConfig.params.runaround_mdl = modelName
+		end
 	else
 		local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
 		local why

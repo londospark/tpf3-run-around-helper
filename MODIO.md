@@ -10,7 +10,7 @@ LondoSpark
 
 ## Summary (max 250 characters)
 
-ALPHA. Your loco runs around its train at the terminus instead of the instant flip. Click a few points on the track: it uncouples, runs around with its own sound, smoke and paint, and couples on at the other end.
+ALPHA, made with a lot of help from AI. Your loco runs around its train at the terminus instead of the instant flip. Click a few points on the track: it uncouples, runs around with its own sound, smoke and paint, and couples on at the other end.
 
 ## Tags
 
@@ -23,6 +23,8 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 ## Description (paste into the description field; it is HTML)
 
 <p><strong>ALPHA - an early test release. It works, but it has only been tried on a few layouts: please try it and tell me what breaks.</strong></p>
+
+<p><strong>Made with a lot of help from AI.</strong> Most of the code, tests and documentation for this mod were written by an AI assistant (Anthropic's Claude, using Claude Code). I set the direction, made the decisions and tested it in game. I'm saying so up front so that nobody downloads it under a false impression; if you'd rather not use AI-assisted mods, that's completely fair.</p>
 
 <p><strong>Your locomotive runs around its train at the terminus, instead of the game's instant flip.</strong> A proper run-around (run round, run-round loop) for Transport Fever 3.</p>
 

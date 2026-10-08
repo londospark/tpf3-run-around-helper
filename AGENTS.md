@@ -31,6 +31,10 @@ instead of the game's instant flip.
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 
   (or the current model's equivalent line).
+- **Say plainly that the mod is made with a lot of help from AI.** The owner
+  wants nobody downloading it under false pretences and isn't ashamed of it.
+  The README, MODIO.md (summary and description), `_metadata/modinfo.json` and
+  CHANGELOG all say so. Keep it in every public text, and in any new one.
 - Game script changes need a **full game restart**. Script mods load only at
   start-up.
 
@@ -43,7 +47,7 @@ instead of the game's instant flip.
 | `res/scripts/ghost_real.script.lua` | transformator and sound wrappers: stock behaviour for real trains; drives free-entity copies; hides carriages painted the flag colour |
 | `ghost_build.script.lua` | load-time `postRunScript`: patches every rail vehicle to use the wrappers, builds `runaround_ghost_dyn/` copies and `runaround_ghost_real/` markers |
 | `res/audio/ghostwrap/` | 15 generated copies of the game's rail sound sets (absolute paths, wrapped update script) |
-| `res/models/runaround_ghost/` | `real.trf.lua`, `real_tilting.trf.lua`, plus 55 static plain loco copies (last fallback) |
+| `res/models/runaround_ghost/` | `real.trf.lua`, `real_tilting.trf.lua` (the game's own, wrapped); `chain.trf.lua` and `chain_emit.trf.lua` (another mod's, chained; the second also passes on the extra-model hooks); plus 55 static plain loco copies (last fallback) |
 | `_metadata/` | `modinfo.json`, `0.png` logo (rendered from `logo_source.svg` with `rsvg-convert`) |
 | `MODIO.md` | text for the mod.io page (the owner uploads it themselves) |
 | `dev/` | **not shipped**: tests, tools, scripts (see below) |
@@ -185,6 +189,11 @@ Offline-tested only:
   a normal departure.
 - **Failure handling (H1-H4)** and the M5 mismatch check: offline only.
 - **Bogies hidden**, and no `Could not find texture` warnings.
+- **`mcs_basisset` wagons** (`mcs_gtw1_base`), now chained through
+  `chain_emit.trf`: the load log should no longer say `left alone` for
+  `maikc_train_all.trf`. A train of them should get the ghost rake (hidden and
+  drawn forward), not the simple sequence, and look and animate as before when
+  shown again.
 
 ### Bugs found in review
 

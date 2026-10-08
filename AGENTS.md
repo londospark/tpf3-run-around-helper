@@ -45,12 +45,12 @@ instead of the game's instant flip.
 | `res/scripts/runaround.script.lua` | game script: arrivals, route planning, the run (ghost loco, ghost rake, simple sequence), recouple, GUI command handling |
 | `res/scripts/runaround_gui.script.lua` | train-window card (`RunAroundHelperVehiclePlugin`) and the route tool |
 | `res/scripts/ghost_real.script.lua` | transformator and sound wrappers: stock behaviour for real trains; drives free-entity copies; hides carriages painted the flag colour |
-| `ghost_build.script.lua` | load-time `postRunScript`: patches every rail vehicle to use the wrappers, builds `runaround_ghost_dyn/` copies and `runaround_ghost_real/` markers |
+| `ghost_build.script.lua` | load time. `runFn` (`runScript`): a `loadModel` modifier (`partsAtLoad`) that works out each rail vehicle's parts spec (`runaround_partsN` params) and adds the `runaround_yawJ` / `runaround_spinK` animations. `postRunFn` (`postRunScript`): patches every rail vehicle to use the wrappers, builds `runaround_ghost_dyn/` copies and `runaround_ghost_real/` markers |
 | `res/audio/ghostwrap/` | 15 generated copies of the game's rail sound sets (absolute paths, wrapped update script) |
 | `res/models/runaround_ghost/` | `real.trf.lua`, `real_tilting.trf.lua` (the game's own, wrapped); `chain.trf.lua` and `chain_emit.trf.lua` (another mod's, chained; the second also passes on the extra-model hooks); plus 55 static plain loco copies (last fallback) |
 | `_metadata/` | `modinfo.json`, `0.png` logo (rendered from `logo_source.svg` with `rsvg-convert`) |
 | `MODIO.md` | text for the mod.io page (the owner uploads it themselves) |
-| `dev/` | **not shipped**: tests, tools, scripts (see below) |
+| `dev/` | **not shipped**: tests, tools, scripts (see below). `dev/tools/node_index.lua <model.mdl> [lod]` numbers a model's nodes as the game numbers user transforms |
 
 `dev/`, `AGENTS.md` and `CODE_REVIEW.md` are excluded from the staging install
 by `dev/sync_staging.sh`. Exclude them from the mod.io upload as well.
@@ -117,7 +117,11 @@ allowed inside `update()`.
    there on the track and brakes to a stop. Only what's left (centimetres) is
    the straight `approach` glide. With no ghost rake (the simple sequence), or
    coaches more than 2.5 m off the way back, it glides from where the clicked
-   route ends, as before.
+   route ends, as before. The copy stops where the real loco's **origin will
+   be once it is turned round** (`placeTarget`): the engine keeps a turned
+   vehicle's extent in place, and a model's origin isn't in its middle.
+   Throughout the run the copy's tender, pony truck and bogies turn to the
+   track and its small axles spin: see "Tender and bogies on the copy".
 8. `recoupleRake`: the real loco and coaches get their own paint back (matched
    by model and purchase time; the loco part is the same object throughout). The
    copies are destroyed.
@@ -164,198 +168,164 @@ So that nobody repeats them:
 - **Wheel animation frame wrapped to one turn:** blends backwards. Use a
   frame that keeps increasing, computed from a motion segment.
 
-## Where we are (2026-10-08, handing back to the other machine)
+## Where we are (2026-10-08 evening, laptop; handing to the desktop)
 
-Latest work, done on the second machine (desktop), all pushed. **On the other
-machine: `git pull`, then `dev/sync_staging.sh`, then restart the game.**
+All pushed. **On the desktop: `git pull`, `dev/sync_staging.sh`, restart the
+game** (`mod.json` changed: there's now a `runScript`, so a full restart is
+needed). On this laptop the game is at
+`/data/games/SteamLibrary/steamapps/common/Transport Fever 3/`; on the desktop
+`/mnt/games/...`.
 
-- Reviewed the other machine's 13 commits of 2026-10-07 (`50c57a2`..`606ecd5`):
-  they were sound. Fixed two slips in this file (`751a745`).
-- **Extra-model hooks passed on** (`daa8bcb`). A transformator that declares
-  `getEmittableModelsScript` and `computeEmittedModelsScript` is now chained
-  through `chain_emit.trf.lua`, and can be hidden. While hidden, it emits nothing.
-  - Signatures checked against the game's hot-air balloon, `transformator_util.tl`
-    and `mcs_basisset`'s `maikc_train_all.script.tl`.
-  - In the owner's mods, the only users are 15 **goods wagons** in
-    `mcs_gtw1_base` (mod.io 5690808, needs `mcs_basisset`, 5684258). No loco in
-    the owner's mods was unhideable.
-  - None of those wagons sets `randomGroups`, so they emit nothing today. The
-    forwarding itself won't be seen working with them.
-  - **Live test pending:** see "`mcs_basisset` wagons" under "Still to check".
-- **AI disclosure** (`ff36b88`). The README, MODIO.md, `modinfo.json` and the
-  CHANGELOG say the mod was made with a lot of help from AI. This is now a
-  working rule (above).
-- Also on the desktop: the owner's mod.io downloads are in
-  `~/mod.io/common/10640/mods/<id>/` (handy for reading other mods' scripts).
-  The game is at `/mnt/games/SteamLibrary/steamapps/common/Transport Fever 3/`.
-- Ideas raised but not started:
-  - A live probe of whether full model names match between load time and the
-    game script. If they do, vehicles that share a file name could be keyed by
-    full name (M1).
-  - A list of API requests for Urban Games. The main three: a per-carriage
-    visibility command, a replace that doesn't buy or sell, and vehicle info for
-    free entities. Then mod-relative paths, model metadata readable from game
-    scripts, stackable transformators, hook documentation, and a "shunt N metres"
-    command.
+The day's work, in order:
 
-## Known issues
+1. **Status review and alpha checklist.** Save and load mid-run passed live;
+   a run without *devers* passed live; a steam loco runs without crashing.
+2. **Wheels backwards on the final glide** (route ending past the points with
+   no clicked reversal): the glide now takes the wheel direction from its own
+   movement (`run.approachBackwards`). Fixed and seen.
+3. **The way back** (route version 2): the route goes on from the last click to
+   the station stop, and the copy sets back onto the coaches along the track
+   instead of a straight glide. Seen live working: `way back: the loco sets
+   back 25.0 m along the track to its coaches (0.12 m off the track there)`.
+   Also: planned legs that double back at points (hairpins) are rejected
+   (`hasHairpin`).
+4. **The snap at coupling** (seen live: the loco jumped ~9 m onto the coaches
+   with the Su): fixed by `placeTarget`. **Not yet seen live.** Log:
+   `coupling place: turned round from the hidden loco - the loco's origin
+   9.30 m from the hidden loco's`.
+5. **Tender and bogies on the copy:** see the next section. In progress.
 
-### Seen working live (2026-10-07, owner's save with the *devers* mod: Real Track Cant, mod ID `devers_1`, mod.io 6418700)
+### Tender and bogies on the copy (in progress)
 
-- One run per arrival; the game's repeat arrival is ignored (N5); the loco, not
-  a coach, is chosen (N6).
-- The loco stays on the train, hidden: `money: the detach/recouple changed the
-  balance by 0`, no money in the world (N7). No crash after the sound fix.
-- Chaining *devers*' transformator: `368 through another mod's transformator`,
-  and the ghost rake ran (`train drawn up 23.8 m; loco ghost 0.35 m from where it
-  would be coupled`).
-- The start check on a normal arrival: `0.3 m from the route`.
+**The problem.** For a real train on the track, the engine places the loco
+body, tender, pony truck and bogies, and spins the small axles. The run's loco
+copy is a free entity: the engine does none of that, so the copy was one rigid
+piece, with its tender wheels off the rails on curves. It affects every tender
+loco, and the coach copies' bogies.
+
+**What the engine does** (probed live on an A4 and a Black 5 with *devers*
+off, `PROBE` lines; README → Engine findings): it places, as absolute user
+transforms in world coordinates, every node that directly holds an axle and
+every fake bogie group. Each keeps its centre where it is on the vehicle and
+only turns to the track under its axles. It spins every axle that has no
+animation of its own (not the driving wheels). User transforms are numbered
+root 0, then depth first. Inferred, not probed: a part holding two or more
+such parts (the Su's tender body on two bogies) turns with them.
+
+**What we learned the hard way** (each from a live test):
+
+- `modelRep.getAsTable` in the `postRunScript` gives **no `lods`**. Nodes can
+  only be read in a `loadModel` modifier, as *devers* does.
+- Params set in the modifier survive to the game (`loco params at setup: ...
+  given as table ... parts spec: yes; devers rest poses: yes`). Our modifier
+  runs **after** *devers*' (the Su's spec counts 39 nodes = 38 + its wrapper).
+- A free entity has **no user transforms**: `getUserTransfs()` is empty and
+  `setUserTransf` is accepted but does nothing. So the parts are driven by
+  **animations**, which do play on a free entity (the driving wheels show it).
+- An animation applies on top of the node's rest transform (the game's wheel
+  `.ani` files are pure rotations about the wheel). Keyframe matrices are
+  column-major (the Black 5's rod keyframes have their translation at 13-15).
+- Fake bogie positions are in model coordinates (the Su's far tender sits at
+  -9.14 and -13.87, its bogies' places).
+
+**How it works now:**
+
+- **Load** (`ghost_build`, `partsAtLoad`): `partsSpecs` finds the parts to turn
+  (nodes holding axles, fake bogie groups, parts holding two or more of those;
+  never the root or *devers*' single wrapper node) and the axles to spin (no
+  animation of their own), per level of detail. It writes them as
+  `runaround_partsN` params: `"n G A"`, then per part `idx parent x y z yaw
+  (model) lx ly lz lyaw (local) px py pz pyaw (parent) a b (reference points'
+  x)`, then per axle `idx radius sign`. `animateParts` adds `runaround_yawJ`
+  (KEYFRAME_MATRIX, -30..+30 degrees over 0..6000 ms) to part J and
+  `runaround_spinK` (a turn over 3600 ms) to axle K, J and K counting the
+  full-detail spec. Lower levels get the same names on the parts at the same
+  place. The dyn copies copy the params from the loaded model.
+- **Game script** (`runaround.script.lua`): each tick on the route,
+  `trackStrip` sends the copy 17 track points (-16..+16 m along its facing, in
+  its own frame), following the route onto pieces that join and straight on
+  where none does. Motion segments carry `s0`, the signed distance along the
+  copy's facing, for the axles.
+- **Copy** (`ghost_real`, `placeParts`): turns each part to the chord of the
+  track under its reference points, relative to its parent, and plays
+  `runaround_yawJ` at that angle; plays `runaround_spinK` at the signed
+  distance over the axle's radius.
+
+**State at hand-over.** Seventh live test (Su, *devers* on, turns drawn x4):
+the loco body visibly turned, the tender didn't. Cause: the Su's tender body
+holds no axles (they're in two bogies under it). Fixed by the "parts holding
+two or more parts" rule (commit `57078fe`). **Not yet seen live.**
+
+**Temporary things to remove once the tender is seen right:**
+
+- `PARTS_TEST_SCALE = 4` in `ghost_real.script.lua`: the copy's part turns are
+  drawn four times larger so their direction is obvious, and logged every 3 s
+  (`loco copy parts: track bends X deg (left/right) over 16 m; parts turned
+  ...`). Set it to 1, and the three x4 expectations in
+  `dev/tests/ghost_real/test_parts.lua` back to x1.
+- The `PROBE` (`runaround_probe` set in `patchLoco` for steam locos on the
+  stock path; `PROBE` lines from real trains). Remove both halves.
+- `loco parts: ...` (load), `loco params at setup: ...` (setup) and the
+  one-off `loco copy parts: turning ...` lines can stay or go; they're capped.
+
+**Next checks, in order** (restart first):
+
+1. The Su's tender turns towards the inside of curves with the loco (x4 makes
+   it obvious); the `track bends ... parts turned` lines list 4 parts.
+2. The Black 5 and the A4 the same.
+3. **Real trains are unaffected** by the added animations (never played on
+   them): a real Su or Black 5 in normal running still bends its tender on
+   curves. With *devers* off, the `PROBE` lines should still list the tender
+   and the small axles as moved. If not, move the animations to the copies
+   only (the dyn copies are built with `modelPath`, so that would need their
+   own node tree; see `addGhostModel`).
+4. With and without *devers* (the owner needs both).
+5. The coupling: no snap (`coupling place: ...`).
+6. Then x1, remove the probe, and update the README if anything changed.
+
+**Not started, raised by the owner:** the coach copies' bogies on a curved
+platform stay straight (no track is sent for coaches, and they stand there the
+whole run). Plan: send each coach copy a track strip once, at the pull, from
+the route's first pieces and the way back, which cover the platform; the same
+`placeParts` then turns their bogies.
+
+**Known, not looked into:** a steam loco's copy doesn't chuff (the rest of its
+sound plays).
 
 ### Still to check before the public alpha
 
-Offline-tested only:
-
-- ~~Save and load mid-run (M7)~~: **passed live** (2026-10-08). Removing the
-  mod mid-run is still untested.
-- ~~A steam loco~~: **no crash live** (2026-10-08), so the silenced output keeps
-  the track count. Seen, both documented as known in the README and MODIO.md:
-  - **No chuffing** on the running copy; the rest of its sound plays. Not looked
-    into yet. A guess: the chuff needs state the copy's sound update doesn't get.
-  - **The tender's wheels don't follow the track exactly.** Also without
-    *devers*, so it's this mod (see "The tender" below).
-  - Wheels turned backwards on the approach glide when the route ended past the
-    points with no reversal (the last reverse into the platform is the glide,
-    not a route reversal). **Fixed:** the glide sets the wheel direction from
-    its own movement against the loco's facing (`run.approachBackwards`,
-    `test_flow.lua`). Needs a live re-check.
-- **The way back** (2026-10-08, offline only): after the last click the route
-  goes on to the station stop, and the loco copy sets back onto the coaches
-  along the track instead of the straight glide. Check: the card's route ends
-  "back to the station"; the log says `way back: the loco sets back N m along
-  the track`, not `glided instead`; the copy follows the points into the
-  platform and stops against the far coach. Older saved routes are re-planned
-  at the first arrival (`saved by an older version: planning it again`).
-  Also new: planned legs that double back at points (a hairpin) are rejected
-  (`hasHairpin`); the pathfinder starts from a node, so it never knew which
-  piece the loco came in on. `findPath` (from an edge with direction) exists
-  in the API but nothing uses it, so it wasn't relied on.
-- **The tender** (Black 5, and every tender loco): the loco and tender move as
-  one rigid object on the copy; seen without *devers* too, so it's this mod.
-  Cause, from *devers*' notes (tested live by its author) and the model files:
-  the engine places bogies, axles and fake bogies itself, as absolute user
-  transforms, only for a vehicle on the track. A free entity (the copy) gets
-  none, so its tender and wheels sit at their rest pose. In the Black 5
-  (`gr1m_LMSblack5`, mod.io 6392677) the tender is node `group_29` (x = -9.15,
-  axles 32-34) and the loco body `group_1` (pony truck `group_12`); see
-  `lua dev/tools/node_index.lua <model.mdl>`. User transform numbering: root 0,
-  then depth first.
-  **Probed live (2026-10-08, *devers* off; A4 and Black 5):** the engine
-  places, as absolute (type 2) user transforms in world coordinates, every node
-  that directly holds an axle (A4: `front_grp`, `front_b1_grp`, `back_grp`;
-  Black 5: `group_1`, `group_12`, `group_29`) and every fake bogie group; it
-  turns (relative, type 1) every axle without its own animation (not the
-  driving wheels). Each placed part keeps its centre where it is on the vehicle
-  and only turns to the track (A4 tender centre = loco centre; Black 5 tender
-  9.15 m back on the loco's axis), as *devers*' notes say.
-  **Done (offline-tested, needs a live look):** `ghost_build`'s `partsSpecs`
-  writes `runaround_partsN` (one string per level of detail, matched by node
-  count) on every rail vehicle's own model and dyn copy; `ghost_real`'s
-  `placeParts` turns those parts on the copy, relative to their parents, from
-  `state.track` (17 points, ±16 m, in the copy's frame; `trackStrip` in the
-  game script), and turns the axles by a signed distance (`seg.s0`). It
-  measures once whether `setUserTransf` counts from 0 or 1 (log: `loco copy
-  parts: user transform indices start at N`). Coach copies get turning axles
-  (no track is sent for them, so their bogies stay straight; they only move
-  during the pull).
-  **First live test (2026-10-08, *devers* on):** rigid on the Su and the Black
-  5 (the A4 looked right, probably because its tender turns about the loco's
-  centre); the log had no `user transform indices` line, so nothing was placed
-  at all. Unknown: whether `modelRep.getAsTable` gives `lods` at load, and
-  whether the drawn node count matches (*devers* adds a wrapper node under the
-  root in its `loadModel` modifier). Now logged: `loco parts: <model> - lods:
-  ... specs (nodes placed axles): ...` at load (first 12 steam locos) and
-  `loco copy parts: ... is drawn with N nodes; its parts spec is for ...` in
-  the copy. A spec one node short is shifted for a *devers* model.
-  **Second live test:** `loco parts: ... lods: nil`: `getAsTable` at postRun
-  has no nodes. So the spec is now worked out in a `loadModel` modifier
-  (`partsAtLoad`, registered by `mod.runFn`, `runScript` in `mod.json`), as
-  *devers* does; copies take the loaded model's `runaround_partsN`. Whether
-  our modifier runs before or after *devers*' (its wrapper node) is unknown;
-  both are handled.
-  **Third live test (*devers* on, Su):** specs are made at load (`loco parts:
-  ... specs ...` for every steam loco), but no copy logged anything, so no copy
-  carried them. Suspect: `getAsTable` returns `transformatorConfig.params` as
-  something other than a plain table, and the setup replaced it with `{}`
-  (losing our specs and *devers*' params). Now `plainParams` keeps them in
-  either shape, and the log says `loco params at setup: ... given as <type>
-  with N entries; parts spec: yes/NO` and, in a copy without a spec, `loco
-  copy parts: ... has no parts spec; its parameters are <type>`.
-  **Fourth live test (*devers* on, Su):** `loco params at setup: ... given as
-  table with 7 entries; parts spec: yes; devers rest poses: yes`, so the specs
-  do reach the models (the guess above was wrong; `plainParams` stays, it's
-  harmless). Yet the copy logged nothing: the only silent way out was an empty
-  `getUserTransfs()` (so no node count). Now, with none listed, the copy uses
-  the full-detail spec counted from 0, and logs once `loco copy parts: N user
-  transforms listed; parts spec ...` and `wrote N part transforms ...
-  refused: ...`.
-  **Fifth live test (*devers* on, Su):** `loco copy parts: 0 user transforms
-  listed; parts spec for 39 nodes, 3 parts, 6 axles` (39 = 38 + *devers*'
-  wrapper: the spec was made after *devers*' modifier) and `wrote 9 part
-  transforms (track under the copy known)`, no error; the tender still rigid.
-  So a free entity has no user transforms: setUserTransf on it is accepted and
-  does nothing (to confirm: did the pony/tender wheels turn?). Proposed next:
-  drive the parts with animations instead (they work on free entities, as the
-  driving wheels show; *devers* adds its roll the same way): a uniquely named
-  yaw animation on each placed part and a spin on each small axle, added in
-  `partsAtLoad`, played only by the copy.
-  **Done (2026-10-08):** `animateParts` adds `runaround_yawJ` (KEYFRAME_MATRIX,
-  -30..30 degrees over 0..6000 ms) to each placed part and `runaround_spinK`
-  (a turn over 3600 ms) to each small axle, J/K in the full-detail spec's
-  order, lower levels matched by place. `ghost_real.placeParts` plays them
-  (log: `loco copy parts: turning N part(s) and M axle(s) by animation`); no
-  more user-transform writes or index measuring. An animation applies on top
-  of the node's rest transform (the game's wheel .ani files are pure
-  rotations about the wheel). **Risk to check live:** the real models carry
-  these animations too (never played). If the engine stops placing an
-  animated part or turning an animated axle, real trains' tenders/bogies
-  would go rigid in normal running: check a real Su or Black 5 on a curve,
-  and with *devers* off the PROBE lines should still list the tender and
-  the small axles as moved.
-  **Sixth live test (*devers* on, Su):** tender "rigid or maybe bending the
-  wrong way at times"; the turn on a 150 m curve is only ~3.5 degrees, so the
-  copy's part turns are now drawn x4 (`PARTS_TEST_SCALE`, TEMPORARY) and
-  logged every 3 s with the track's bend (`loco copy parts: track bends ...
-  parts turned ...`). Set it back to 1 (and the test_parts expectations) once
-  the direction is confirmed.
-  Also seen: the loco "snapped onto the coaches from about a loco length".
-  Cause: the copy stopped on the hidden loco's origin, but the real loco is
-  shown turned round, and the engine keeps a vehicle's extent in place when
-  its facing changes; the Su's origin is 4.65 m off its extent's middle, so
-  9.3 m. Fixed: `placeTarget` (log `coupling place: ...`).
-  **Seventh live test (x4):** the Su's loco body turned, its tender didn't.
-  The Su's tender body (`back_grp`) holds no axles: they're in two bogies
-  under it. Now a part holding two or more placed parts turns by their
-  centres (not the root, nor a single wrapper node under it, as *devers*'),
-  inferred from the engine visibly bending the real Su's tender; not probed.
-  Also: fake bogie positions are in model coordinates (the Su's far tender:
-  -9.14 and -13.87, its bogies' places), not the group's.
-  The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
-  the copy is seen right.
+- **Everything in "Tender and bogies on the copy" above**, and the snap fix.
+- **The way back** on other layouts: a wye, a balloon loop (no reversal; the
+  route returns over the platform), a route whose last click is on the
+  platform. Older saved routes are re-planned at the first arrival (`saved by
+  an older version: planning it again`).
+- **Removing the mod mid-run** (save and load mid-run passed).
 - **Goods wagons with loads:** the copies should show the loads
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line
   up with the hidden coaches when they reappear.
-- ~~Without *devers*~~: **passed live** (2026-10-08), one run on the stock-wrapped path.
 - **The refusals:** a route whose first points head back into the train (N2), a
   train at an alternative platform (N1). Each should show the card's message and
   a normal departure.
 - **Failure handling (H1-H4)** and the M5 mismatch check: offline only.
 - **Bogies hidden**, and no `Could not find texture` warnings.
-- **`mcs_basisset` wagons** (`mcs_gtw1_base`), now chained through
+- **`mcs_basisset` wagons** (`mcs_gtw1_base`), chained through
   `chain_emit.trf`: the load log should no longer say `left alone` for
   `maikc_train_all.trf`. A train of them should get the ghost rake (hidden and
   drawn forward), not the simple sequence, and look and animate as before when
   shown again.
+- On the first mod.io install, `loco setup: SKIPPED` must not appear.
+
+### Seen working live
+
+- 2026-10-07 (*devers* on): one run per arrival, the repeat arrival ignored
+  (N5); the loco, not a coach, chosen (N6); the loco stays on the train,
+  hidden, no money in the world (N7); *devers* chained (`368 through another
+  mod's transformator`) with the ghost rake running; the start check `0.3 m
+  from the route`.
+- 2026-10-08: save and load mid-run; a run without *devers*; a steam loco with
+  no crash; the way back (`sets back 25.0 m along the track ... 0.12 m off`);
+  the final glide's wheel direction.
 
 ### Bugs found in review
 

@@ -226,7 +226,7 @@ Offline-tested only:
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line
   up with the hidden coaches when they reappear.
-- **Without *devers*:** one run on the stock-wrapped path.
+- ~~Without *devers*~~: **passed live** (2026-10-08), one run on the stock-wrapped path.
 - **The refusals:** a route whose first points head back into the train (N2), a
   train at an alternative platform (N1). Each should show the card's message and
   a normal departure.

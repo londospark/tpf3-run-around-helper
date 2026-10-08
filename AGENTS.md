@@ -267,6 +267,15 @@ Offline-tested only:
   parts: user transform indices start at N`). Coach copies get turning axles
   (no track is sent for them, so their bogies stay straight; they only move
   during the pull).
+  **First live test (2026-10-08, *devers* on):** rigid on the Su and the Black
+  5 (the A4 looked right, probably because its tender turns about the loco's
+  centre); the log had no `user transform indices` line, so nothing was placed
+  at all. Unknown: whether `modelRep.getAsTable` gives `lods` at load, and
+  whether the drawn node count matches (*devers* adds a wrapper node under the
+  root in its `loadModel` modifier). Now logged: `loco parts: <model> - lods:
+  ... specs (nodes placed axles): ...` at load (first 12 steam locos) and
+  `loco copy parts: ... is drawn with N nodes; its parts spec is for ...` in
+  the copy. A spec one node short is shifted for a *devers* model.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

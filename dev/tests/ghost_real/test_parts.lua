@@ -67,4 +67,12 @@ fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
 assert(next(set) == nil, "a level of detail with another node count is left alone")
 fns.train.updateFn(nil, ghost(nil, 2.0), out)
 assert(next(set) == nil, "no spec: nothing placed")
+-- devers wraps everything under the root in a node of its own: one node more,
+-- every index after the root one further on
+set = {}
+list = {} for i = 1, 42 do list[i] = { type = 1 } end
+fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC, devers_trf = "x" }, 2.0), out)
+assert(set[30] and set[30].abs == false and not set[29] or (set[29] and set[29].m.yaw == nil), "tender at 30 under devers' wrapper")
+assert(near(set[30].m.yaw, t.m.yaw), "same turn")
+assert(set[33] and set[34] and set[35], "tender axles at 33-35")
 print("parts ok")

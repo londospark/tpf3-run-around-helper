@@ -166,9 +166,23 @@ local function decodeParts(s)
 	end
 	return out
 end
+-- The same spec with every node after the root one further on: devers wraps
+-- everything under the root in one node of its own (its roll), so if the spec
+-- was made without it, the drawn model has one node more.
+local function shifted(r)
+	local out = { n = r.n + 1, groups = {}, axles = {} }
+	local function sh(i) return i + 1 end -- the root's children are now the wrapper's
+	for _, g in ipairs(r.groups) do
+		out.groups[#out.groups + 1] = { idx = sh(g.idx), parent = sh(g.parent), model = g.model, lcl = g.lcl, parentModel = g.parentModel, a = g.a, b = g.b }
+	end
+	for _, a in ipairs(r.axles) do out.axles[#out.axles + 1] = { idx = sh(a.idx), r = a.r, sign = a.sign } end
+	return out
+end
+local partsMissLogged = {}
 local function partsFor(params, n)
 	local tcp = params.transformatorConfigParams
 	if tcp == nil or n == nil then return nil end
+	local seen, wrapped = {}, (tcp.devers_trf ~= nil or tcp.devers_rest1 ~= nil)
 	for i = 1, 8 do
 		local s = tcp["runaround_parts" .. i]
 		if type(s) ~= "string" then break end
@@ -178,6 +192,20 @@ local function partsFor(params, n)
 			partsCache[s] = r
 		end
 		if r and r.n == n then return r end
+		if r and wrapped and r.n + 1 == n then
+			local key = s .. "+1"
+			if partsCache[key] == nil then partsCache[key] = shifted(r) end
+			return partsCache[key]
+		end
+		seen[#seen + 1] = r and tostring(r.n) or "unreadable"
+	end
+	local key = tostring(tcp.runaround_mdl) .. ":" .. tostring(n)
+	if not partsMissLogged[key] and #seen > 0 and (partsMissLogged.count or 0) < 10 then
+		partsMissLogged[key] = true
+		partsMissLogged.count = (partsMissLogged.count or 0) + 1
+		print("[RunAroundHelper] loco copy parts: " .. tostring(tcp.runaround_mdl) .. " is drawn with " .. tostring(n)
+			.. " nodes; its parts spec is for " .. (#seen > 0 and table.concat(seen, ", ") or "none (no runaround_parts on the model)")
+			.. (wrapped and " (devers)" or "") .. " - tender and bogies stay rigid")
 	end
 	return nil
 end

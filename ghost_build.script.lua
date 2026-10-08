@@ -357,12 +357,25 @@ local function partsSpecs(src)
 	end
 	return out
 end
-local function addPartsParams(tc, src)
+local partsLogged = 0
+local function addPartsParams(tc, src, modelName)
 	if type(tc) ~= "table" then return end
 	local ok, specs = pcall(partsSpecs, src)
+	-- (logged for the first steam locos: what the game handed over, and what came of it)
+	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
+	if partsLogged < 12 and type(snd) == "string" and string.find(snd, "steam", 1, true) then
+		partsLogged = partsLogged + 1
+		local counts = {}
+		for _, spec in ipairs(ok and specs or {}) do counts[#counts + 1] = string.match(spec, "^(%d+ %d+ %d+)") end
+		local root = type(src.lods) == "table" and type(src.lods[1]) == "table" and src.lods[1].node or nil
+		log("loco parts:", tostring(modelName), "- lods:", type(src.lods) == "table" and #src.lods or type(src.lods),
+			"first root:", type(root) == "table" and tostring(root.name) or type(root),
+			"- specs (nodes placed axles):", ok and (#counts > 0 and table.concat(counts, ", ") or "none") or ("error " .. tostring(specs)))
+	end
 	if not ok or #specs == 0 then return end
 	if type(tc.params) ~= "table" then tc.params = {} end
 	for i, spec in ipairs(specs) do tc.params["runaround_parts" .. i] = spec end
+	tc.params.runaround_mdl = tc.params.runaround_mdl or modelName
 end
 
 -- Points a vehicle with another transformator at the chaining one, keeping the
@@ -422,7 +435,7 @@ local function patchLoco(modelId, modelName, src)
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end
 	if not trfOk and wrappedSound == nil then return false end
 	if wrappedSound ~= nil then md.soundConfig.soundSet.name = wrappedSound end
-	if trfOk then addPartsParams(md.transformatorConfig, src) end
+	if trfOk then addPartsParams(md.transformatorConfig, src, modelName) end
 	local ok, res = pcall(api.res.modelRep.setAsTable, modelId, src)
 	if not ok or res == false then
 		stats.failed = stats.failed + 1
@@ -445,7 +458,7 @@ local function addGhostModel(name, src, modelName, withEffects)
 			transformator = { name = wrappedTransformator(meta) or (MOD_ID .. "::/res/models/runaround_ghost/real.trf") },
 		},
 	}
-	if withEffects then addPartsParams(md.transformatorConfig, src) end
+	if withEffects then addPartsParams(md.transformatorConfig, src, modelName) end
 	if withEffects then
 		if meta.particleSystem ~= nil then md.particleSystem = clone(meta.particleSystem) end
 		local soundName = meta.soundConfig and meta.soundConfig.soundSet and meta.soundConfig.soundSet.name

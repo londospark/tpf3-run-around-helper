@@ -46,7 +46,7 @@ if python3 "$ROOT/dev/tools/gen_content.py" --check; then echo "ok    _content.j
 
 # Every script must parse, and read no globals beyond the expected ones (a
 # global read is usually a local used before it is defined - that crashed live).
-allowed='api|data|ipairs|pairs|math|string|table|tostring|tonumber|type|pcall|print|select|next|setmetatable|ug_require|getCurrentModId'
+allowed='api|data|ipairs|pairs|math|string|table|tostring|tonumber|type|pcall|print|select|next|setmetatable|ug_require|getCurrentModId|addModifier'
 for f in "$S"/*.lua "$ROOT"/ghost_build.script.lua; do
 	if ! luac -p "$f"; then echo "FAIL  syntax $f"; fail=1; continue; fi
 	extra=$(luac -l -p "$f" | grep -oE '_ENV "[A-Za-z_]+"' | grep -oE '"[A-Za-z_]+"' | tr -d '"' | sort -u | grep -vxE "$allowed")

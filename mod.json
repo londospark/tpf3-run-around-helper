@@ -12,7 +12,7 @@
     },
     "revision": 1,
     "runScript": {
-        "fileName": ""
+        "fileName": "runaround_helper_1::ghost_build.script@runFn"
     },
     "severityAdd": "None",
     "severityRemove": "None"

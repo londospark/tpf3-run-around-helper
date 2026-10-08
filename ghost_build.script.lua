@@ -344,13 +344,15 @@ end
 local function partsSpecs(src)
 	local out = {}
 	local rv = src.metadata and src.metadata.railVehicle
-	local cfg = rv and (rv.config or (type(rv.configs) == "table" and rv.configs[1])) or nil
-	if type(cfg) ~= "table" or type(src.lods) ~= "table" then return out end
-	local fakes = cfg.fakeBogies
-	local flat = type(fakes) == "table" and type(fakes[1]) == "table" and fakes[1].group ~= nil
+	if type(rv) ~= "table" or type(src.lods) ~= "table" then return out end
 	for li, lod in ipairs(src.lods) do
-		if type(lod) == "table" and type(lod.node) == "table" then
-			local f = flat and fakes or (type(fakes) == "table" and fakes[li]) or nil
+		-- one config for all levels (as the game keeps it), or one per level (as a
+		-- model file has it); fake bogies per level, or one list for all
+		local cfg = type(rv.configs) == "table" and rv.configs[li] or rv.config
+		if type(lod) == "table" and type(lod.node) == "table" and type(cfg) == "table" then
+			local fakes = cfg.fakeBogies
+			local flat = type(fakes) == "table" and type(fakes[1]) == "table" and fakes[1].group ~= nil
+			local f = flat and fakes or (type(fakes) == "table" and type(rv.configs) ~= "table" and fakes[li]) or nil
 			local ok, spec = pcall(lodPartsSpec, lod.node, cfg.axles, f)
 			if ok and spec ~= nil then out[#out + 1] = spec end
 		end
@@ -363,7 +365,7 @@ local function addPartsParams(tc, src, modelName)
 	local ok, specs = pcall(partsSpecs, src)
 	-- (logged for the first steam locos: what the game handed over, and what came of it)
 	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
-	if partsLogged < 12 and type(snd) == "string" and string.find(snd, "steam", 1, true) then
+	if partsLogged < 3 and type(snd) == "string" and string.find(snd, "steam", 1, true) then
 		partsLogged = partsLogged + 1
 		local counts = {}
 		for _, spec in ipairs(ok and specs or {}) do counts[#counts + 1] = string.match(spec, "^(%d+ %d+ %d+)") end
@@ -435,7 +437,6 @@ local function patchLoco(modelId, modelName, src)
 	if soundName ~= nil and wrappedSound == nil then note(modelName, "has its own sound set, left alone:", soundName) end
 	if not trfOk and wrappedSound == nil then return false end
 	if wrappedSound ~= nil then md.soundConfig.soundSet.name = wrappedSound end
-	if trfOk then addPartsParams(md.transformatorConfig, src, modelName) end
 	local ok, res = pcall(api.res.modelRep.setAsTable, modelId, src)
 	if not ok or res == false then
 		stats.failed = stats.failed + 1
@@ -458,7 +459,17 @@ local function addGhostModel(name, src, modelName, withEffects)
 			transformator = { name = wrappedTransformator(meta) or (MOD_ID .. "::/res/models/runaround_ghost/real.trf") },
 		},
 	}
-	if withEffects then addPartsParams(md.transformatorConfig, src, modelName) end
+	-- the parts spec worked out when the loco's model loaded (partsAtLoad)
+	local srcParams = meta.transformatorConfig and meta.transformatorConfig.params
+	if withEffects and type(srcParams) == "table" then
+		for k, v in pairs(srcParams) do
+			if type(k) == "string" and string.find(k, "^runaround_parts%d+$") then
+				md.transformatorConfig.params = md.transformatorConfig.params or {}
+				md.transformatorConfig.params[k] = v
+			end
+		end
+		if md.transformatorConfig.params then md.transformatorConfig.params.runaround_mdl = modelName end
+	end
 	if withEffects then
 		if meta.particleSystem ~= nil then md.particleSystem = clone(meta.particleSystem) end
 		local soundName = meta.soundConfig and meta.soundConfig.soundSet and meta.soundConfig.soundSet.name
@@ -473,6 +484,31 @@ local function addGhostModel(name, src, modelName, withEffects)
 	})
 	if not ok then note("could not add", name, "-", tostring(res)) end
 	return ok
+end
+
+-- runScript: the parts spec is worked out as each model loads, the only time
+-- its nodes are there to read (modelRep.getAsTable in postRunFn gives no lods:
+-- seen live, 2026-10-08). The parameters set here stay on the model. A rail
+-- vehicle with no transformator declared gets the one the game would give it
+-- (model_metadata_util.addTransformatorConfig), as devers does: a config with
+-- only parameters would stop the game adding its default.
+local function partsAtLoad(fileName, data)
+	pcall(function()
+		local md = type(data) == "table" and data.metadata or nil
+		if type(md) ~= "table" or type(md.railVehicle) ~= "table" then return end
+		local tc = md.transformatorConfig
+		if type(tc) ~= "table" then
+			local tram = type(md.transportVehicle) == "table" and md.transportVehicle.carrier == "TRAM"
+			tc = { transformator = { name = tram and "::/vehicle/tram/shared/default_tram.trf" or "::/vehicle/train/shared/default_train.trf" }, skipFromLod = 1 }
+			md.transformatorConfig = tc
+		end
+		addPartsParams(tc, data, fileName)
+	end)
+	return data
+end
+
+mod.runFn = function(_settings, _allModParams)
+	if type(addModifier) == "function" then addModifier("loadModel", partsAtLoad) end
 end
 
 mod.postRunFn = function(_configDict, _allModParams)

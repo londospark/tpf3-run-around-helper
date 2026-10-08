@@ -346,13 +346,22 @@ Learned while building this. The full write-up is in the modding guide.
   aboard through replaces and flips as long as the vehicle does.
 - **Model repository.**
   - `modelRep.getAsTable` works in a load script but not in a game script, where
-    `modelRep.get` works.
+    `modelRep.get` works. In a `postRunScript` it gives no `lods`: a model's
+    nodes can only be read as it loads (`addModifier("loadModel", ...)` in a
+    `runScript`). Transformator parameters set there stay on the model.
   - `modelRep.addAsTable{..., modelPath}` makes a model from another's meshes, and
     `modelRep.setAsTable` works.
   - `soundSetRep.addAsTable`/`setAsTable` throw `std::exception`.
 - **Free entities.** A free entity's custom state reaches its scripts as
   `currentInfo.customState`. `setModelInstanceAttributeVec3f(0, colour)` paints
   it.
+- **Parts the engine places.** For a rail vehicle on the track, the engine
+  places every node that directly holds an axle (body, tender, pony truck,
+  bogie) and every fake bogie group, as absolute user transforms in world
+  coordinates, each kept at its place on the vehicle and turned to the track
+  under its axles. It turns every axle that has no animation of its own. A free
+  entity gets none of this. User transforms are numbered root 0, then depth
+  first (traced on an A4 and a Black 5).
 - **Scripting.**
   - `util.useFn` fails in the transformator scope. Use `ug_require` instead.
   - A `.script.lua` must define `data()`.

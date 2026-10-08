@@ -276,6 +276,12 @@ Offline-tested only:
   ... specs (nodes placed axles): ...` at load (first 12 steam locos) and
   `loco copy parts: ... is drawn with N nodes; its parts spec is for ...` in
   the copy. A spec one node short is shifted for a *devers* model.
+  **Second live test:** `loco parts: ... lods: nil`: `getAsTable` at postRun
+  has no nodes. So the spec is now worked out in a `loadModel` modifier
+  (`partsAtLoad`, registered by `mod.runFn`, `runScript` in `mod.json`), as
+  *devers* does; copies take the loaded model's `runaround_partsN`. Whether
+  our modifier runs before or after *devers*' (its wrapper node) is unknown;
+  both are handled.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

@@ -302,8 +302,31 @@ local function measureIndexBase(transfsOutput)
 	return false
 end
 
+local copyReported = false
 local function placeParts(params, st, transfsOutput, signedDist)
-	local spec = partsFor(params, userTransfCount(transfsOutput))
+	local n = userTransfCount(transfsOutput)
+	local spec
+	if n ~= nil then
+		spec = partsFor(params, n)
+	else
+		-- No user transforms listed for the copy (a free entity may get none):
+		-- the full-detail spec, the one drawn close up, written counting from 0
+		-- (as hide() does on real vehicles, which works live).
+		local tcp = params.transformatorConfigParams
+		local okS, s = pcall(function() return tcp.runaround_parts1 end)
+		if okS and type(s) == "string" then
+			if partsCache[s] == nil then partsCache[s] = decodeParts(s) end
+			spec = partsCache[s] or nil
+		end
+		if indexBase == nil then indexBase = 0 end
+	end
+	if not copyReported then
+		copyReported = true
+		local raw = "unreadable"
+		pcall(function() raw = tostring(#transfsOutput:getUserTransfs()) end)
+		print("[RunAroundHelper] loco copy parts: " .. raw .. " user transforms listed; parts spec "
+			.. (spec and ("for " .. tostring(spec.n) .. " nodes, " .. #spec.groups .. " parts, " .. #spec.axles .. " axles") or "none"))
+	end
 	if spec == nil then return end
 	if indexBase == nil then
 		local ok, b = pcall(measureIndexBase, transfsOutput)
@@ -313,6 +336,11 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	end
 	if indexBase == false then return end
 	local base = indexBase
+	local wrote, err = 0, nil
+	local function write(i, m)
+		local ok, e = pcall(transfsOutput.setUserTransf, transfsOutput, i, m, false)
+		if ok then wrote = wrote + 1 elseif err == nil then err = tostring(e) end
+	end
 	local tr = st.track
 	if tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0 then
 		local poses = {}
@@ -322,11 +350,16 @@ local function placeParts(params, st, transfsOutput, signedDist)
 			local parent = poses[g.parent] or g.parentModel
 			local u = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))
 			poses[g.idx] = want
-			transfsOutput:setUserTransf(g.idx + base, poseMat(u), false)
+			write(g.idx + base, poseMat(u))
 		end
 	end
 	for _, a in ipairs(spec.axles) do
-		transfsOutput:setUserTransf(a.idx + base, axleMat(a.sign * signedDist / a.r), false)
+		write(a.idx + base, axleMat(a.sign * signedDist / a.r))
+	end
+	if copyReported ~= "written" and (wrote > 0 or err ~= nil) then
+		copyReported = "written"
+		print("[RunAroundHelper] loco copy parts: wrote " .. wrote .. " part transforms"
+			.. (tr and " (track under the copy known)" or " (no track yet)") .. (err and ("; refused: " .. err) or ""))
 	end
 end
 

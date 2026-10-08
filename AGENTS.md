@@ -290,6 +290,14 @@ Offline-tested only:
   either shape, and the log says `loco params at setup: ... given as <type>
   with N entries; parts spec: yes/NO` and, in a copy without a spec, `loco
   copy parts: ... has no parts spec; its parameters are <type>`.
+  **Fourth live test (*devers* on, Su):** `loco params at setup: ... given as
+  table with 7 entries; parts spec: yes; devers rest poses: yes`, so the specs
+  do reach the models (the guess above was wrong; `plainParams` stays, it's
+  harmless). Yet the copy logged nothing: the only silent way out was an empty
+  `getUserTransfs()` (so no node count). Now, with none listed, the copy uses
+  the full-detail spec counted from 0, and logs once `loco copy parts: N user
+  transforms listed; parts spec ...` and `wrote N part transforms ...
+  refused: ...`.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

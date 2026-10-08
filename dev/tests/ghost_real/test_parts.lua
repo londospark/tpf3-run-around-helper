@@ -75,4 +75,10 @@ fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC, devers_trf = "x" }, 2.0
 assert(set[30] and set[30].abs == false and not set[29] or (set[29] and set[29].m.yaw == nil), "tender at 30 under devers' wrapper")
 assert(near(set[30].m.yaw, t.m.yaw), "same turn")
 assert(set[33] and set[34] and set[35], "tender axles at 33-35")
+-- a copy with no user transforms listed (a free entity may get none): the
+-- full-detail spec, counted from 0
+set = {}
+list = {}
+fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
+assert(set[29] and near(set[29].m.yaw, t.m.yaw) and set[32], "tender and axles placed from the full-detail spec")
 print("parts ok")

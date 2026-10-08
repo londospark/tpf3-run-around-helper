@@ -66,6 +66,10 @@
   piece, with the tender's wheels off the rails on curves.
 - Planned routes no longer double back from one branch of a set of points to
   the other (a move no train can make).
+- Fixed: the loco stopped short of its coaches and then jumped onto them when
+  coupling on (by about 9 m with the Su, 7 m with the Black 5). A run-around
+  turns the loco round in the train, and the game then places it by the
+  middle of its length, not by its model's origin.
 - Fixed: the wheels turned the wrong way on the last stretch back to the
   coaches when the route ended past the points, beyond the end of the platform,
   so the reverse back into the station wasn't one of the clicked reversals.

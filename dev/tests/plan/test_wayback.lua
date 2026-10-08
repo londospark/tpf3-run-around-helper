@@ -61,4 +61,23 @@ assert(saw, "says why it glides")
 run = newRun(nil); run.rake = nil
 phases = drive(run)
 assert(run.backStop == nil and run.phase ~= nil, "simple sequence glides")
+-- the hidden loco faces the other way (a run-around keeps the loco's facing):
+-- the copy stops where the real loco's origin will be once it is turned round,
+-- the far side of its extent's middle (the Su: -16.41 .. 7.11 m, middle -4.65)
+api.res = { modelRep = { get = function() return { metadata = { extent = { bbMin = { x = -16.41 }, bbMax = { x = 7.11 } } } } end } }
+run = newRun({x=995,y=0,z=0})
+run.locoPart = { modelId = 1 }
+run.hiddenLoco = { x = 995, y = 0, z = 0, yaw = math.pi }
+drive(run)
+print("turned round: stopped at", run.gx)
+assert(math.abs(run.gx - (995 + 9.3)) < 1e-3, "stopped 9.3 m on, where the turned loco's origin will be")
+local said = false
+for _,l in ipairs(LOGS) do if l:find("turned round from the hidden loco") then said = true end end
+assert(said, "says so")
+-- facing as the hidden loco: no shift
+run = newRun({x=1004,y=0,z=0})
+run.locoPart = { modelId = 1 }
+run.hiddenLoco = { x = 1004, y = 0, z = 0, yaw = 0 }
+drive(run)
+assert(math.abs(run.gx - 1004) < 1e-3, "same facing: on the hidden loco's origin")
 print("way back ok")

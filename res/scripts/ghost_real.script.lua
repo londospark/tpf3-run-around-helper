@@ -292,6 +292,11 @@ end
 local YAW_MAX, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 100, 10
 local SPIN_OFFSET_DEG = 360000 -- (a thousand turns, so that the frame stays positive going backwards)
 local copyReported = false
+-- TEMPORARY (testing which way the tender turns): the copy's part turns are
+-- drawn this many times larger, and logged every few seconds with which way
+-- the track curves. Back to 1 once seen right.
+local PARTS_TEST_SCALE = 4
+local lastPartsLog = nil
 local function placeParts(params, st, transfsOutput, signedDist)
 	local tcp = params.transformatorConfigParams
 	local okS, s = pcall(function() return tcp.runaround_parts1 end)
@@ -302,6 +307,7 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	local tr = st.track
 	local trackKnown = tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0
 	local turned = 0
+	local turns = {}
 	if trackKnown then
 		local poses = {}
 		for j, g in ipairs(spec.groups) do
@@ -311,7 +317,8 @@ local function placeParts(params, st, transfsOutput, signedDist)
 			local turn = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))[4]
 			turn = atan2(math.sin(turn), math.cos(turn)) -- (-pi..pi)
 			poses[g.idx] = want
-			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn)))
+			turns[#turns + 1] = string.format("%.2f", math.deg(turn))
+			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn) * PARTS_TEST_SCALE))
 			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, (deg + YAW_MAX) * YAW_MS_PER_DEG, false, false)
 			turned = turned + 1
 		end
@@ -323,6 +330,14 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	if not copyReported and trackKnown then
 		copyReported = true
 		print("[RunAroundHelper] loco copy parts: turning " .. turned .. " part(s) and " .. #spec.axles .. " axle(s) by animation")
+	end
+	local now = params.currentInfo.world and params.currentInfo.world.gameTime
+	if trackKnown and now ~= nil and (lastPartsLog == nil or now - lastPartsLog > 3000 or now < lastPartsLog) then
+		lastPartsLog = now
+		-- (the track's turn from 8 m behind the copy's origin to 8 m ahead: + is to the left)
+		local bend = math.deg(trackYaw(tr, 9, 7) - trackYaw(tr, -7, -9))
+		print(string.format("[RunAroundHelper] loco copy parts: track bends %.1f deg (%s) over 16 m; parts turned %s deg (drawn x%d for the test)",
+			bend, bend > 0.05 and "left" or (bend < -0.05 and "right" or "straight"), table.concat(turns, ", "), PARTS_TEST_SCALE))
 	end
 end
 

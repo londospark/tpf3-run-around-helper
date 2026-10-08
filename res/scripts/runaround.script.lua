@@ -1211,9 +1211,58 @@ local function routeFinished(run)
 	return true
 end
 
+-- Every carriage's centre and yaw, in list order.
+local function carriageFrames(vehicleEntity)
+	local frames = {}
+	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
+	for i, c in ipairs(cl.carriages) do
+		local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
+		local t = mil.fatInstances[1].transf
+		local p, x = t:cols(3), t:cols(0)
+		frames[i] = { x = p.x, y = p.y, z = p.z, yaw = math.atan2(x.y, x.x), modelId = mil.fatInstances[1].modelId, entity = c }
+	end
+	return frames
+end
+
+-- The middle of a model's extent along x (its length), or nil. A model's
+-- origin need not be there: the Su's is 4.65 m off, the Black 5's 3.55 m.
+local function extentCentreX(modelId)
+	local function x(v)
+		if v == nil then return nil end
+		local ok, r = pcall(function() return v.x end)
+		if ok and type(r) == "number" then return r end
+		ok, r = pcall(function() return v[1] end)
+		return (ok and type(r) == "number") and r or nil
+	end
+	local lo, hi = x(modelMeta(modelId, "extent", "bbMin")), x(modelMeta(modelId, "extent", "bbMax"))
+	if lo == nil or hi == nil then return nil end
+	return (lo + hi) / 2
+end
+
+-- Where the loco's origin will be when it is shown again, facing as the copy
+-- does now. When a vehicle is turned round in a train, the engine keeps its
+-- extent where it is, so its origin moves to the other side of the extent's
+-- middle. The copy used to stop on the hidden loco's origin (which faces the
+-- other way after a run-around), twice that offset short of the coaches, and
+-- jumped onto them at the recouple (seen live: about 9 m with the Su).
+local function placeTarget(run)
+	local h = run.hiddenLoco
+	if h == nil or h.yaw == nil or run.gyaw == nil then return end
+	local cx = run.locoPart and extentCentreX(run.locoPart.modelId) or nil
+	local hx, hy = math.cos(h.yaw), math.sin(h.yaw)
+	local same = hx * math.cos(run.gyaw) + hy * math.sin(run.gyaw) >= 0
+	local shift = (cx ~= nil and not same) and 2 * cx or 0.0
+	run.target = { x = h.x + shift * hx, y = h.y + shift * hy, z = h.z }
+	if not run.targetLogged then
+		run.targetLogged = true
+		logInfo(string.format("coupling place: %s - the loco's origin %.2f m from the hidden loco's", same and "facing as the hidden loco" or "turned round from the hidden loco", math.abs(shift)))
+	end
+end
+
 -- Glide in a straight line to run.target (the hidden loco, after the flip: where the loco
 -- goes back on), braking evenly to a stop there. The facing stays as it was.
 local function advanceApproach(run, dt)
+	if run.approachDecel == nil then placeTarget(run) end
 	local dx, dy, dz = run.target.x - run.gx, run.target.y - run.gy, run.target.z - run.gz
 	local dist = math.sqrt(dx * dx + dy * dy)
 	if run.approachDecel == nil then
@@ -1370,6 +1419,10 @@ local function advanceGhost(run, dt)
 		run.settleTicks = (run.settleTicks or 0) + 1
 		if run.settleTicks >= 4 then
 			run.target = readHeadPosition(run.vehicleEntity)
+			local okF, frames = pcall(carriageFrames, run.vehicleEntity)
+			if run.target ~= nil and okF and frames[1] ~= nil then
+				run.hiddenLoco = { x = run.target.x, y = run.target.y, z = run.target.z, yaw = frames[1].yaw }
+			end
 			-- (the ghost goes onto the hidden loco itself)
 			if run.target ~= nil then
 				run.phase = "approach"
@@ -1439,6 +1492,7 @@ local function advanceGhost(run, dt)
 		if run.rake == nil or run.rake.stage ~= "done" or run.target == nil then
 			why = "where the loco couples on isn't known yet"
 		else
+			placeTarget(run)
 			local okB, at, off = pcall(locateOnWayBack, loop, run.edgeCursor, run.startOffset, run.target)
 			if not okB or at == nil then
 				why = "the way back could not be read: " .. tostring(at)
@@ -1916,18 +1970,6 @@ end
 -- Ghost rake (see CONFIG.ghostRake)
 -- ---------------------------------------------------------------------
 
--- Every carriage's centre and yaw, in list order.
-local function carriageFrames(vehicleEntity)
-	local frames = {}
-	local cl = api.engine.getComponent(vehicleEntity, api.type.ComponentType.CARRIAGE_LIST)
-	for i, c in ipairs(cl.carriages) do
-		local mil = api.engine.getComponent(c, api.type.ComponentType.MODEL_INSTANCE_LIST)
-		local t = mil.fatInstances[1].transf
-		local p, x = t:cols(3), t:cols(0)
-		frames[i] = { x = p.x, y = p.y, z = p.z, yaw = math.atan2(x.y, x.x), modelId = mil.fatInstances[1].modelId, entity = c }
-	end
-	return frames
-end
 
 
 -- The train while its ghosts are shown: the loco hidden in its place, then the
@@ -2075,6 +2117,7 @@ local function advanceRake(run, dt)
 			pushCoachState(c, 0.0, nil)
 		end
 		run.target = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z }
+		run.hiddenLoco = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z, yaw = locoFrame.yaw }
 		-- The pull: the loco ghost draws forward along its route by as far as the
 		-- coaches have to go (a loco length), and the coach ghosts go with it.
 		local far, turn = 0, 0

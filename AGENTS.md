@@ -321,6 +321,17 @@ Offline-tested only:
   would go rigid in normal running: check a real Su or Black 5 on a curve,
   and with *devers* off the PROBE lines should still list the tender and
   the small axles as moved.
+  **Sixth live test (*devers* on, Su):** tender "rigid or maybe bending the
+  wrong way at times"; the turn on a 150 m curve is only ~3.5 degrees, so the
+  copy's part turns are now drawn x4 (`PARTS_TEST_SCALE`, TEMPORARY) and
+  logged every 3 s with the track's bend (`loco copy parts: track bends ...
+  parts turned ...`). Set it back to 1 (and the test_parts expectations) once
+  the direction is confirmed.
+  Also seen: the loco "snapped onto the coaches from about a loco length".
+  Cause: the copy stopped on the hidden loco's origin, but the real loco is
+  shown turned round, and the engine keeps a vehicle's extent in place when
+  its facing changes; the Su's origin is 4.65 m off its extent's middle, so
+  9.3 m. Fixed: `placeTarget` (log `coupling place: ...`).
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

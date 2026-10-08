@@ -158,6 +158,40 @@ So that nobody repeats them:
 - **Wheel animation frame wrapped to one turn:** blends backwards. Use a
   frame that keeps increasing, computed from a motion segment.
 
+## Where we are (2026-10-08, handing back to the other machine)
+
+Latest work, done on the second machine (desktop), all pushed. **On the other
+machine: `git pull`, then `dev/sync_staging.sh`, then restart the game.**
+
+- Reviewed the other machine's 13 commits of 2026-10-07 (`50c57a2`..`606ecd5`):
+  they were sound. Fixed two slips in this file (`751a745`).
+- **Extra-model hooks passed on** (`daa8bcb`). A transformator that declares
+  `getEmittableModelsScript` and `computeEmittedModelsScript` is now chained
+  through `chain_emit.trf.lua`, and can be hidden. While hidden, it emits nothing.
+  - Signatures checked against the game's hot-air balloon, `transformator_util.tl`
+    and `mcs_basisset`'s `maikc_train_all.script.tl`.
+  - In the owner's mods, the only users are 15 **goods wagons** in
+    `mcs_gtw1_base` (mod.io 5690808, needs `mcs_basisset`, 5684258). No loco in
+    the owner's mods was unhideable.
+  - None of those wagons sets `randomGroups`, so they emit nothing today. The
+    forwarding itself won't be seen working with them.
+  - **Live test pending:** see "`mcs_basisset` wagons" under "Still to check".
+- **AI disclosure** (`ff36b88`). The README, MODIO.md, `modinfo.json` and the
+  CHANGELOG say the mod was made with a lot of help from AI. This is now a
+  working rule (above).
+- Also on the desktop: the owner's mod.io downloads are in
+  `~/mod.io/common/10640/mods/<id>/` (handy for reading other mods' scripts).
+  The game is at `/mnt/games/SteamLibrary/steamapps/common/Transport Fever 3/`.
+- Ideas raised but not started:
+  - A live probe of whether full model names match between load time and the
+    game script. If they do, vehicles that share a file name could be keyed by
+    full name (M1).
+  - A list of API requests for Urban Games. The main three: a per-carriage
+    visibility command, a replace that doesn't buy or sell, and vehicle info for
+    free entities. Then mod-relative paths, model metadata readable from game
+    scripts, stackable transformators, hook documentation, and a "shunt N metres"
+    command.
+
 ## Known issues
 
 ### Seen working live (2026-10-07, owner's save with the *devers* mod)

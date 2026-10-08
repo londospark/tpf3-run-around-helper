@@ -7,7 +7,7 @@ local function T(x, y, z, s) s = s or 1 return { s, 0, 0, 0, 0, 1, 0, 0, 0, 0, s
 local model = {
   metadata = { railVehicle = { config = {
     axles = { "pony_w", "drive_w", "tender_w1", "tender_w2" },
-    fakeBogies = { {}, { { group = "far_tender", position = 0 } } } } } },
+    fakeBogies = { {}, { { group = "far_tender", position = -9 } } } } } },
   lods = {
     { node = { name = "Root", children = {
       { name = "body", children = {
@@ -57,7 +57,7 @@ assert(L2.children[2].animations.runaround_yaw3 and not (L2.children[1].animatio
 loaded = partsAtLoad("loco2.mdl", { metadata = { railVehicle = model.metadata.railVehicle, transportVehicle = { carrier = "RAIL" } }, lods = model.lods })
 assert(loaded.metadata.transformatorConfig.transformator.name == "::/vehicle/train/shared/default_train.trf" and loaded.metadata.transformatorConfig.skipFromLod == 1, "default transformator")
 -- one config per level of detail, as a model file can have it
-local perLod = { metadata = { railVehicle = { configs = { { axles = model.metadata.railVehicle.config.axles }, { fakeBogies = { { group = "far_tender", position = 0 } } } } },
+local perLod = { metadata = { railVehicle = { configs = { { axles = model.metadata.railVehicle.config.axles }, { fakeBogies = { { group = "far_tender", position = -9 } } } } },
   transformatorConfig = { transformator = { name = "x" } } }, lods = model.lods }
 loaded = partsAtLoad("loco3.mdl", perLod)
 assert(loaded.metadata.transformatorConfig.params.runaround_parts1 == specs[1] and loaded.metadata.transformatorConfig.params.runaround_parts2 == specs[2], "per-level configs give the same specs")
@@ -72,4 +72,20 @@ local obj = setmetatable({}, { __index = function(_, k) return ({ runaround_part
 plain = plainParams(obj)
 assert(type(plain) == "table" and rawget(plain, "runaround_parts1") == "a" and plain.runaround_parts2 == "b" and plain.devers_rest1 == "r" and plain.devers_flip == -1, "an indexable object: the known ones kept")
 assert(plainParams(nil) == nil and plainParams({}) == nil, "none: nil")
+-- a tender body on two bogies (as the Su's): turned by the bogies' centres;
+-- a coach's root on its bogies is the vehicle itself, and so is a single node
+-- wrapping everything (devers)
+local function bogie(x) return { name = "b" .. x, transf = T(x, 0, 0), children = { { name = "ax" .. x, transf = T(0.9, 0, 0.5) }, { name = "ay" .. x, transf = T(-0.9, 0, 0.5) } } } end
+local su = { metadata = { railVehicle = { config = { axles = { "ax1", "ay1", "ax-3", "ay-3" } } } },
+  lods = { { node = { name = "Root", children = { { name = "tender", transf = T(-10, 0, 0), children = { bogie(1), bogie(-3) } } } } } } }
+local sv = nums(partsSpecs(su)[1])
+-- nodes: root 0, tender 1, bogie 2 (axles 3-4), bogie 5 (axles 6-7)
+assert(sv[2] == 3 and sv[4] == 1 and sv[4 + 14] == -9 and sv[4 + 15] == -13, "tender body turned by its bogies at -9 and -13")
+local coach = { metadata = { railVehicle = { config = { axles = { "ax5", "ay5", "ax-5", "ay-5" } } } },
+  lods = { { node = { name = "Root", children = { bogie(5), bogie(-5) } } } } }
+local cv = nums(partsSpecs(coach)[1])
+assert(cv[2] == 2 and cv[4] == 1 and cv[4 + 16] == 4, "a coach: its two bogies, not its root")
+local wrapped = { metadata = coach.metadata, lods = { { node = { name = "Root", children = { { name = "devers_roulis", children = { bogie(5), bogie(-5) } } } } } } }
+local wv = nums(partsSpecs(wrapped)[1])
+assert(wv[2] == 2 and wv[4] == 2, "under devers' wrapper: still just the bogies")
 print("parts spec ok")

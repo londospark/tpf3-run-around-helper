@@ -323,8 +323,41 @@ local function lodPartsSpec(root, axleNames, fakes)
 		if g ~= nil and g.model ~= nil and type(fb.position) == "number" then
 			local p = placed[g.idx]
 			if p ~= nil and not p.fake then p.xs = {} end -- the fake bogie positions, not its axles
-			place(g, g.model[1] + fb.position)
+			place(g, fb.position) -- (in the model: the Su's far tender is at its bogies' places)
 			if placed[g.idx] then placed[g.idx].fake = true end
+		end
+	end
+	-- A part that holds two or more placed parts (a tender body on two bogies,
+	-- as the Su's is) turns with them: by their centres. Not the vehicle
+	-- itself: the root, or a single node wrapping everything under it (devers'
+	-- roll wrapper). Children come after their parents in node order, so going
+	-- backwards each part sees its placed children first.
+	local top = nodes[1]
+	while top ~= nil do
+		local kids = type(top.node.children) == "table" and top.node.children or {}
+		if #kids ~= 1 or type(kids[1]) ~= "table" then break end
+		local only = nil
+		for _, r in ipairs(nodes) do if r.node == kids[1] then only = r break end end
+		if only == nil or only.local_ == nil or math.abs(only.local_[1]) + math.abs(only.local_[2]) + math.abs(only.local_[3]) + math.abs(only.local_[4]) > 1e-6 then break end
+		top = only
+	end
+	local isTop = {}
+	local r0 = nodes[1]
+	while r0 ~= nil do
+		isTop[r0] = true
+		if r0 == top then break end
+		local nextTop = nil
+		for _, r in ipairs(nodes) do if r.parent == r0 then nextTop = r break end end
+		r0 = nextTop
+	end
+	for i = #nodes, 1, -1 do
+		local rec = nodes[i]
+		if not isTop[rec] and placed[rec.idx] == nil then
+			local xs = {}
+			for _, r in ipairs(nodes) do
+				if r.parent == rec and placed[r.idx] ~= nil and r.model ~= nil then xs[#xs + 1] = r.model[1] end
+			end
+			if #xs >= 2 then for _, x in ipairs(xs) do place(rec, x) end end
 		end
 	end
 	table.sort(order, function(u, v) return u.rec.idx < v.rec.idx end)

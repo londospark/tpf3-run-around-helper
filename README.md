@@ -357,7 +357,8 @@ Learned while building this. The full write-up is in the modding guide.
   it.
 - **Parts the engine places.** For a rail vehicle on the track, the engine
   places every node that directly holds an axle (body, tender, pony truck,
-  bogie) and every fake bogie group, as absolute user transforms in world
+  bogie) and every fake bogie group (its positions are in the model's
+  coordinates), as absolute user transforms in world
   coordinates, each kept at its place on the vehicle and turned to the track
   under its axles. It turns every axle that has no animation of its own. A free
   entity gets none of this. User transforms are numbered root 0, then depth

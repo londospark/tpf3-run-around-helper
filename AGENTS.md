@@ -332,6 +332,13 @@ Offline-tested only:
   shown turned round, and the engine keeps a vehicle's extent in place when
   its facing changes; the Su's origin is 4.65 m off its extent's middle, so
   9.3 m. Fixed: `placeTarget` (log `coupling place: ...`).
+  **Seventh live test (x4):** the Su's loco body turned, its tender didn't.
+  The Su's tender body (`back_grp`) holds no axles: they're in two bogies
+  under it. Now a part holding two or more placed parts turns by their
+  centres (not the root, nor a single wrapper node under it, as *devers*'),
+  inferred from the engine visibly bending the real Su's tender; not probed.
+  Also: fake bogie positions are in model coordinates (the Su's far tender:
+  -9.14 and -13.87, its bogies' places), not the group's.
   The **PROBE** (`runaround_probe`, `PROBE` lines) is still in; remove it once
   the copy is seen right.
 - **Goods wagons with loads:** the copies should show the loads

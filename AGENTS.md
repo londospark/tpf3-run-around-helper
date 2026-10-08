@@ -116,9 +116,11 @@ allowed inside `update()`.
 
 **If a coach can't be hidden:** the simple sequence. The loco is hidden in place,
 the coaches stay in view and move at the flip. **If the loco can't be hidden**
-(no `runaround_ghost_hide/` marker): no run-around, and the card says why. The
-creep (0.25 m stand-in steps) and the loco-for-a-stand-in swap are gone. Both
-bought and sold vehicles (live: money in the world). The stand-in models are gone (nothing uses them).
+(no `runaround_ghost_hide/` marker): no run-around, and the card says why.
+
+The creep (0.25 m stand-in steps) and the loco-for-a-stand-in swap are gone:
+every replace they made bought and sold vehicles (seen live as money in the
+world). The stand-in models went with them.
 
 ### Engine facts the design rests on (traced live)
 
@@ -220,6 +222,6 @@ These are documented in the README:
    (from the staging install, which leaves out `dev/`, `AGENTS.md`,
    `CODE_REVIEW.md` and `MODIO.md`), pastes `MODIO.md` into the page, and adds
    their video.
-4. Add a chapter on the hidden-coach technique to the modding guide (new source
+3. Add a chapter on the hidden-coach technique to the modding guide (new source
    needed, see above).
-5. Later: loops keyed by station rather than stop index; multiple units.
+4. Later: loops keyed by station rather than stop index; multiple units.

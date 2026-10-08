@@ -110,8 +110,14 @@ allowed inside `update()`.
 5. **Pull:** the loco copy draws forward one loco length along its route, and
    the coach copies follow, ending exactly over their hidden coaches.
 6. **Uncouple:** a 2.5 s pause.
-7. The loco copy runs the route (reversals, facing kept) and brakes against the
-   far coach.
+7. The loco copy runs the route (reversals, facing kept). The route's last
+   pieces are the **way back**, planned automatically from the last click to the
+   station stop (`loop.backFrom`, route version 2). On entering it, the copy
+   finds the point on it nearest its coupling place (`locateOnWayBack`), drives
+   there on the track and brakes to a stop. Only what's left (centimetres) is
+   the straight `approach` glide. With no ghost rake (the simple sequence), or
+   coaches more than 2.5 m off the way back, it glides from where the clicked
+   route ends, as before.
 8. `recoupleRake`: the real loco and coaches get their own paint back (matched
    by model and purchase time; the loco part is the same object throughout). The
    copies are destroyed.
@@ -215,13 +221,27 @@ Offline-tested only:
   the track count. Seen, both documented as known in the README and MODIO.md:
   - **No chuffing** on the running copy; the rest of its sound plays. Not looked
     into yet. A guess: the chuff needs state the copy's sound update doesn't get.
-  - **The tender's wheels don't follow the track exactly.** Not looked into yet.
-    Check whether it also happens without *devers*.
+  - **The tender's wheels don't follow the track exactly.** Also without
+    *devers*, so it's this mod (see "The tender" below).
   - Wheels turned backwards on the approach glide when the route ended past the
     points with no reversal (the last reverse into the platform is the glide,
     not a route reversal). **Fixed:** the glide sets the wheel direction from
     its own movement against the loco's facing (`run.approachBackwards`,
     `test_flow.lua`). Needs a live re-check.
+- **The way back** (2026-10-08, offline only): after the last click the route
+  goes on to the station stop, and the loco copy sets back onto the coaches
+  along the track instead of the straight glide. Check: the card's route ends
+  "back to the station"; the log says `way back: the loco sets back N m along
+  the track`, not `glided instead`; the copy follows the points into the
+  platform and stops against the far coach. Older saved routes are re-planned
+  at the first arrival (`saved by an older version: planning it again`).
+  Also new: planned legs that double back at points (a hairpin) are rejected
+  (`hasHairpin`); the pathfinder starts from a node, so it never knew which
+  piece the loco came in on. `findPath` (from an edge with direction) exists
+  in the API but nothing uses it, so it wasn't relied on.
+- **The tender** (Black 5): the owner says the loco and tender move as one
+  rigid object; seen without *devers* too, so it's this mod. Not looked into
+  yet.
 - **Goods wagons with loads:** the copies should show the loads
   (`vehicleStaticInfo.carriageEntity`).
 - **A curved platform (M4):** `coaches turn up to N degrees`, and the copies line

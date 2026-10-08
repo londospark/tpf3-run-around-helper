@@ -4,6 +4,9 @@ local function node(i) return {entity=1,index=i} end
 local defs = { [0]={0,6},[1]={6,1},[2]={1,2},[3]={1,5},[4]={5,0},[5]={7,0} }
 local names = {[0]="PLa",[1]="PLb",[2]="T",[3]="L1",[4]="L2",[5]="ML"}
 local NE=5
+-- where the nodes are: the platform along x, the loop above it; the points'
+-- branches leave each node at a slant, so a hairpin turns back on itself
+P = { [0]={0,0}, [1]={200,0}, [2]={300,0}, [5]={100,20}, [6]={100,0}, [7]={-100,0} }
 local edges = {}
 for i,d in pairs(defs) do edges[i]={conns={node(d[1]),node(d[2])},geometry={idx=i}} end
 -- illegal hairpin pairs (both directions), keyed "node:edgeA-edgeB" with edgeA<edgeB
@@ -28,7 +31,7 @@ api={
       return components[ct]
     end,
     util={
-      transport={calcPosition=function(g,t) return {x=g.idx*200+t*100,y=0,z=0} end},
+      transport={calcPosition=function(g,t) local a,b=P[defs[g.idx][1]],P[defs[g.idx][2]] return {x=a[1]+(b[1]-a[1])*t,y=a[2]+(b[2]-a[2])*t,z=0} end},
       octree={findTransportNetworkNodesInCircle=function(c,r)
         local out={} for _,i in ipairs{0,1,2,5,6,7} do out[#out+1]=node(i) end return out end},
       pathfinding={findPathNodeToNode=function(starts,dests)
@@ -73,3 +76,20 @@ print("B loose: L1, PLa           ", fmt(M.planRoute(wp(3,0),sn,sp)))
 print("C explicit: T, L1, ML      ", fmt(M.planRoute(wp(2,3,5),sn,sp)))
 print("D loose: L1 only (2 pts)   ", fmt(M.planRoute(wp(3,4),sn,sp)))
 print("E impossible: same piece twice not adjacent (PLa,PLa)", fmt(M.planRoute(wp(0,0),sn,sp)))
+-- the route goes on back to the station along the track: past the left points
+-- onto the main line, reverse, and in along the platform (never the hairpin
+-- from the loop straight onto the platform)
+for _, case in ipairs({ {"A", wp(3,5)}, {"C", wp(2,3,5)}, {"D", wp(3,4)} }) do
+  local route, info = M.planRoute(case[2], sn, sp)
+  local s = fmt(route, info)
+  assert(s:find("L2%+ ML%- ML%+%(rev%) PLa%+  |", 1, false), case[1] .. ": way back past the points: " .. s)
+  local lastWp = case[2][#case[2]]
+  assert(info.backFrom and route[info.backFrom - 1].index == lastWp.index, case[1] .. ": the way back starts after the last point")
+end
+-- no hairpin anywhere
+local route = M.planRoute(wp(3,4), sn, sp)
+for i = 2, #route do
+  local pair = route[i-1].index .. "-" .. route[i].index
+  assert(pair ~= "4-0" and pair ~= "0-4" and pair ~= "1-3" and pair ~= "3-1", "hairpin " .. pair)
+end
+print("way back planned ok")

@@ -52,6 +52,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
   <li>a piece of track beyond the points, where the loco will stop and reverse;</li>
   <li>a piece of the loop, or the other road through the station;</li>
   <li>a piece of track beyond the far end of the train.</li>
+  <li>After your last point, the route goes back into the station by itself, so the loco sets back onto its coaches along the track.</li>
   </ol>
 You don't click every piece of track, the station, or the exact reversing spot. The loco reverses just clear of the points. Right-click, Esc or <strong>Done</strong> when finished.</li>
 <li><strong>Check it.</strong> The card shows the route's length, reversals and points. A warning says which two points couldn't be joined.</li>

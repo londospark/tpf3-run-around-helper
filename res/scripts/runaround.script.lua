@@ -596,6 +596,12 @@ local REVERSAL_PAUSE = 1.5     -- seconds the ghost loco waits when it reverses
 local PULL_BRAKE = 0.5         -- m/s^2: braking as the train draws up before the uncouple
 local CLEAR_M = 10.0          -- a reversal happens this far into the track piece, i.e. just clear of the points, not at the piece's end
 local STATES = { { true, true }, { true, false }, { false, true }, { false, false } } -- {arrive dir, depart dir}
+-- How far the loco may stand from the planned route and still count as on it:
+-- half the game's spacing between parallel tracks (trackDistance = 5 m for every
+-- track type). On the planned platform the loco stands on the route (about 0 m);
+-- on any other platform it is a whole track spacing away. Also how near the
+-- way back to the station must pass the loco's coupling place.
+local ON_ROUTE_M = 2.5
 
 local function getTnEdge(entity, index)
 	local tn = api.engine.getComponent(entity, api.type.ComponentType.TRANSPORT_NETWORK)
@@ -669,6 +675,39 @@ local function endsAlong(edges, b, dB)
 	return last ~= nil and sameEdge(last, b) and last.forward == dB
 end
 
+-- Unit direction of travel where a piece is entered (atEnd false) or left.
+local function travelDir(e, atEnd)
+	local g = getEdgeGeometry(e)
+	local calc = api.engine.util.transport.calcPosition
+	local nearHigh = (atEnd == e.forward) -- the end of the piece at u = 1
+	local pa = calc(g, nearHigh and 0.95 or 0.0)
+	local pb = calc(g, nearHigh and 1.0 or 0.05)
+	local dx, dy = pb.x - pa.x, pb.y - pa.y
+	if not e.forward then dx, dy = -dx, -dy end
+	local d = math.sqrt(dx * dx + dy * dy)
+	if d < 1e-9 then return nil end
+	return dx / d, dy / d
+end
+
+-- Whether a run of pieces doubles back on itself at a node (a hairpin from one
+-- branch of a set of points to the other), which no train can do. A pathfinder
+-- route that starts at a node doesn't know which piece the loco came in on, so
+-- it can turn back there. A reversal (the same piece taken back) is fine.
+local function hasHairpin(edges)
+	for i = 2, #edges do
+		local a, b = edges[i - 1], edges[i]
+		if not sameEdge(a, b) then
+			local ok, bad = pcall(function()
+				local ax, ay = travelDir(a, true)
+				local bx, by = travelDir(b, false)
+				return ax ~= nil and bx ~= nil and ax * bx + ay * by < 0.0
+			end)
+			if ok and bad then return true end
+		end
+	end
+	return false
+end
+
 -- Edges to drive from waypoint a (leaving in direction dA) to waypoint b
 -- (travelling along it in direction dB), both included. nil + message if no route.
 local function legPath(a, dA, b, dB)
@@ -681,6 +720,7 @@ local function legPath(a, dA, b, dB)
 	for _, e in ipairs(mid) do raw[#raw + 1] = e end
 	local out = dedupeEdges(raw)
 	if not endsAlong(out, b, dB) then return nil, "no route along the clicked piece that way" end
+	if hasHairpin(out) then return nil, "the only route doubles back at a set of points" end
 	return out
 end
 
@@ -693,6 +733,7 @@ local function legFromNode(startNode, b, dB)
 	if mid == nil then return nil, err end
 	local out = dedupeEdges(mid)
 	if not endsAlong(out, b, dB) then return nil, "no route along the clicked piece that way" end
+	if hasHairpin(out) then return nil, "the only route doubles back at a set of points" end
 	return out
 end
 
@@ -758,14 +799,14 @@ local function findCuspLeg(firstEdges, uNode, targetExitNode, b, dB, centres)
 				if ec ~= nil then
 					local backNode = c.forward and ec.conns[1] or ec.conns[2]
 					local p2 = pathBetweenNodes(backNode, targetExitNode)
-					if p2 ~= nil and endsAlong(p2, b, dB) then
+					if p2 ~= nil and (b == nil or endsAlong(p2, b, dB)) then
 						local raw = {}
 						for _, e in ipairs(firstEdges) do raw[#raw + 1] = e end
 						for _, e in ipairs(p1) do raw[#raw + 1] = e end
 						raw[#raw + 1] = { entity = c.entity, index = c.index, forward = not c.forward }
 						for _, e in ipairs(p2) do raw[#raw + 1] = e end
 						local cost = edgesCost(raw) + REVERSAL_PENALTY
-						if cost < bestCost then best, bestCost = raw, cost end
+						if cost < bestCost and not hasHairpin(raw) then best, bestCost = raw, cost end
 					end
 				end
 			end
@@ -802,11 +843,46 @@ local function legFromNodeAuto(startNode, startPos, b, dB)
 	return dedupeEdges(raw)
 end
 
-local function planRoute(waypoints, startNode, startPos)
+-- Edges from piece a (leaving in direction dA, a included) to a track node.
+local function legToNode(a, dA, node)
+	local ea = getTnEdge(a.entity, a.index)
+	if ea == nil then return nil, "a clicked track piece no longer exists" end
+	local mid, err = pathBetweenNodes(dA and ea.conns[2] or ea.conns[1], node)
+	if mid == nil then return nil, err end
+	local raw = { { entity = a.entity, index = a.index, forward = dA } }
+	for _, e in ipairs(mid) do raw[#raw + 1] = e end
+	local out = dedupeEdges(raw)
+	if hasHairpin(out) then return nil, "the only route doubles back at a set of points" end
+	return out
+end
+
+-- Same, or, if there is none, one with an automatically chosen reversing place.
+local function legToNodeAuto(a, dA, node, nodePos)
+	local edges, err = legToNode(a, dA, node)
+	if edges ~= nil then return edges end
+	local ea = getTnEdge(a.entity, a.index)
+	if ea == nil then return nil, err end
+	local first = { { entity = a.entity, index = a.index, forward = dA } }
+	local raw = findCuspLeg(first, dA and ea.conns[2] or ea.conns[1], node, nil, nil, { piecePos(first[1], dA and 1.0 or 0.0), nodePos })
+	if raw == nil then return nil, err end
+	return dedupeEdges(raw)
+end
+
+-- backTo: a track node (the station stop) the route goes on to after the last
+-- point, so that the loco also sets back onto its coaches along the track
+-- (the "way back"); nil for a route that ends at the last point.
+local function planRouteTo(waypoints, startNode, startPos, backTo)
 	local n = #waypoints
 	if n < 2 then return nil, "need at least 2 points" end
 
 	local memo = {}
+	local back = {}
+	if backTo ~= nil then
+		for _, d in ipairs({ true, false }) do
+			local edges = legToNodeAuto(waypoints[n], d, backTo, startPos)
+			back[d] = { edges = edges, cost = edges and edgesCost(edges) or math.huge }
+		end
+	end
 	local function leg(i, d, a)
 		local key = i .. ":" .. tostring(d) .. ":" .. tostring(a)
 		local m = memo[key]
@@ -842,10 +918,11 @@ local function planRoute(waypoints, startNode, startPos)
 		best[i], from[i] = {}, {}
 		for s, st in ipairs(STATES) do
 			local a, d = st[1], st[2]
-			if i == n and a ~= d then
+			if i == n and a ~= d and backTo == nil then
 				best[i][s] = math.huge -- departure at the last point is meaningless
 			else
 				local penalty = (a ~= d) and REVERSAL_PENALTY or 0
+				if i == n and backTo ~= nil then penalty = penalty + back[d].cost end
 				local bestCost, bestPrev = math.huge, nil
 				for ps, pst in ipairs(STATES) do
 					if best[i - 1][ps] < math.huge then
@@ -914,7 +991,23 @@ local function planRoute(waypoints, startNode, startPos)
 	for i = 1, n - 1 do
 		append(leg(i, STATES[chosen[i]][2], STATES[chosen[i + 1]][1]).edges)
 	end
-	return route, { length = endCost, reversals = reversals }
+	local backFrom = nil
+	if backTo ~= nil then
+		local before = #route
+		append(back[STATES[chosen[n]][2]].edges)
+		if #route > before then backFrom = before + 1 end
+	end
+	return route, { length = endCost, reversals = reversals, backFrom = backFrom }
+end
+
+-- Best route through all waypoints and then back to the station stop; if there
+-- is no way back from the last point, the route ends there as before.
+local function planRoute(waypoints, startNode, startPos)
+	if startNode ~= nil then
+		local route, info = planRouteTo(waypoints, startNode, startPos, startNode)
+		if route ~= nil then return route, info end
+	end
+	return planRouteTo(waypoints, startNode, startPos, nil)
 end
 
 -- The track node where trains stop at a line's stop, or nil. Resolved the way
@@ -943,9 +1036,13 @@ end
 
 -- Rebuilds loop.loopEdges from loop.waypoints and records a one-line status
 -- for the panel. Never throws.
+local ROUTE_VERSION = 2 -- 2: the route goes on back to the station stop (loop.backFrom)
+
 local function recomputeLoopRoute(loop)
 	loop.waypoints = loop.waypoints or {}
 	loop.routeLength, loop.routePieces, loop.routeReversals = nil, nil, nil
+	loop.backFrom = nil
+	loop.routeVersion = ROUTE_VERSION
 	if #loop.waypoints < 2 then
 		loop.loopEdges = {}
 		loop.pathStatus = (#loop.waypoints == 0) and "no points yet" or "1 point - click at least one more (the reversing point, then the loop)"
@@ -970,6 +1067,8 @@ local function recomputeLoopRoute(loop)
 		return
 	end
 	loop.loopEdges = route
+	-- where the way back to the station starts (the last pieces), or nil
+	loop.backFrom = info.backFrom
 	-- The planner's cost includes a penalty per reversal; the real length is the
 	-- sum of the pieces (reversal pieces are driven back over, so they count).
 	local length = 0.0
@@ -981,7 +1080,8 @@ local function recomputeLoopRoute(loop)
 	loop.routeLength = length
 	loop.routePieces = #route
 	loop.routeReversals = info.reversals
-	loop.pathStatus = string.format("%d points, %d track pieces, %d reversal(s), about %d m", #loop.waypoints, #route, info.reversals, math.floor(info.length))
+	loop.pathStatus = string.format("%d points, %d track pieces, %d reversal(s), about %d m%s", #loop.waypoints, #route, info.reversals, math.floor(info.length),
+		info.backFrom and ", back to the station" or "")
 	logInfo("route for loop", loopLabel(loop), "-", loop.pathStatus)
 end
 
@@ -989,8 +1089,11 @@ end
 -- route's end, by advanceGhost's own rules: a piece driven back over (a reversal)
 -- is only driven CLEAR_M into, not to its far end. For the card's progress bar
 -- (the route's length counts such pieces twice in full). nil if unreadable.
-local function routeDriveLength(loop, k0, off0)
-	local total, startOffset = 0.0, off0
+-- The stretch of each piece the ghost drives, from piece k0 (off0 metres in) to
+-- the route's end: { k, from, to, len } per piece, in metres along the way of
+-- travel. nil if a piece is unreadable.
+local function drivenRanges(loop, k0, off0)
+	local out, startOffset = {}, off0
 	for k = k0 or 1, #loop.loopEdges do
 		local e = loop.loopEdges[k]
 		local ok, len = pcall(function() return estimateEdgeLength(getEdgeGeometry(e)) end)
@@ -1002,9 +1105,44 @@ local function routeDriveLength(loop, k0, off0)
 			to = math.max(CLEAR_M, from + 1.0)
 			startOffset = len - to
 		end
-		total = total + math.max(to - from, 0.0)
+		out[#out + 1] = { k = k, from = from, to = math.max(to, from), len = len }
 	end
+	return out
+end
+
+local function routeDriveLength(loop, k0, off0)
+	local ranges = drivenRanges(loop, k0, off0)
+	if ranges == nil then return nil end
+	local total = 0.0
+	for _, r in ipairs(ranges) do total = total + (r.to - r.from) end
 	return total
+end
+
+-- On the way back to the station (from piece k0, off0 metres in), the point the
+-- ghost drives over that is nearest pos (where the loco couples on): the
+-- distance driven to reach it, and how far it is from pos. nil if unreadable.
+local function locateOnWayBack(loop, k0, off0, pos)
+	local ranges = drivenRanges(loop, k0, off0)
+	if ranges == nil then return nil end
+	local calc = api.engine.util.transport.calcPosition
+	local bestAt, bestD2, driven = nil, math.huge, 0.0
+	for _, r in ipairs(ranges) do
+		local edgeDef = loop.loopEdges[r.k]
+		local ok, geometry = pcall(getEdgeGeometry, edgeDef)
+		if not ok then return nil end
+		local span = r.to - r.from
+		local steps = math.max(4, math.min(2000, math.ceil(span / 0.25))) -- every 25 cm
+		for i = 0, steps do
+			local s = r.from + span * i / steps
+			local along = r.len > 0 and s / r.len or 0.0
+			local p = calc(geometry, edgeDef.forward and along or (1.0 - along))
+			local d2 = (p.x - pos.x) ^ 2 + (p.y - pos.y) ^ 2
+			if d2 < bestD2 then bestAt, bestD2 = driven + (s - r.from), d2 end
+		end
+		driven = driven + span
+	end
+	if bestAt == nil then return nil end
+	return bestAt, math.sqrt(bestD2)
 end
 
 -- Where along the route the real loco is standing, so the ghost can start
@@ -1020,7 +1158,10 @@ local function locateOnRoute(loop, pos)
 	if edges == nil or #edges == 0 then return nil end
 	local calc = api.engine.util.transport.calcPosition
 	local bestK, bestS, bestD2 = nil, 0, math.huge
-	for k = 1, math.min(#edges, 120) do
+	-- (not on the way back to the station: after a loop with no reversal that
+	-- runs over the platform again)
+	local last = math.min(#edges, 120, (loop.backFrom or math.huge) - 1)
+	for k = 1, last do
 		local edgeDef = edges[k]
 		if edgeDef.reversal then break end
 		do
@@ -1071,9 +1212,12 @@ local function advanceApproach(run, dt)
 	if run.approachDecel == nil then
 		-- Set off at the route speed and brake at a constant rate to stop at the
 		-- hidden loco (the wheel animation follows the same motion).
-		local v0 = math.max(run.loopSpeed or CONFIG.defaultSpeed, 1.0)
+		-- (after setting back along the track, only what is left, at a crawl)
+		local v0 = run.backStopped and 0.5 or math.max(run.loopSpeed or CONFIG.defaultSpeed, 1.0)
 		run.approachDecel = (dist > 0.1) and (v0 * v0 / (2.0 * dist)) or 1.0
-		run.approachBackwards = (dx * math.cos(run.gyaw or 0.0) + dy * math.sin(run.gyaw or 0.0)) < 0.0
+		if dist > 0.1 then -- (a few centimetres say nothing about the direction)
+			run.approachBackwards = (dx * math.cos(run.gyaw or 0.0) + dy * math.sin(run.gyaw or 0.0)) < 0.0
+		end
 		run.speed = v0
 		startSegment(run, v0, -run.approachDecel, 0.0)
 	end
@@ -1205,6 +1349,30 @@ local function advanceGhost(run, dt)
 	end
 
 	local edgeDef = loop.loopEdges[run.edgeCursor]
+	if run.edgeLength == nil and run.edgeCursor == loop.backFrom and run.backStop == nil then
+		-- The way back to the station: driven along the track to where the loco
+		-- couples on, when that is known (the ghost rake) and on the way back.
+		local why = nil
+		if run.rake == nil or run.rake.stage ~= "done" or run.target == nil then
+			why = "where the loco couples on isn't known yet"
+		else
+			local okB, at, off = pcall(locateOnWayBack, loop, run.edgeCursor, run.startOffset, run.target)
+			if not okB or at == nil then
+				why = "the way back could not be read: " .. tostring(at)
+			elseif off > ON_ROUTE_M then
+				why = string.format("the coaches are %.1f m from the way back", off)
+			else
+				run.backStop = (run.gdist or 0.0) + at
+				run.driveTotal = run.backStop
+				logInfo(string.format("way back: the loco sets back %.1f m along the track to its coaches (%.2f m off the track there)", at, off))
+			end
+		end
+		if why ~= nil then
+			logInfo("way back: glided instead -", why)
+			run.edgeCursor = #loop.loopEdges + 1
+			return routeFinished(run)
+		end
+	end
 	if run.edgeLength == nil then
 		if edgeDef.reversal and not run.reversalDone then
 			run.reversalDone = true
@@ -1246,6 +1414,20 @@ local function advanceGhost(run, dt)
 			run.speed = math.max(brakeSpeed, 0.2)
 		end
 		advance = math.min(run.speed * dt, pullLeft)
+	end
+	if run.backStop ~= nil then
+		-- setting back onto the coaches: brake evenly to stop at them
+		local left = math.max(run.backStop - (run.gdist or 0.0), 0.0)
+		local brake = loop.accel or CONFIG.defaultAccel
+		local brakeSpeed = math.sqrt(2.0 * brake * left)
+		if brakeSpeed < run.speed then
+			if not run.backBraking then
+				run.backBraking = true
+				startSegment(run, run.speed, -brake, 0.0)
+			end
+			run.speed = math.max(brakeSpeed, 0.2)
+		end
+		advance = math.min(run.speed * dt, left)
 	end
 	local endAt = run.edgeLimit or run.edgeLength
 	local before = run.edgeProgress
@@ -1293,6 +1475,12 @@ local function advanceGhost(run, dt)
 	pushGhostState(run, run.speed, pvx, pvy, dt)
 
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
+
+	if run.backStop ~= nil and run.backStop - run.gdist <= 1e-3 then
+		run.backStopped = true
+		run.edgeCursor = #loop.loopEdges + 1
+		return routeFinished(run)
+	end
 
 	if run.edgeProgress >= endAt then
 		if run.edgeLimit ~= nil then
@@ -1923,11 +2111,6 @@ recoupleRake = function(state, run)
 	end)
 end
 
--- How far the loco may stand from the planned route and still count as on it:
--- half the game's spacing between parallel tracks (trackDistance = 5 m for every
--- track type). On the planned platform the loco stands on the route (about 0 m);
--- on any other platform it is a whole track spacing away.
-local ON_ROUTE_M = 2.5
 
 -- Unit direction of travel along the route at piece k, s metres into it.
 local function routeDirectionAt(loop, k, s)
@@ -2046,6 +2229,10 @@ local function startRunAround(state, vehicleEntity, loop)
 		end
 		logInfo("loco chosen automatically: part", locoIdx, "of", n, "- model", tvc.vehicles[locoIdx].part.modelId,
 			#ends == 2 and "(a loco at each end; the one nearer the first route point)" or "(the powered end of the train)")
+	end
+	if (loop.routeVersion or 1) < ROUTE_VERSION and loop.waypoints ~= nil and #loop.waypoints >= 2 then
+		logInfo("route for loop", loopLabel(loop), "saved by an older version: planning it again")
+		recomputeLoopRoute(loop)
 	end
 	if #loop.loopEdges == 0 then
 		logInfo("startRunAround: no route for loop", loopLabel(loop), "- nothing to animate (" .. tostring(loop.pathStatus) .. ")")

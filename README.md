@@ -62,7 +62,9 @@ run-arounds set up is safe too: trains then flip as normal.
 
    You don't click every piece of track, the station, or the exact reversing
    spot. The route is planned with the game's pathfinder, and the loco reverses
-   just clear of the points (10 m past them). Right-click, **Esc** or **Done**
+   just clear of the points (10 m past them). After your last point, the route
+   goes on back into the station by itself, reversing past the points if it
+   has to, so the loco sets back onto its coaches along the track. Right-click, **Esc** or **Done**
    when finished.
 4. **Check it.** The card shows the route's length, reversals and points. A
    warning says which two points could not be joined.
@@ -110,7 +112,8 @@ While editing or showing:
 4. A short pause while the loco uncouples.
 5. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-6. It comes back and brakes to a stop against the far coach. The real loco and
+6. It comes back along the track, onto the platform, and brakes to a stop
+   against the far coach. The real loco and
    coaches reappear exactly where their copies are, and the copies go.
 7. The train loads as normal and leaves, with the loco leading.
 

@@ -55,6 +55,14 @@
 - Fixed: straight after a run-around, the game reports the train arriving
   again, and a second run-around started on the turned train, running a coach
   around as the "loco". Repeat arrivals at the same stop are now ignored.
+- The route now goes on from your last point back into the station by itself,
+  reversing past the points if it has to. The loco sets back onto its coaches
+  along the track, instead of sliding there in a straight line (which cut
+  across points and curves). The card's route summary ends with "back to the
+  station". Routes made with an earlier version are planned again the next
+  time a train arrives.
+- Planned routes no longer double back from one branch of a set of points to
+  the other (a move no train can make).
 - Fixed: the wheels turned the wrong way on the last stretch back to the
   coaches when the route ended past the points, beyond the end of the platform,
   so the reverse back into the station wasn't one of the clicked reversals.

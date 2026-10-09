@@ -89,6 +89,9 @@ by `dev/sync_staging.sh`. Exclude them from the mod.io upload as well.
   `base/content/vehicle/train/*.zip`) and on mods' (`~/mod.io/common/10640/mods/`
   on the desktop) after changing anything in the parts code.
   `dev/tools/node_index.lua <model.mdl> [lod]` prints a model's node tree.
+  `lua dev/tools/parts_audit.lua ghost_build.script.lua <model.mdl>...` checks
+  the load step leaves each model as it was apart from our additions, and
+  counts the keyframes added.
 - `dev/tools/gen_ghost_models.lua` built the static plain loco copies in
   `res/models/runaround_ghost/`, from base-game `.mdl` files unzipped into `src/`.
 - **Modding guide:** `~/tf3-mods/docs/Transport_Fever_3_Modding_Guide.pdf`, with
@@ -301,6 +304,37 @@ a model of each structure; the previous version fails it at 0.79 m):
   combines two on one node (unknown).
 - The A4's far level of detail (one part, fake points 9 and -0.9) is 9 cm off a
   150 m curve: its line differs from the full detail's. Seen from far away only.
+- **Real trains unaffected** (`dev/tools/parts_audit.lua` on all 605): after the
+  load step every model is the model before plus only our animations and
+  parameters: no node added, removed, renamed or moved, no animation of its own
+  changed, at most one turn and one spin per node.
+- **Memory:** turns only on powered vehicles (only the loco copy gets track);
+  spins on all (coach and wagon copies' wheels turn as they draw forward). Each
+  part's keyframes sized to it (`turnRange`: its turn on a 30 m curve, with
+  spare; steps keeping its farthest point within 1 mm). 620k keyframes -> 257k
+  (turns 413k -> 50k; the spins, 207k, were there before). On a 50 m curve the
+  locos are still within 3 cm.
+- **A whole run** (`test_frame_run`): on a curve, out, reversal and back, the
+  copy never moves more than its speed allows in a tick or turns more than the
+  curve; on its wheels' line both ways; ends on the same coupling place.
+- **Before it moves** (`initialTrack`): the copy has its track from the moment
+  it appears (the route both ways from its start, in its own x order, either
+  facing), so the tender doesn't stand straight on a curved platform and snap
+  onto the curve when it sets off.
+- **Far levels of detail** whose parts don't match by name or place get the
+  turn on the node of the same name (the Black 5's far tender is `group_29`).
+
+**Could be done, needs a live probe first:**
+
+- Share the spin keyframes: one shipped `.ani` (`FILE_REF`, as the game's
+  wheels) instead of 5,600 copies. How a mod's `.ani` path resolves is unknown.
+- A second animation per part (two pivots) would fit a curve that changes under
+  a long loco exactly (Big Boy S-bend 7.7 cm). Whether the game combines two
+  animations on one node is unknown.
+- During a long final glide ("glided instead") the track isn't updated: the
+  parts keep their last turns.
+- Coach copies' bogies (raised by the owner): they'd need turns on unpowered
+  vehicles again (memory: size them as above) and a strip per coach copy.
 
 **Temporary things to remove once seen right live:** the `PROBE` (logging
 only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;

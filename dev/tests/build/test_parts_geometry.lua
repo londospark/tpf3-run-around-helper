@@ -16,7 +16,7 @@ end
 local function wheel(name, x, own) return { name = name, transf = T(x, 0, 0.5), animations = own and { wheels = {} } or nil } end
 local function bogie(name, x, w1, w2, h) return { name = name, transf = T(x, 0, 0), children = { wheel(w1, h), wheel(w2, -h) } } end
 local function model(lods, axles, fakeBogies)
-  return { metadata = { railVehicle = { config = { axles = axles, fakeBogies = fakeBogies } },
+  return { metadata = { landVehicle = { engines = { { power = 1000 } } }, railVehicle = { config = { axles = axles, fakeBogies = fakeBogies } },
     transformatorConfig = { transformator = { name = "::/vehicle/train/shared/default_train.trf" } } }, lods = lods }
 end
 

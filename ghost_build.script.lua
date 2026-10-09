@@ -253,10 +253,11 @@ end
 -- run-around sends. One string per level of detail, as the transformator's
 -- parameter runaround_partsN (node indices in the order of user transforms:
 -- the root 0, then depth first):
---   "n G A  (G times) idx parent a b pivot  (A times) idx r sign"
+--   "n G A  (G times) idx parent a b pivot range  (A times) idx r sign"
 -- a and b: the part's reference points (model x; a == b: one point); parent:
 -- the nearest placed part above it (0: none, the copy's own frame), which it
--- turns with; pivot: the model x it turns about (pivotX). Only nodes turned
+-- turns with; pivot: the model x it turns about (pivotX); range: the most it
+-- turns, in degrees (turnRange). Only nodes turned
 -- about the vertical (or not at all) are included. The copy plays the
 -- full-detail one (runaround_parts1); the others are for reading.
 local IDENT16 = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }
@@ -291,6 +292,21 @@ local function pivotX(a, b, c, d)
 	local den = a + b - c - d
 	if math.abs(den) < 1e-3 then den = (den < 0) and -1e-3 or 1e-3 end
 	return math.max(-500, math.min(500, (a * b - c * d) / den))
+end
+-- How far a part can turn from the part it turns with, on the tightest curve
+-- a train might take (30 m), with room to spare, in degrees: from the
+-- difference of the two lines' directions there, ((c + d) - (a + b)) / 2R. And
+-- the keyframes' step for it: small enough that blending between two of them
+-- keeps its farthest point (its wheels, and a few metres of body beyond them)
+-- within a millimetre of the true turn: the gap is reach * step^2 / 8.
+local TIGHTEST_R, TURN_SPARE, TURN_MIN, TURN_MAX = 30, 1.25, 3, 30
+local function turnRange(a, b, c, d, pivot)
+	local deg = math.deg(math.abs((c + d) - (a + b)) / (2 * TIGHTEST_R)) * TURN_SPARE + 2
+	local range = math.max(TURN_MIN, math.min(TURN_MAX, deg))
+	local reach = math.max(math.abs(c - pivot), math.abs(d - pivot)) + 6
+	local step = math.max(math.rad(0.1), math.min(math.rad(2), math.sqrt(8 * 0.001 / reach)))
+	local n = math.max(2, math.ceil(math.rad(2 * range) / step))
+	return math.floor(range * 100 + 0.5) / 100, n
 end
 local function lodPartsSpec(root, axleNames, fakes, frame)
 	local nodes, byName = {}, {}
@@ -431,10 +447,11 @@ local function lodPartsSpec(root, axleNames, fakes, frame)
 		local fa, fb = 0, 0
 		if p.up then fa, fb = p.up.a, p.up.b elseif frame then fa, fb = frame[1], frame[2] end
 		p.pivot = pivotX(fa, fb, p.a, p.b)
+		p.range, p.steps = turnRange(fa, fb, p.a, p.b, p.pivot)
 	end
 	local out = { #nodes, #order, #axles }
 	for _, p in ipairs(order) do
-		for _, v in ipairs({ p.rec.idx, p.up and p.up.rec.idx or 0, p.a, p.b, p.pivot }) do out[#out + 1] = v end
+		for _, v in ipairs({ p.rec.idx, p.up and p.up.rec.idx or 0, p.a, p.b, p.pivot, p.range }) do out[#out + 1] = v end
 	end
 	for _, ax in ipairs(axles) do for i = 1, 3 do out[#out + 1] = ax[i] end end
 	if #order == 0 and #axles == 0 then return nil, nil, frame end
@@ -443,7 +460,14 @@ local function lodPartsSpec(root, axleNames, fakes, frame)
 	-- the nodes, in the spec's order, for their animations (partsAtLoad)
 	local nodesOut = { groups = {}, axles = {} }
 	for _, p in ipairs(order) do
-		nodesOut.groups[#nodesOut.groups + 1] = { node = p.rec.node, name = p.rec.node.name, model = p.rec.model, a = p.a, b = p.b, pivot = p.pivot }
+		nodesOut.groups[#nodesOut.groups + 1] = { node = p.rec.node, name = p.rec.node.name, model = p.rec.model, a = p.a, b = p.b,
+			pivot = p.pivot, range = p.range, steps = p.steps }
+	end
+	-- every named node with a rest pose, for a lower level whose own parts
+	-- don't match (the Black 5's far tender is its node group_29 there too)
+	nodesOut.named = {}
+	for name, list in pairs(byName) do
+		if list[1].model ~= nil and type(name) == "string" then nodesOut.named[name] = { node = list[1].node, model = list[1].model } end
 	end
 	for _, ax in ipairs(axles) do nodesOut.axles[#nodesOut.axles + 1] = { node = ax.rec.node, x = ax.rec.at[1], z = ax.rec.at[3] } end
 	return table.concat(parts, " "), nodesOut, frame
@@ -452,8 +476,9 @@ end
 -- A free entity has no user transforms (seen live: none listed, writes do
 -- nothing), but its animations play (the driving wheels). So each part gets an
 -- animation of its own that only the copy plays: runaround_yawJ turns part J
--- of the full-detail spec about its pivot (pivotX), -30 to +30 degrees over 1
--- to 6001 ms; frame 0 is no turn at all, so a real train, which never plays
+-- of the full-detail spec about its pivot (pivotX), -range to +range degrees
+-- (turnRange) at 100 ms a degree from 1 ms; frame 0 is no turn at all, so a
+-- real train, which never plays
 -- it, is drawn as before whatever the engine makes of an animation not
 -- played. runaround_spinK turns axle K a full turn over 3600 ms. An animation
 -- applies on top of the node's rest transform, about the node's own origin
@@ -463,7 +488,7 @@ end
 -- found by node name, else by where their wheels' centre is (never by the node's
 -- origin: the A4's loco and tender nodes both sit at x = 0, and matching by
 -- origin gave the loco the tender's turn).
-local YAW_MAX, YAW_STEP, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 0.5, 100, 10
+local YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 100, 10
 local function keyframes(n, step, ms, mat)
 	local k = {}
 	for i = 0, n do
@@ -472,15 +497,15 @@ local function keyframes(n, step, ms, mat)
 	end
 	return k
 end
--- turning about (px, py) in the node's own coordinates
-local function yawAnimation(px, py)
+-- turning about (px, py) in the node's own coordinates, -range..range degrees in steps keyframes
+local function yawAnimation(px, py, range, steps)
 	local k = { { time = 0, transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } } }
-	for i = 0, math.floor(2 * YAW_MAX / YAW_STEP + 0.5) do
-		local deg = i * YAW_STEP - YAW_MAX
+	for i = 0, steps do
+		local deg = -range + i * (2 * range / steps)
 		local a = math.rad(deg)
 		local c, s = math.cos(a), math.sin(a)
 		local tx, ty = px - (c * px - s * py), py - (s * px + c * py)
-		k[#k + 1] = { time = 1 + (deg + YAW_MAX) * YAW_MS_PER_DEG, transf = { c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1 } }
+		k[#k + 1] = { time = 1 + (deg + range) * YAW_MS_PER_DEG, transf = { c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1 } }
 	end
 	return { type = "KEYFRAME_MATRIX", params = { keyframes = k } }
 end
@@ -501,8 +526,10 @@ local function addAnimation(node, name, ani)
 	if type(node.animations) ~= "table" then node.animations = {} end
 	node.animations[name] = ani
 end
--- names from the first level's parts; other levels' parts matched by place
-local function animateParts(lodNodes)
+-- names from the first level's parts; other levels' parts matched by place.
+-- The turns only if yaws (a powered vehicle); the axles' spins always (they
+-- turn the wheels of coach and wagon copies too, as they draw forward).
+local function animateParts(lodNodes, yaws)
 	local first = lodNodes[1]
 	if first == nil then return 0 end
 	local n = 0
@@ -516,13 +543,16 @@ local function animateParts(lodNodes)
 			for _, h in ipairs(ln.groups) do -- (a far level may have one fake bogie point where this has two axles)
 				if not used[h] and math.abs((h.a + h.b) - (g.a + g.b)) < 1.0 then return h end
 			end
+			local h = g.name ~= nil and ln.named and ln.named[g.name] or nil -- (the node, not a part there)
+			if h ~= nil and not used[h] then return h end
 			return nil
 		end
-		for j, g in ipairs(first.groups) do
+		for j, g in ipairs(yaws and first.groups or {}) do
 			local h = match(g)
 			if h ~= nil then
 				used[h] = true
-				addAnimation(h.node, "runaround_yaw" .. j, yawAnimation(toNode(h.model, g.pivot))); n = n + 1
+				local px, py = toNode(h.model, g.pivot)
+				addAnimation(h.node, "runaround_yaw" .. j, yawAnimation(px, py, g.range, g.steps)); n = n + 1
 			end
 		end
 		for k, a in ipairs(first.axles) do
@@ -537,7 +567,8 @@ local function animateParts(lodNodes)
 	return n
 end
 -- runaround_partsN strings for a rail vehicle model ({} when there is nothing
--- to place), and the copy's frame (see lodPartsSpec), from the full detail
+-- to place), and the copy's frame (see lodPartsSpec), from the full detail.
+-- animate: "all" (turns and spins), "spins", or nil (none).
 local function partsSpecs(src, animate)
 	local out, lodNodes, frame = {}, {}, nil
 	local rv = src.metadata and src.metadata.railVehicle
@@ -558,13 +589,23 @@ local function partsSpecs(src, animate)
 			end
 		end
 	end
-	if animate then pcall(animateParts, lodNodes) end
+	if animate ~= nil then pcall(animateParts, lodNodes, animate == "all") end
 	return out, frame or nil
+end
+-- Whether a vehicle has an engine: only such a vehicle runs around as a copy
+-- sent the track, so only its parts get the turns (with every coach and
+-- wagon's too, some 40 MB of keyframes). Specs and spins are kept on all.
+local function isPowered(md)
+	local engines = type(md) == "table" and type(md.landVehicle) == "table" and md.landVehicle.engines or nil
+	for _, e in ipairs(type(engines) == "table" and engines or {}) do
+		if type(e) == "table" and type(e.power) == "number" and e.power > 0 then return true end
+	end
+	return false
 end
 local partsLogged = 0
 local function addPartsParams(tc, src, modelName)
 	if type(tc) ~= "table" then return end
-	local ok, specs, frame = pcall(partsSpecs, src, true)
+	local ok, specs, frame = pcall(partsSpecs, src, isPowered(src.metadata) and "all" or "spins")
 	-- (logged for the first steam locos: what the game handed over, and what came of it)
 	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
 	if partsLogged < 3 and type(snd) == "string" and string.find(snd, "steam", 1, true) then

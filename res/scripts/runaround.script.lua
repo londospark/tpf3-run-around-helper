@@ -1438,10 +1438,45 @@ local function framePlacement(run, loop, facingSign, pos, yaw)
 	return api.type.Vec3f.new(p2.x + (p1.x - p2.x) * f, p2.y + (p1.y - p2.y) * f, pos.z), cyaw
 end
 
+-- The track under the copy before it has moved (it stands where the real loco
+-- stood while the hidden train is turned and drawn forward, its facing along
+-- the route not yet worked out): the route both ways from where it starts, in
+-- the copy's frame there (the real loco's), in the order of the copy's own x.
+-- Without it the tender stood straight on a curved platform, then snapped onto
+-- the curve as the copy set off.
+local function initialTrack(run, loop)
+	local edges = loop.loopEdges
+	if run.locoPos == nil or run.locoYaw == nil or edges[run.edgeCursor] == nil then return nil end
+	local p0 = run.edgeProgress or run.startOffset or 0.0
+	local c, s = math.cos(run.locoYaw), math.sin(run.locoYaw)
+	local pts = {}
+	for d = -TRACK_HALF, TRACK_HALF + 1e-6, TRACK_STEP do
+		local w = routePointFrom(edges, run.edgeCursor, p0, d)
+		if w == nil then return nil end
+		local dx, dy = w.x - run.locoPos.x, w.y - run.locoPos.y
+		pts[#pts + 1] = { c * dx + s * dy, -s * dx + c * dy }
+	end
+	if pts[#pts][1] < pts[1][1] then -- facing back along the route: the copy's x runs the other way
+		local r = {}
+		for i = #pts, 1, -1 do r[#r + 1] = pts[i] end
+		pts = r
+	end
+	local flat = {}
+	for _, p in ipairs(pts) do
+		flat[#flat + 1] = math.floor(p[1] * 1000 + 0.5) / 1000
+		flat[#flat + 1] = math.floor(p[2] * 1000 + 0.5) / 1000
+	end
+	return { s0 = -TRACK_HALF, ds = TRACK_STEP, pts = flat }
+end
+
 -- Advances one run by dt seconds. Returns true when the run needs its next
 -- step done in postUpdate (recouple, or the facing check after it).
 local function advanceGhost(run, dt)
 	local loop = run.loop
+	if run.track == nil and run.gx == nil and run.phase ~= "finish" and run.phase ~= "done" then
+		local okI, tr = pcall(initialTrack, run, loop)
+		if okI and tr ~= nil then run.track = tr end
+	end
 	if run.phase == "flip" then return false end -- waiting for the train to be flipped
 	if run.phase == "settle" then
 		-- Just after a flip the carriages still report their old positions for a

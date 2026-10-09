@@ -151,11 +151,11 @@ local function decodeParts(s)
 	local v = {}
 	for w in string.gmatch(s, "%S+") do v[#v + 1] = tonumber(w) end
 	local n, G, A = v[1], v[2], v[3]
-	if n == nil or G == nil or A == nil or #v ~= 3 + G * 5 + A * 3 then return false end
+	if n == nil or G == nil or A == nil or #v ~= 3 + G * 6 + A * 3 then return false end
 	local out, k = { n = n, groups = {}, axles = {} }, 4
 	for _ = 1, G do
-		out.groups[#out.groups + 1] = { idx = v[k], parent = v[k + 1], a = v[k + 2], b = v[k + 3], pivot = v[k + 4] }
-		k = k + 5
+		out.groups[#out.groups + 1] = { idx = v[k], parent = v[k + 1], a = v[k + 2], b = v[k + 3], pivot = v[k + 4], range = v[k + 5] }
+		k = k + 6
 	end
 	for _ = 1, A do
 		out.axles[#out.axles + 1] = { idx = v[k], r = v[k + 1], sign = v[k + 2] }
@@ -226,14 +226,14 @@ end
 -- axles; the small axles turned by the distance rolled (signed: backwards when
 -- the copy runs backwards). A free entity has no user transforms (seen live:
 -- none listed, and writing them does nothing), so this plays the animations
--- ghost_build gave those parts at load: runaround_yawJ (-30..+30 degrees over
--- 1..6001 ms, about the part's pivot, which ghost_build put in the keyframes;
--- frame 0 is no turn) and runaround_spinK (a turn over 3600 ms), J and K
+-- ghost_build gave those parts at load: runaround_yawJ (-range..+range degrees
+-- at 100 ms a degree from 1 ms, about the part's pivot, which ghost_build put
+-- in the keyframes; frame 0 is no turn) and runaround_spinK (a turn over 3600 ms), J and K
 -- counting the full-detail spec's parts and axles. Each part is turned to the
 -- line through the track under its reference points, measured from the part it
 -- is turned with (the spec's parent: the nearest placed part above it, or the
 -- copy's own frame, which lies along the track at its origin).
-local YAW_MAX, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 100, 10
+local YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 100, 10
 local SPIN_OFFSET_DEG = 360000 -- (a thousand turns, so that the frame stays positive going backwards)
 local copyReported = false
 local lastPartsLog = nil
@@ -272,14 +272,14 @@ local function placeParts(params, st, transfsOutput, signedDist)
 				sd = sd + (ux * tx + uy * ty)
 			end
 			local turn = (sc == 0.0 and sd == 0.0) and 0.0 or atan2(sc, sd)
-			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn)))
+			local deg = math.max(-g.range, math.min(g.range, math.deg(turn)))
 			local c, sn = math.cos(math.rad(deg)), math.sin(math.rad(deg))
 			-- turned about (cx, cy): p' = R (p - c) + c, after q
 			local rc, rs = c * q[1] - sn * q[2], sn * q[1] + c * q[2]
 			local ox, oy = q[3] - cx, q[4] - cy
 			drawn[g.idx] = { rc, rs, c * ox - sn * oy + cx, sn * ox + c * oy + cy }
 			turns[#turns + 1] = string.format("%.2f", deg)
-			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, 1 + (deg + YAW_MAX) * YAW_MS_PER_DEG, false, false)
+			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, 1 + (deg + g.range) * YAW_MS_PER_DEG, false, false)
 			turned = turned + 1
 		end
 	end

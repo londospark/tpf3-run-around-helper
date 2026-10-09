@@ -5,8 +5,8 @@
 -- is ghost_build's for the Black 5 (gr1m_LMSblack5, lms_stanier5_br1.mdl, full
 -- detail): body 1 (driving wheels 0.83 .. -3.66), pony truck 12 in it (4.6 ..
 -- 2.6), tender 29 (-6.92 .. -11.35), each with its pivot; axles 14, 15
--- (pony), 32-34 (tender).
-local SPEC = "41 3 5 1 0 0.8272 -3.6627 1.0685 12 1 4.6 2.6 1.4937 29 0 -6.9152 -11.3528 -4.2975 14 0.4611 1 15 0.4611 1 32 0.5738 1 33 0.5738 1 34 0.5738 1"
+-- (pony), 32-34 (tender). Each part's range: 10 degrees.
+local SPEC = "41 3 5 1 0 0.8272 -3.6627 1.0685 10 12 1 4.6 2.6 1.4937 10 29 0 -6.9152 -11.3528 -4.2975 10 14 0.4611 1 15 0.4611 1 32 0.5738 1 33 0.5738 1 34 0.5738 1"
 math.atan2 = math.atan2 or math.atan
 local tu = setmetatable({ colorAttributePostition = 0, getEntityTime = function() return 0 end },
   { __index = function() return function() end end })
@@ -38,7 +38,7 @@ local function chord(a, b) -- the track's direction between model x = a and b
   local ax, ay = at(a); local bx, by = at(b)
   return math.atan2(ay - by, ax - bx)
 end
-local function yawOf(name) return (played[name].param - 1) / 100 - 30 end -- degrees (frame 0 is no turn)
+local function yawOf(name) return (played[name].param - 1) / 100 - 10 end -- degrees (each part's range is 10 here; frame 0 is no turn)
 
 fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
 assert(wrote == 0, "no user transforms written on a copy")

@@ -12,7 +12,7 @@ api = { engine = { util = { transport = { calcPosition = function(_, u) return o
     Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end,
       distance = function(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) end } },
   res = { modelRep = { get = function(id) return { metadata = { transformatorConfig = { params = { runaround_frame = id == 1 and "5.3600 -4.9700" or nil } } } } end } } }
-local M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn { place = framePlacement, read = readFrame, len = pieceLength }", "f"))()
+local M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn { place = framePlacement, read = readFrame, len = pieceLength, initial = initialTrack }", "f"))()
 local loop = { loopEdges = { { entity = 1, index = 0, forward = true } } }
 -- a point d metres along the route, as the run-around finds it (by its measured length)
 local k = LEN / M.len(loop.loopEdges[1])
@@ -46,4 +46,18 @@ assert(math.abs(math.atan2(math.sin(yawB - math.atan2(q1.y - q2.y, q1.x - q2.x))
 assert(M.place({ edgeCursor = 1, edgeProgress = 100 }, loop, 1, here, tangent) == nil, "no frame: left as it is")
 -- a yaw far from the line's (wrong facing sign): left as it is
 assert(M.place(run, loop, 1, here, tangent + math.pi) == nil, "the line the other way round: left as it is")
+-- before the copy has moved: the track under it, in its own frame, either way it faces
+local function curveY(x) return R - math.sqrt(R * R - x * x) end -- (the circle, in the frame along it)
+for _, facing in ipairs({ 1, -1 }) do
+  local yaw0 = 100 * k / R + (facing < 0 and math.pi or 0)
+  local tr = M.initial({ edgeCursor = 1, startOffset = 100, locoPos = at(100), locoYaw = yaw0 }, loop)
+  assert(tr and #tr.pts == 50 and tr.s0 == -24 and tr.ds == 2, "25 points from -24 m")
+  for i = 1, 25 do
+    local x, y = tr.pts[2 * i - 1], tr.pts[2 * i]
+    assert(math.abs(x - (-24 + 2 * (i - 1))) < 0.1, "in the copy's own x order: " .. x)
+    -- a left-hand curve: to the copy's left facing along, to its right facing back
+    assert(math.abs(y - facing * curveY(x)) < 0.01, string.format("facing %d: point %d at y %.3f (curve %.3f)", facing, i, y, facing * curveY(x)))
+  end
+end
+print("frame: the track under the copy before it moves, either way it faces")
 print("frame ok")

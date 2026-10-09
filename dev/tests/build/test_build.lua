@@ -111,6 +111,12 @@ assert(chainedName(6) ~= "runaround_helper_1::/res/models/runaround_ghost/chain.
 ug_require = saved_req
 print("build: devers-style chained, mcs-style through chain_emit; unknown hook, missing function, or no ug_require -> left alone")
 assert(added["runaround_ghost_real/br_e94.mdl"] and added["runaround_ghost_dyn/br_e94.mdl"], "marker and copy built")
+-- the copy takes the parts spec and the frame worked out as the loco loaded
+models[1][2].metadata.transformatorConfig.params = { runaround_parts1 = "spec", runaround_frame = "5 -5", other = 1 }
+build("runaround_helper_1")
+local cp = added["runaround_ghost_dyn/br_e94.mdl"].metadata.transformatorConfig.params
+assert(cp and cp.runaround_parts1 == "spec" and cp.runaround_frame == "5 -5" and cp.other == nil, "the copy: the parts spec and frame, nothing else")
+models[1][2].metadata.transformatorConfig.params = nil
 print("build: own ID - vehicles patched, markers and copies built")
 
 -- M1: locos sharing a file name (two mods' and the fixture's own loco.mdl) are left alone (a marker or copy

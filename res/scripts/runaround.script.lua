@@ -2103,9 +2103,53 @@ local function pushCoachState(coach, speed, seg)
 	pcall(function()
 		api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateStateCmd(coach.ghost, {
 			speed01 = 0.0, power01 = 0.0,
-			state = { speed = speed, power = 0.0, vx = 0.0, vy = 0.0, color = coach.color, dist = coach.dist or 0.0, seg = seg, dir = 1, mirror = coach.mirror },
+			state = { speed = speed, power = 0.0, vx = 0.0, vy = 0.0, color = coach.color, dist = coach.dist or 0.0, seg = seg, dir = 1,
+				mirror = coach.mirror, track = coach.track },
 		}))
 	end)
+end
+
+-- The track under each coach copy, so that ghost_real turns its bogies as it
+-- does the loco copy's: the platform's curve at each coach, read from the
+-- vehicles around it (they stand along the track, so the change in their
+-- facing over the distance between them is the track's curvature), as a strip
+-- in the copy's own frame: y = k (x - a)(x - b) / 2 from the line through its
+-- own reference points a, b (its model's runaround_frame; the game places a
+-- vehicle on that line). poses: the train's vehicles ({ x, y, yaw, coach }),
+-- in any order; from: one end of the train, to put them in order.
+local MAX_CURVATURE = 1 / 20
+local function coachStrips(poses, from)
+	table.sort(poses, function(p, q)
+		return (p.x - from.x) ^ 2 + (p.y - from.y) ^ 2 < (q.x - from.x) ^ 2 + (q.y - from.y) ^ 2
+	end)
+	for i, p in ipairs(poses) do
+		local c = p.coach
+		if c ~= nil then
+			local lo, hi = poses[math.max(1, i - 1)], poses[math.min(#poses, i + 1)]
+			local dx, dy = hi.x - lo.x, hi.y - lo.y
+			local L = math.sqrt(dx * dx + dy * dy)
+			local k, facing = 0.0, 1
+			if L > 0.5 then
+				local dir = math.atan2(dy, dx)
+				local function along(yaw) return (math.cos(yaw - dir) < 0) and yaw + math.pi or yaw end
+				local turn = along(hi.yaw) - along(lo.yaw)
+				turn = math.atan2(math.sin(turn), math.cos(turn))
+				-- over the arc between them, not the straight line: L * (turn/2) / sin(turn/2)
+				local arc = (math.abs(turn) > 1e-6) and L * (turn / 2) / math.sin(turn / 2) or L
+				k = math.max(-MAX_CURVATURE, math.min(MAX_CURVATURE, turn / arc))
+				facing = (math.cos(p.yaw - dir) < 0) and -1 or 1
+			end
+			local a, b = 0.0, 0.0
+			if c.frame then a, b = c.frame[1], c.frame[2] end
+			local pts = {}
+			for x = -TRACK_HALF, TRACK_HALF + 1e-6, TRACK_STEP do
+				pts[#pts + 1] = x
+				pts[#pts + 1] = math.floor(k * facing * (x - a) * (x - b) / 2 * 1000 + 0.5) / 1000
+			end
+			c.track = { s0 = -TRACK_HALF, ds = TRACK_STEP, pts = pts }
+			c.curvature = k * facing
+		end
+	end
 end
 
 -- Where a coach ghost is, a fraction f of the way through the pull, and its yaw.
@@ -2178,11 +2222,14 @@ local function advanceRake(run, dt)
 				return false
 			end
 		end
+		local poses = { { x = locoFrame.x, y = locoFrame.y, yaw = locoFrame.yaw } }
 		for i, c in ipairs(R.coaches) do
 			c.target = coachFrames[i]
 			c.mirror = coachFrames[i].entity -- the real coach under this ghost: its load nodes
-			pushCoachState(c, 0.0, nil)
+			poses[#poses + 1] = { x = c.target.x, y = c.target.y, yaw = c.target.yaw, coach = c }
 		end
+		pcall(coachStrips, poses, run.locoPos or locoFrame) -- (where they will stand: the same platform)
+		for _, c in ipairs(R.coaches) do pushCoachState(c, 0.0, nil) end
 		run.target = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z }
 		run.hiddenLoco = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z, yaw = locoFrame.yaw }
 		-- The pull: the loco ghost draws forward along its route by as far as the
@@ -2201,8 +2248,10 @@ local function advanceRake(run, dt)
 		R.gdist0 = run.gdist or 0.0
 		R.pullTo = R.gdist0 + R.pullLen
 		R.stage = "pull"
-		logInfo(string.format("ghost rake: the train draws forward %.1f m (coaches turn up to %.1f degrees), then the loco uncouples",
-			R.pullLen, math.deg(turn)))
+		local bend = 0.0
+		for _, c in ipairs(R.coaches) do bend = math.max(bend, math.abs(c.curvature or 0.0)) end
+		logInfo(string.format("ghost rake: the train draws forward %.1f m (coaches turn up to %.1f degrees; platform %s), then the loco uncouples",
+			R.pullLen, math.deg(turn), bend > 1e-4 and string.format("curved, radius about %.0f m: the coach copies' bogies follow it", 1 / bend) or "straight"))
 		return false
 	end
 	if R.stage == "pull" then
@@ -2503,7 +2552,15 @@ local function startRunAround(state, vehicleEntity, loop)
 					dist = 0.0,
 				}
 			end
-			if coaches ~= nil then rakeInfo = { coaches = coaches } end
+			if coaches ~= nil then
+				rakeInfo = { coaches = coaches }
+				local poses = { { x = frames[1].x, y = frames[1].y, yaw = frames[1].yaw } }
+				for _, c in ipairs(coaches) do
+					c.frame = readFrame(c.ghostModel)
+					poses[#poses + 1] = { x = c.start.x, y = c.start.y, yaw = c.start.yaw, coach = c }
+				end
+				pcall(coachStrips, poses, frames[1])
+			end
 		end
 		if rakeInfo == nil then logInfo("ghost rake: not every coach can be hidden - the coaches stay in view and move at the flip") end
 	end

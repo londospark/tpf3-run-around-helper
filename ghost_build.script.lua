@@ -592,20 +592,12 @@ local function partsSpecs(src, animate)
 	if animate ~= nil then pcall(animateParts, lodNodes, animate == "all") end
 	return out, frame or nil
 end
--- Whether a vehicle has an engine: only such a vehicle runs around as a copy
--- sent the track, so only its parts get the turns (with every coach and
--- wagon's too, some 40 MB of keyframes). Specs and spins are kept on all.
-local function isPowered(md)
-	local engines = type(md) == "table" and type(md.landVehicle) == "table" and md.landVehicle.engines or nil
-	for _, e in ipairs(type(engines) == "table" and engines or {}) do
-		if type(e) == "table" and type(e.power) == "number" and e.power > 0 then return true end
-	end
-	return false
-end
 local partsLogged = 0
 local function addPartsParams(tc, src, modelName)
 	if type(tc) ~= "table" then return end
-	local ok, specs, frame = pcall(partsSpecs, src, isPowered(src.metadata) and "all" or "spins")
+	-- (turns and spins on every rail vehicle: the loco copy's tender and bogies
+	-- follow the route, the coach copies' bogies the platform's curve)
+	local ok, specs, frame = pcall(partsSpecs, src, "all")
 	-- (logged for the first steam locos: what the game handed over, and what came of it)
 	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
 	if partsLogged < 3 and type(snd) == "string" and string.find(snd, "steam", 1, true) then

@@ -308,12 +308,15 @@ a model of each structure; the previous version fails it at 0.79 m):
   load step every model is the model before plus only our animations and
   parameters: no node added, removed, renamed or moved, no animation of its own
   changed, at most one turn and one spin per node.
-- **Memory:** turns only on powered vehicles (only the loco copy gets track);
-  spins on all (coach and wagon copies' wheels turn as they draw forward). Each
-  part's keyframes sized to it (`turnRange`: its turn on a 30 m curve, with
-  spare; steps keeping its farthest point within 1 mm). 620k keyframes -> 257k
-  (turns 413k -> 50k; the spins, 207k, were there before). On a 50 m curve the
-  locos are still within 3 cm.
+- **Memory:** each part's keyframes sized to it (`turnRange`: its turn on a
+  30 m curve, with spare; steps keeping its farthest point within 1 mm). 620k
+  keyframes -> 271k (turns 413k -> 64k; the spins, 207k, were there before).
+  On a 50 m curve the locos are still within 3 cm.
+- **Coach copies' bogies** (`coachStrips`): each coach copy gets the track
+  under it as a strip, from the platform's curvature read off the vehicles
+  around it (the change of facing over the arc between neighbours), in its own
+  frame from its bogie centres; at creation (start poses) and at the settle
+  (where they will stand). Log: `platform curved, radius about N m`.
 - **A whole run** (`test_frame_run`): on a curve, out, reversal and back, the
   copy never moves more than its speed allows in a tick or turns more than the
   curve; on its wheels' line both ways; ends on the same coupling place.
@@ -333,8 +336,9 @@ a model of each structure; the previous version fails it at 0.79 m):
   animations on one node is unknown.
 - During a long final glide ("glided instead") the track isn't updated: the
   parts keep their last turns.
-- Coach copies' bogies (raised by the owner): they'd need turns on unpowered
-  vehicles again (memory: size them as above) and a strip per coach copy.
+- Coach copies' bogies on a platform that isn't one steady curve (a curve
+  starting part-way along the train): the curvature is read per coach from its
+  neighbours, so it follows, but only coarsely.
 
 **Temporary things to remove once seen right live:** the `PROBE` (logging
 only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;

@@ -136,12 +136,13 @@ local deep = { metadata = { railVehicle = { config = { axles = { "t1", "t2", "q1
 local dv = nums(partsSpecs(deep)[1])
 -- nodes: root 0, tender 1, t1 2, t2 3, holder 4, truck 5
 assert(dv[2] == 2 and dv[4 + 6] == 5 and dv[4 + 6 + 1] == 1, "the truck's turn is measured from the tender, past the group between")
--- a vehicle without an engine (a coach, a wagon): its axles spin, nothing turns
+-- a vehicle without an engine (a coach, a wagon): its bogies turn too (the
+-- coach copies' bogies follow a curved platform) and its axles spin
 local function fresh() local m = { metadata = { railVehicle = model.metadata.railVehicle, transformatorConfig = { transformator = { name = "x" } } }, lods = {
   { node = { name = "Root", children = { { name = "b1", transf = T(5, 0, 0), children = { { name = "pony_w", transf = T(0.5, 0, 0.45) }, { name = "tender_w1", transf = T(-0.5, 0, 0.45) } } } } } } } } return m end
 local wag = partsAtLoad("wagon.mdl", fresh())
 local b1 = wag.lods[1].node.children[1]
-assert(b1.children[1].animations and b1.children[1].animations.runaround_spin1 and not (b1.animations and b1.animations.runaround_yaw1), "unpowered: spins, no turns")
+assert(b1.children[1].animations and b1.children[1].animations.runaround_spin1 and b1.animations and b1.animations.runaround_yaw1, "unpowered: turns and spins")
 assert(wag.metadata.transformatorConfig.params.runaround_parts1 ~= nil, "and its spec")
 -- a far level whose parts don't match by name or place: the node of the same name
 local farOnly = { metadata = { landVehicle = ENGINES, railVehicle = { config = { axles = { "tw1", "tw2" }, fakeBogies = { {}, { { group = "lod2_coal", position = 0 } } } } },

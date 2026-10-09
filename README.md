@@ -211,7 +211,12 @@ very small driving wheels may turn a little too fast or too slow.
 While the loco runs around, its tender, pony truck and bogies follow the track
 on curves, and their wheels turn, as on a real train. (The game does this
 itself only for a train on the track; for the moving copy the mod does it,
-from the loco's model.)
+from the loco's model.) It's worked out from each model's own parts, so it
+covers tenders on bogies (the Su), tenders and bodies with their node at the
+loco's centre (the A4), articulated locos (the Big Boy), and modded locos built
+other ways. On a steady curve the wheels sit on the rails; where a curve
+starts or reverses under a long loco, they can be a few centimetres off for a
+moment.
 
 Known in this alpha, seen with a steam loco:
 
@@ -363,6 +368,15 @@ Learned while building this. The full write-up is in the modding guide.
   under its axles. It turns every axle that has no animation of its own. A free
   entity gets none of this. User transforms are numbered root 0, then depth
   first (traced on an A4 and a Black 5).
+- **Animations on a free entity.** It has no user transforms (none listed;
+  writing them does nothing), but its animations play. An animation applies on
+  top of the node's rest transform, about the node's own origin: the game's
+  wheel `.ani` files are pure rotations, and the wheel's place is in its node.
+  So to turn a part about any other point, that point goes into the keyframes.
+- **Model structure varies.** A part's node origin can be anywhere: at the
+  part's centre, at its front (the Su's tender), or at the model's origin (the
+  A4's loco body and tender both). An axle name in the config can be on several
+  nodes (a modded 8F's four driving axles share one).
 - **Scripting.**
   - `util.useFn` fails in the transformator scope. Use `ug_require` instead.
   - A `.script.lua` must define `data()`.

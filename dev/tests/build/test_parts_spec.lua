@@ -25,34 +25,49 @@ local function nums(s) local v = {} for w in s:gmatch("%S+") do v[#v + 1] = tonu
 local v = nums(specs[1])
 -- 10 nodes (root 0, body 1, pony 2 and its wheels 3-4, driving wheels 5-6, tender 7 and its axles 8-9); placed: body by its driving wheel at -1, pony by its axle at 4.5, tender by its axles -7 .. -11
 assert(v[1] == 10 and v[2] == 3 and v[3] == 3, "10 nodes, 3 placed, 3 axles turned (not the driving wheel)")
-local function group(i) local k = 4 + (i - 1) * 16 return { idx = v[k], parent = v[k + 1], x = v[k + 2], a = v[k + 14], b = v[k + 15] } end
+local function group(i) local k = 4 + (i - 1) * 5 return { idx = v[k], parent = v[k + 1], a = v[k + 2], b = v[k + 3], pivot = v[k + 4] } end
 local b, p, t = group(1), group(2), group(3)
 assert(b.idx == 1 and b.parent == 0 and b.a == -1 and b.b == -1, "body: one driving wheel")
-assert(p.idx == 2 and p.parent == 1 and p.x == 4 and p.a == 4.5, "pony truck inside the body, at 4")
-assert(t.idx == 7 and t.x == -9 and t.a == -7 and t.b == -11, "tender by its axles (scaled 7%)")
-local ax = 4 + 3 * 16
+assert(p.idx == 2 and p.parent == 1 and p.a == 4.5, "pony truck inside the body, by its axle at 4.5")
+assert(t.idx == 7 and t.parent == 0 and t.a == -7 and t.b == -11, "tender by its axles (scaled 7%)")
+-- the copy is placed as the game places a vehicle, on its own reference
+-- points: nothing on the root here, so the centres of its top parts, the body
+-- (-1) and the tender (-9); the tender turns where its line meets that one:
+-- ((-1)(-9) - (-7)(-11)) / (-1 - 9 + 7 + 11) = -8.5
+local _, frame = partsSpecs(model)
+assert(frame and frame[1] == -1 and frame[2] == -9, "the copy's frame: through the body's and the tender's centres")
+assert(math.abs(t.pivot - (-8.5)) < 1e-6, "the tender turns about -8.5")
+assert(math.abs(p.pivot - ((-1) * (-1) - 4.5 * 4.5) / (-2 - 9)) < 1e-3, "the pony truck where its axle's tangent meets the body's line")
+local ax = 4 + 3 * 5
 assert(v[ax] == 3 and v[ax + 3] == 8 and v[ax + 6] == 9, "pony and tender axles turn")
 assert(math.abs(v[ax + 4] - 0.55) < 1e-6, "an axle's radius is its height")
 -- the far level of detail: its fake bogie group, by its own position
 local f = nums(specs[2])
-assert(f[1] == 3 and f[2] == 1 and f[3] == 0 and f[4] == 2 and f[18] == -9 and f[19] == -9, "far tender: the fake bogie at its centre")
+assert(f[1] == 3 and f[2] == 1 and f[3] == 0 and f[4] == 2 and f[6] == -9 and f[7] == -9, "far tender: the fake bogie at its centre")
 -- worked out as the model loads (the load step later gets no lods): the
 -- parameters go on the model's own transformator config
 local loaded = partsAtLoad("loco.mdl", { metadata = { railVehicle = model.metadata.railVehicle,
   transformatorConfig = { transformator = { name = "::/vehicle/train/shared/default_train.trf" }, params = { other = 1 } } }, lods = model.lods })
 local p = loaded.metadata.transformatorConfig.params
 assert(p.runaround_parts1 == specs[1] and p.runaround_parts2 == specs[2] and p.other == 1, "at load: specs added, other params kept")
+assert(p.runaround_frame == "-1.0000 -9.0000", "and the copy's frame for the run-around")
 -- the parts got their animations, named after the full-detail spec's order
 -- (1 body, 2 pony, 3 tender; axles 1 pony, 2-3 tender), the far tender by place
 local L1, L2 = model.lods[1].node, model.lods[2].node
 local body, pony, tender = L1.children[1], L1.children[1].children[1], L1.children[2]
 assert(body.animations.runaround_yaw1 and pony.animations.runaround_yaw2 and tender.animations.runaround_yaw3, "yaw animations on the parts")
 local kf = tender.animations.runaround_yaw3.params.keyframes
-assert(tender.animations.runaround_yaw3.type == "KEYFRAME_MATRIX" and #kf == 61 and kf[1].time == 0 and kf[61].time == 6000, "-30..30 degrees over 0..6000 ms")
-assert(math.abs(kf[31].transf[1] - 1) < 1e-9 and math.abs(kf[61].transf[2] - math.sin(math.rad(30))) < 1e-9, "a turn about z")
+assert(tender.animations.runaround_yaw3.type == "KEYFRAME_MATRIX" and #kf == 122 and kf[1].time == 0 and kf[2].time == 1 and kf[122].time == 6001,
+  "frame 0 no turn, then -30..30 degrees over 1..6001 ms")
+for j = 1, 16 do assert(kf[1].transf[j] == ({ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 })[j], "frame 0 is no turn at all") end
+assert(math.abs(kf[62].transf[1] - 1) < 1e-9 and math.abs(kf[62].transf[13]) < 1e-9 and math.abs(kf[122].transf[2] - math.sin(math.rad(30))) < 1e-9, "a turn about z")
+-- a turn leaves the pivot where it is (in the tender's node: from -9)
+local px = t.pivot + 9
+local k = kf[122].transf
+assert(math.abs(k[1] * px + k[5] * 0 + k[13] - px) < 1e-9 and math.abs(k[2] * px + k[6] * 0 + k[14]) < 1e-9, "turned about its pivot")
 assert(pony.children[1].animations.runaround_spin1 and tender.children[1].animations.runaround_spin2 and tender.children[2].animations.runaround_spin3, "spin on the small axles")
 assert(not body.children[2].animations.runaround_spin1 and body.children[2].animations.wheels, "the driving wheel keeps only its own")
-assert(L2.children[2].animations.runaround_yaw3 and not (L2.children[1].animations or {}).runaround_yaw1, "far tender matched by place")
+assert(L2.children[2].animations.runaround_yaw3 and not (L2.children[1].animations or {}).runaround_yaw1, "far tender matched by where its wheels are")
 -- no transformator declared: the game's default one, as the game would add it
 loaded = partsAtLoad("loco2.mdl", { metadata = { railVehicle = model.metadata.railVehicle, transportVehicle = { carrier = "RAIL" } }, lods = model.lods })
 assert(loaded.metadata.transformatorConfig.transformator.name == "::/vehicle/train/shared/default_train.trf" and loaded.metadata.transformatorConfig.skipFromLod == 1, "default transformator")
@@ -80,12 +95,38 @@ local su = { metadata = { railVehicle = { config = { axles = { "ax1", "ay1", "ax
   lods = { { node = { name = "Root", children = { { name = "tender", transf = T(-10, 0, 0), children = { bogie(1), bogie(-3) } } } } } } }
 local sv = nums(partsSpecs(su)[1])
 -- nodes: root 0, tender 1, bogie 2 (axles 3-4), bogie 5 (axles 6-7)
-assert(sv[2] == 3 and sv[4] == 1 and sv[4 + 14] == -9 and sv[4 + 15] == -13, "tender body turned by its bogies at -9 and -13")
+assert(sv[2] == 3 and sv[4] == 1 and sv[6] == -9 and sv[7] == -13, "tender body turned by its bogies at -9 and -13")
 local coach = { metadata = { railVehicle = { config = { axles = { "ax5", "ay5", "ax-5", "ay-5" } } } },
   lods = { { node = { name = "Root", children = { bogie(5), bogie(-5) } } } } }
 local cv = nums(partsSpecs(coach)[1])
-assert(cv[2] == 2 and cv[4] == 1 and cv[4 + 16] == 4, "a coach: its two bogies, not its root")
+assert(cv[2] == 2 and cv[4] == 1 and cv[4 + 5] == 4, "a coach: its two bogies, not its root")
 local wrapped = { metadata = coach.metadata, lods = { { node = { name = "Root", children = { { name = "devers_roulis", children = { bogie(5), bogie(-5) } } } } } } }
 local wv = nums(partsSpecs(wrapped)[1])
 assert(wv[2] == 2 and wv[4] == 2, "under devers' wrapper: still just the bogies")
+-- an axle name on several nodes (the 8F's four driving axles share one): every one is an axle
+local eight = { metadata = { railVehicle = { config = { axles = { "drv" } } } },
+  lods = { { node = { name = "Root", children = { { name = "frame", transf = T(1, 0, 0), children = {
+    { name = "drv", transf = T(-2, 0, 0.8), animations = { wheels = {} } }, { name = "drv", transf = T(0, 0, 0.8), animations = { wheels = {} } },
+    { name = "drv", transf = T(2, 0, 0.8), animations = { wheels = {} } } } } } } } } }
+local ev = nums(partsSpecs(eight)[1])
+assert(ev[2] == 1 and ev[4] == 1 and ev[6] == 3 and ev[7] == -1, "the frame by all three driving axles, -1 .. 3")
+local _, ef = partsSpecs(eight)
+assert(ef[1] == 3 and ef[2] == -1, "one top part: the copy is placed on its line")
+-- a body that is the root, on two bogies (a diesel): on the line through the bogies' centres
+local _, cf = partsSpecs(coach)
+assert(cf[1] == 5 and cf[2] == -5, "a body on two bogies: on the bogies' centres")
+-- fake bogie points on the root itself (an articulated car's shared bogie): those
+local jac = { metadata = { railVehicle = { config = { axles = { "ax5", "ay5" }, fakeBogies = { { group = "Root", position = -9 } } } } },
+  lods = { { node = { name = "Root", children = { bogie(5) } } } } }
+local _, jf = partsSpecs(jac)
+assert(jf and jf[1] == 5 and jf[2] == -9, "an articulated car: on the line through its own bogie and the shared one")
+-- the parent field: the nearest placed part above (a bogie under an unplaced group under the tender)
+local deep = { metadata = { railVehicle = { config = { axles = { "t1", "t2", "q1", "q2" } } } },
+  lods = { { node = { name = "Root", children = { { name = "tender", transf = T(-9, 0, 0), children = {
+    { name = "t1", transf = T(2, 0, 0.5) }, { name = "t2", transf = T(-2, 0, 0.5) },
+    { name = "holder", transf = T(-1, 0, 0), children = { { name = "truck", transf = T(-3, 0, 0), children = {
+      { name = "q1", transf = T(0.5, 0, 0.4) }, { name = "q2", transf = T(-0.5, 0, 0.4) } } } } } } } } } } } }
+local dv = nums(partsSpecs(deep)[1])
+-- nodes: root 0, tender 1, t1 2, t2 3, holder 4, truck 5
+assert(dv[2] == 2 and dv[4 + 5] == 5 and dv[4 + 5 + 1] == 1, "the truck's turn is measured from the tender, past the group between")
 print("parts spec ok")

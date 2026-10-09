@@ -1338,7 +1338,7 @@ end
 -- frame. They follow the route both ways from where the copy is, onto the next
 -- or previous piece where that joins on (not across a reversal: there the
 -- piece the copy is on goes on, and beyond its ends the track runs straight).
-local TRACK_HALF, TRACK_STEP = 16.0, 2.0
+local TRACK_HALF, TRACK_STEP = 24.0, 2.0
 local pieceLengths = {}
 local function pieceLength(e)
 	local key = tostring(e.entity) .. ":" .. tostring(e.index)
@@ -1406,6 +1406,36 @@ local function trackStrip(run, loop, facingSign)
 		pts[#pts + 1] = math.floor((-s * dx + c * dy) * 1000 + 0.5) / 1000
 	end
 	return { s0 = -TRACK_HALF, ds = TRACK_STEP, pts = pts }
+end
+
+-- The loco copy's own reference points in the model, as the game places a
+-- vehicle by them: "a b" with a > b (ghost_build's runaround_frame), or nil.
+local function readFrame(modelId)
+	local s = modelMeta(modelId, "transformatorConfig", "params", "runaround_frame")
+	local a, b = nil, nil
+	if type(s) == "string" then a, b = string.match(s, "^(%S+) (%S+)$") end
+	a, b = tonumber(a), tonumber(b)
+	if a == nil or b == nil or a - b < 0.5 then return nil end
+	return { a, b }
+end
+
+-- Where the copy goes, as the game places a vehicle on the track: on the line
+-- through the track under its reference points (runaround_frame), not along the
+-- track's direction at its origin (on a curve those differ by a few
+-- centimetres; the parts' turns in ghost_real are worked out from that line,
+-- which keeps them well placed where the curve changes under the loco).
+-- Returns the position and yaw, or nil to stay as it is.
+local function framePlacement(run, loop, facingSign, pos, yaw)
+	local F = run.frameRefs
+	local edges = loop.loopEdges
+	if F == nil or edges[run.edgeCursor] == nil then return nil end
+	local p1 = routePointFrom(edges, run.edgeCursor, run.edgeProgress or 0.0, F[1] * facingSign)
+	local p2 = routePointFrom(edges, run.edgeCursor, run.edgeProgress or 0.0, F[2] * facingSign)
+	if p1 == nil or p2 == nil then return nil end
+	local cyaw = math.atan2(p1.y - p2.y, p1.x - p2.x)
+	if math.abs(math.atan2(math.sin(cyaw - yaw), math.cos(cyaw - yaw))) > math.rad(30) then return nil end
+	local f = -F[2] / (F[1] - F[2]) -- (the model's origin, x = 0, on that line)
+	return api.type.Vec3f.new(p2.x + (p1.x - p2.x) * f, p2.y + (p1.y - p2.y) * f, pos.z), cyaw
 end
 
 -- Advances one run by dt seconds. Returns true when the run needs its next
@@ -1599,6 +1629,10 @@ local function advanceGhost(run, dt)
 	if run.headingFlipped then
 		yaw = yaw + math.pi -- driving backwards: the loco keeps facing the way it faced
 	end
+	-- the facing against the way of travel: driving backwards, or facing back
+	local against = ((run.headingFlipped and 1 or 0) + (((run.yawOffset or 0) > 1) and 1 or 0)) % 2 == 1
+	local okF, fpos, fyaw = pcall(framePlacement, run, loop, against and -1 or 1, pos, yaw)
+	if okF and fpos ~= nil then pos, yaw = fpos, fyaw end
 	local transf = api.type.Mat4f.rotZTransl(yaw, pos)
 	local pvx, pvy = 0.0, 0.0
 	if run.gx ~= nil and dt > 0 then pvx, pvy = (pos.x - run.gx) / dt, (pos.y - run.gy) / dt end
@@ -1609,8 +1643,6 @@ local function advanceGhost(run, dt)
 	run.gx, run.gy, run.gz, run.gyaw = pos.x, pos.y, pos.z, yaw
 	run.gdist = (run.gdist or 0.0) + (run.edgeProgress - before)
 	run.loopSpeed = loop.speed
-	-- the facing against the way of travel: driving backwards, or facing back
-	local against = ((run.headingFlipped and 1 or 0) + (((run.yawOffset or 0) > 1) and 1 or 0)) % 2 == 1
 	local okT, strip = pcall(trackStrip, run, loop, against and -1 or 1)
 	run.track = okT and strip or nil
 	pushGhostState(run, run.speed, pvx, pvy, dt)
@@ -2548,6 +2580,12 @@ local function startRunAround(state, vehicleEntity, loop)
 			run.locoYaw = locoYaw
 			run.locoPos = { x = locoTransf:cols(3).x, y = locoTransf:cols(3).y }
 			run.driveTotal = routeDriveLength(loop, startCursor, startOffset)
+			run.frameRefs = readFrame(ghostModelId)
+			if run.frameRefs then
+				logInfo(string.format("loco copy: placed on the line through the track under its wheels at %.2f and %.2f m", run.frameRefs[1], run.frameRefs[2]))
+			else
+				logInfo("loco copy: placed along the track at its origin (no runaround_frame on its model)")
+			end
 			local data = state:get()
 			data.runs[#data.runs + 1] = run
 			state:set(data)

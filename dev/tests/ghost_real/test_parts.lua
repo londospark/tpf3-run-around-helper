@@ -1,9 +1,12 @@
--- ghost_real: the copy's tender, body and pony truck are turned to follow the
--- track under their axles, centres kept; small axles turn as it rolls. The spec
+-- ghost_real: the copy's tender, body and pony truck are turned to the line
+-- through the track under their axles, each measured from the part it's turned
+-- with (the pivots are in the keyframes: see test_parts_spec and
+-- test_parts_geometry); small axles turn as it rolls. The spec
 -- is ghost_build's for the Black 5 (gr1m_LMSblack5, lms_stanier5_br1.mdl, full
 -- detail): body 1 (driving wheels 0.83 .. -3.66), pony truck 12 in it (4.6 ..
--- 2.6), tender 29 (-6.92 .. -11.35); axles 14, 15 (pony), 32-34 (tender).
-local SPEC = "41 3 5 1 0 0.0 0.0 0 0.0 0 0 0 0.0 0.0 0.0 0 0.0 0.8272 -3.6627 12 1 3.6000 0.0 0 0.0 3.6000 0 0 0.0 0.0 0.0 0 0.0 4.6000 2.6000 29 0 -9.1485 0.0 0 0.0 -9.1485 0 0 0.0 0.0 0.0 0 0.0 -6.9152 -11.3528 14 0.4611 1 15 0.4611 1 32 0.5738 1 33 0.5738 1 34 0.5738 1"
+-- 2.6), tender 29 (-6.92 .. -11.35), each with its pivot; axles 14, 15
+-- (pony), 32-34 (tender).
+local SPEC = "41 3 5 1 0 0.8272 -3.6627 1.0685 12 1 4.6 2.6 1.4937 29 0 -6.9152 -11.3528 -4.2975 14 0.4611 1 15 0.4611 1 32 0.5738 1 33 0.5738 1 34 0.5738 1"
 math.atan2 = math.atan2 or math.atan
 local tu = setmetatable({ colorAttributePostition = 0, getEntityTime = function() return 0 end },
   { __index = function() return function() end end })
@@ -35,19 +38,19 @@ local function chord(a, b) -- the track's direction between model x = a and b
   local ax, ay = at(a); local bx, by = at(b)
   return math.atan2(ay - by, ax - bx)
 end
-local function yawOf(name) return played[name].param / 100 - 30 end -- degrees
+local function yawOf(name) return (played[name].param - 1) / 100 - 30 end -- degrees (frame 0 is no turn)
 
 fns.train.updateFn(nil, ghost({ runaround_parts1 = SPEC }, 2.0), out)
 assert(wrote == 0, "no user transforms written on a copy")
 -- parts in the spec's order: 1 the body, 2 the pony truck in it, 3 the tender
 local tender = yawOf("runaround_yaw3")
 print(string.format("tender turned %.2f degrees (track under its wheels: %.2f)", tender, math.deg(chord(-6.9152, -11.3528))))
-assert(near(tender, 4 * math.deg(chord(-6.9152, -11.3528)), 0.04) and tender < -2, "tender follows the curve (drawn x4 while testing)")
+assert(near(tender, math.deg(chord(-6.9152, -11.3528)), 0.02) and tender < -2, "tender follows the curve")
 assert(played["runaround_yaw3"].start == -1 and played["runaround_yaw3"].loop == false, "a set frame, not looped")
 local body = yawOf("runaround_yaw1")
 print(string.format("body %.3f (track %.3f), pony %.3f (track %.3f)", body, math.deg(chord(0.8272, -3.6627)), body + yawOf("runaround_yaw2"), math.deg(chord(4.6, 2.6))))
-assert(near(body, 4 * math.deg(chord(0.8272, -3.6627)), 0.2), "body by its driving wheels (x4 while testing)")
-assert(near(body + yawOf("runaround_yaw2"), 4 * math.deg(chord(4.6, 2.6)), 0.2), "pony truck follows the track (x4 while testing)")
+assert(near(body, math.deg(chord(0.8272, -3.6627)), 0.02), "body by its driving wheels")
+assert(near(body + yawOf("runaround_yaw2"), math.deg(chord(4.6, 2.6)), 0.02), "pony truck follows the track, measured from the body")
 -- axles: a turn over 3600 ms, by the distance rolled over the radius
 local spin = played["runaround_spin1"]
 assert(spin.loop == true and near(spin.param, (math.deg(2.0 / 0.4611) + 360000) * 10, 0.01), "pony axle turned by 2 m / 0.4611 m")

@@ -63,7 +63,11 @@
   time a train arrives.
 - While the loco runs around, its tender, pony truck and bogies follow the
   track on curves, and their wheels turn. Before, the moving loco was one rigid
-  piece, with the tender's wheels off the rails on curves.
+  piece, with the tender's wheels off the rails on curves. It works from each
+  model's own parts: tenders on bogies (Su), parts whose node is at the loco's
+  centre (A4), articulated locos (Big Boy), and modded locos built other ways
+  (checked offline on every loco in the base game, the DLC and 40 mods: on a
+  steady curve every wheel is on the rails).
 - Planned routes no longer double back from one branch of a set of points to
   the other (a move no train can make).
 - Fixed: the loco stopped short of its coaches and then jumped onto them when

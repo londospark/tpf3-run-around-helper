@@ -82,6 +82,13 @@ by `dev/sync_staging.sh`. Exclude them from the mod.io upload as well.
   Its input is `sndsrc/`, the game's 15 rail `.snd.lua` files unzipped from the
   vehicle zips, plus `_index.txt` (`<file> <resource dir>` per line). It writes
   to `res/audio/ghostwrap/`.
+- **Checking tenders and bogies offline:** `lua dev/tools/parts_sim.lua
+  ghost_build.script.lua res/scripts/ghost_real.script.lua <radius> <model.mdl>...`
+  prints, per level of detail, the worst wheel's distance off the track beyond
+  its rigid part's own sag. Run it on the game's models (unzipped from
+  `base/content/vehicle/train/*.zip`) and on mods' (`~/mod.io/common/10640/mods/`
+  on the desktop) after changing anything in the parts code.
+  `dev/tools/node_index.lua <model.mdl> [lod]` prints a model's node tree.
 - `dev/tools/gen_ghost_models.lua` built the static plain loco copies in
   `res/models/runaround_ghost/`, from base-game `.mdl` files unzipped into `src/`.
 - **Modding guide:** `~/tf3-mods/docs/Transport_Fever_3_Modding_Guide.pdf`, with
@@ -168,11 +175,10 @@ So that nobody repeats them:
 - **Wheel animation frame wrapped to one turn:** blends backwards. Use a
   frame that keeps increasing, computed from a motion segment.
 
-## Where we are (2026-10-08 evening, laptop; handing to the desktop)
+## Where we are (2026-10-09, desktop: tenders fixed offline)
 
-All pushed. **On the desktop: `git pull`, `dev/sync_staging.sh`, restart the
-game** (`mod.json` changed: there's now a `runScript`, so a full restart is
-needed). On this laptop the game is at
+All pushed. **On the other machine: `git pull`, `dev/sync_staging.sh`,
+restart the game** (`mod.json` has a `runScript`: a full restart is needed). On this laptop the game is at
 `/data/games/SteamLibrary/steamapps/common/Transport Fever 3/`; on the desktop
 `/mnt/games/...`.
 
@@ -193,9 +199,10 @@ The day's work, in order:
    with the Su): fixed by `placeTarget`. **Not yet seen live.** Log:
    `coupling place: turned round from the hidden loco - the loco's origin
    9.30 m from the hidden loco's`.
-5. **Tender and bogies on the copy:** see the next section. In progress.
+5. **Tender and bogies on the copy:** see the next section. Fixed offline on
+   2026-10-09 (desktop); waiting for the live check.
 
-### Tender and bogies on the copy (in progress)
+### Tender and bogies on the copy (fixed offline; live check pending)
 
 **The problem.** For a real train on the track, the engine places the loco
 body, tender, pony truck and bogies, and spins the small axles. The run's loco
@@ -228,60 +235,91 @@ such parts (the Su's tender body on two bogies) turns with them.
 - Fake bogie positions are in model coordinates (the Su's far tender sits at
   -9.14 and -13.87, its bogies' places).
 
+**What was wrong** (found 2026-10-09 on the desktop, offline, from the game's
+models and the mod.io models; all generic, none model-specific):
+
+1. **Each part turned about its node's origin.** An animation turns a node
+   about its own origin (the game's wheel `.ani` files are pure rotations). A
+   part's origin can be anywhere: the A4's tender node sits at the model's
+   origin (x = 0), so its tender swung about the loco's middle; the Su's sits
+   at the tender's front. Turning alone also can't move a tender sideways onto
+   a curve. Result: tender wheels 0.8 m (Su) to 1.2 m (A4) off a 150 m curve.
+2. **Lower levels of detail matched by node origin.** The A4's loco and tender
+   nodes are both at x = 0, so on lower levels the loco got the tender's turn
+   (the owner saw the loco turn, not the tender).
+3. **An axle name on several nodes** counted once (a modded 8F's four driving
+   axles share `lod_0_body_1`).
+4. **A part on parts turned by its children's node origins**, which can be
+   metres from their wheels (the 8F's), not by their wheels' centres.
+5. **A part's turn measured from its direct parent only**, wrong when the
+   part above it isn't placed (a group between).
+
 **How it works now:**
 
-- **Load** (`ghost_build`, `partsAtLoad`): `partsSpecs` finds the parts to turn
-  (nodes holding axles, fake bogie groups, parts holding two or more of those;
-  never the root or *devers*' single wrapper node) and the axles to spin (no
-  animation of their own), per level of detail. It writes them as
-  `runaround_partsN` params: `"n G A"`, then per part `idx parent x y z yaw
-  (model) lx ly lz lyaw (local) px py pz pyaw (parent) a b (reference points'
-  x)`, then per axle `idx radius sign`. `animateParts` adds `runaround_yawJ`
-  (KEYFRAME_MATRIX, -30..+30 degrees over 0..6000 ms) to part J and
-  `runaround_spinK` (a turn over 3600 ms) to axle K, J and K counting the
-  full-detail spec. Lower levels get the same names on the parts at the same
-  place. The dyn copies copy the params from the loaded model.
-- **Game script** (`runaround.script.lua`): each tick on the route,
-  `trackStrip` sends the copy 17 track points (-16..+16 m along its facing, in
-  its own frame), following the route onto pieces that join and straight on
-  where none does. Motion segments carry `s0`, the signed distance along the
-  copy's facing, for the axles.
-- **Copy** (`ghost_real`, `placeParts`): turns each part to the chord of the
-  track under its reference points, relative to its parent, and plays
-  `runaround_yawJ` at that angle; plays `runaround_spinK` at the signed
-  distance over the axle's radius.
+- **Load** (`ghost_build`: `lodPartsSpec`, `partsSpecs`, `animateParts`, at
+  `loadModel` via `partsAtLoad`): finds the parts (nodes holding axles, every
+  node with a listed axle name; fake bogie groups; parts holding two or more
+  parts, by their wheels' centres; never the root or devers' wrapper) and the
+  axles to spin. Each part gets its reference points (a, b), the nearest placed
+  part above it, and a **pivot** (`pivotX`): where its line meets its parent's.
+  On a curve of any radius that's exact (y = x^2/2R near the vehicle: the lines
+  through p, q meet at (ab - cd)/(a + b - c - d)). `runaround_yawJ` turns part
+  J about that pivot (in the keyframes, in the node's own coordinates): frame 0
+  is no turn, -30..+30 degrees over 1..6001 ms. Lower levels of detail: matched
+  by node name, else by wheel centre. Spec: `runaround_partsN` = `"n G A"`, then
+  per part `idx parent a b pivot`, then per axle `idx radius sign`.
+- **The copy's frame** (`runaround_frame` = `"a b"`): the vehicle's own
+  reference points, as the game places a vehicle: axles or fake bogies on the
+  root (two or more: those alone), else those plus the centres of its top
+  parts (Su: loco body and tender; diesel: its two bogies; articulated car:
+  shared bogie and its own). The game script (`readFrame`, `framePlacement`)
+  puts the copy on the line through the track under those points; without the
+  parameter, along the track at its origin, as before.
+- **Track** (`trackStrip`): 25 points, -24..+24 m (a Big Boy's tender reaches
+  -17.8 m), in the copy's frame. `ghost_real` reads them as a smooth curve
+  (Catmull-Rom): straight lines between points made an 8F's wheels 7.6 cm off.
+- **Copy** (`ghost_real`, `placeParts`): for each part, carried by the part
+  above it as drawn, the turn about its pivot that puts its reference points
+  nearest the track (one point: with the track's direction there too). Plays
+  `runaround_yawJ` at it; `runaround_spinK` by the distance over the radius.
+  The four-times test scale is gone.
 
-**State at hand-over.** Seventh live test (Su, *devers* on, turns drawn x4):
-the loco body visibly turned, the tender didn't. Cause: the Su's tender body
-holds no axles (they're in two bogies under it). Fixed by the "parts holding
-two or more parts" rule (commit `57078fe`). **Not yet seen live.**
+**Checked offline** (`dev/tools/parts_sim.lua` runs the mod's own load step and
+copy update, draws the node tree with the frames played, and measures each
+wheel against the track; `dev/tests/build/test_parts_geometry.lua` does it for
+a model of each structure; the previous version fails it at 0.79 m):
 
-**Temporary things to remove once the tender is seen right:**
+- Every loco and tender in the base game, the DLC and the owner's 40 mods (605
+  rail vehicles): on 150 m, 80 m and -100 m curves, every wheel within 3 cm of
+  where its rigid part can put it (a long rigid wheelbase can't touch a curve at
+  every axle; real trains are the same). Most locos 0-3 mm. Over 3 cm: only
+  multiple units and a tram (which the mod doesn't run around).
+- Where the curve changes under the loco: a 30 m transition, 0.4-1.7 cm; a
+  straight running into a 150 m curve, 2.4-3.9 cm; an instant S-bend, up to
+  7.7 cm (Big Boy), while it passes. One turn about one fixed pivot can't fit a
+  changing curve exactly; a second animation per part would, if the game
+  combines two on one node (unknown).
+- The A4's far level of detail (one part, fake points 9 and -0.9) is 9 cm off a
+  150 m curve: its line differs from the full detail's. Seen from far away only.
 
-- `PARTS_TEST_SCALE = 4` in `ghost_real.script.lua`: the copy's part turns are
-  drawn four times larger so their direction is obvious, and logged every 3 s
-  (`loco copy parts: track bends X deg (left/right) over 16 m; parts turned
-  ...`). Set it to 1, and the three x4 expectations in
-  `dev/tests/ghost_real/test_parts.lua` back to x1.
-- The `PROBE` (`runaround_probe` set in `patchLoco` for steam locos on the
-  stock path; `PROBE` lines from real trains). Remove both halves.
-- `loco parts: ...` (load), `loco params at setup: ...` (setup) and the
-  one-off `loco copy parts: turning ...` lines can stay or go; they're capped.
+**Temporary things to remove once seen right live:** the `PROBE` (logging
+only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;
+`PROBE` lines from real trains). It's kept for check 3 below.
 
 **Next checks, in order** (restart first):
 
-1. The Su's tender turns towards the inside of curves with the loco (x4 makes
-   it obvious); the `track bends ... parts turned` lines list 4 parts.
-2. The Black 5 and the A4 the same.
+1. The Su, the A4 and the Black 5: the tender follows the curve, its wheels on
+   the rails, and the loco body doesn't swing. `loco copy: placed on the line
+   through the track under its wheels at ...` once per run; `loco copy parts:
+   track bends ... parts turned ...` every 3 s (turns now real size).
+2. Up close and from far away (lower levels of detail).
 3. **Real trains are unaffected** by the added animations (never played on
-   them): a real Su or Black 5 in normal running still bends its tender on
-   curves. With *devers* off, the `PROBE` lines should still list the tender
-   and the small axles as moved. If not, move the animations to the copies
-   only (the dyn copies are built with `modelPath`, so that would need their
-   own node tree; see `addGhostModel`).
-4. With and without *devers* (the owner needs both).
+   them; frame 0 is no turn): a real Su or Black 5 in normal running looks as
+   before. With *devers* off, the `PROBE` lines should still list the tender and
+   the small axles as moved.
+4. With and without *devers*.
 5. The coupling: no snap (`coupling place: ...`).
-6. Then x1, remove the probe, and update the README if anything changed.
+6. Then remove the probe.
 
 **Not started, raised by the owner:** the coach copies' bogies on a curved
 platform stay straight (no track is sent for coaches, and they stand there the

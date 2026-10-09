@@ -145,20 +145,17 @@ end
 
 -- The parts the engine would place for a real train (the loco body, tender,
 -- pony truck or bogies) and the axles it would turn: decoded from the model's
--- runaround_partsN parameters (see ghost_build's partsSpecs), the one whose node
--- count is the level of detail being drawn.
+-- runaround_parts1 parameter (the full-detail one; see ghost_build's partsSpecs).
 local partsCache = {}
 local function decodeParts(s)
 	local v = {}
 	for w in string.gmatch(s, "%S+") do v[#v + 1] = tonumber(w) end
 	local n, G, A = v[1], v[2], v[3]
-	if n == nil or G == nil or A == nil or #v ~= 3 + G * 16 + A * 3 then return false end
+	if n == nil or G == nil or A == nil or #v ~= 3 + G * 5 + A * 3 then return false end
 	local out, k = { n = n, groups = {}, axles = {} }, 4
 	for _ = 1, G do
-		out.groups[#out.groups + 1] = { idx = v[k], parent = v[k + 1], model = { v[k + 2], v[k + 3], v[k + 4], v[k + 5] },
-			lcl = { v[k + 6], v[k + 7], v[k + 8], v[k + 9] }, parentModel = { v[k + 10], v[k + 11], v[k + 12], v[k + 13] },
-			a = v[k + 14], b = v[k + 15] }
-		k = k + 16
+		out.groups[#out.groups + 1] = { idx = v[k], parent = v[k + 1], a = v[k + 2], b = v[k + 3], pivot = v[k + 4] }
+		k = k + 5
 	end
 	for _ = 1, A do
 		out.axles[#out.axles + 1] = { idx = v[k], r = v[k + 1], sign = v[k + 2] }
@@ -166,91 +163,35 @@ local function decodeParts(s)
 	end
 	return out
 end
--- The same spec with every node after the root one further on: devers wraps
--- everything under the root in one node of its own (its roll), so if the spec
--- was made without it, the drawn model has one node more.
-local function shifted(r)
-	local out = { n = r.n + 1, groups = {}, axles = {} }
-	local function sh(i) return i + 1 end -- the root's children are now the wrapper's
-	for _, g in ipairs(r.groups) do
-		out.groups[#out.groups + 1] = { idx = sh(g.idx), parent = sh(g.parent), model = g.model, lcl = g.lcl, parentModel = g.parentModel, a = g.a, b = g.b }
-	end
-	for _, a in ipairs(r.axles) do out.axles[#out.axles + 1] = { idx = sh(a.idx), r = a.r, sign = a.sign } end
-	return out
-end
-local partsMissLogged = {}
-local function partsFor(params, n)
-	local tcp = params.transformatorConfigParams
-	if n == nil then return nil end
-	local okP, has = pcall(function() return tcp ~= nil and tcp.runaround_parts1 ~= nil end)
-	if not (okP and has) then
-		if (partsMissLogged.none or 0) < 5 then
-			partsMissLogged.none = (partsMissLogged.none or 0) + 1
-			local mdl = nil
-			pcall(function() mdl = tcp and tcp.runaround_mdl end)
-			print("[RunAroundHelper] loco copy parts: " .. tostring(mdl) .. " (" .. tostring(n) .. " nodes) has no parts spec;"
-				.. " its parameters are " .. type(tcp) .. " - tender and bogies stay rigid")
-		end
-		return nil
-	end
-	local seen, wrapped = {}, (tcp.devers_trf ~= nil or tcp.devers_rest1 ~= nil)
-	for i = 1, 8 do
-		local s = tcp["runaround_parts" .. i]
-		if type(s) ~= "string" then break end
-		local r = partsCache[s]
-		if r == nil then
-			r = decodeParts(s)
-			partsCache[s] = r
-		end
-		if r and r.n == n then return r end
-		if r and wrapped and r.n + 1 == n then
-			local key = s .. "+1"
-			if partsCache[key] == nil then partsCache[key] = shifted(r) end
-			return partsCache[key]
-		end
-		seen[#seen + 1] = r and tostring(r.n) or "unreadable"
-	end
-	local key = tostring(tcp.runaround_mdl) .. ":" .. tostring(n)
-	if not partsMissLogged[key] and #seen > 0 and (partsMissLogged.count or 0) < 10 then
-		partsMissLogged[key] = true
-		partsMissLogged.count = (partsMissLogged.count or 0) + 1
-		print("[RunAroundHelper] loco copy parts: " .. tostring(tcp.runaround_mdl) .. " is drawn with " .. tostring(n)
-			.. " nodes; its parts spec is for " .. (#seen > 0 and table.concat(seen, ", ") or "none (no runaround_parts on the model)")
-			.. (wrapped and " (devers)" or "") .. " - tender and bogies stay rigid")
-	end
-	return nil
-end
-
--- (x, y, z, yaw) poses: composed, inverted, as a matrix
-local function composeP(a, b)
-	local c, s = math.cos(a[4]), math.sin(a[4])
-	return { a[1] + c * b[1] - s * b[2], a[2] + s * b[1] + c * b[2], a[3] + b[3], a[4] + b[4] }
-end
-local function inverseP(a)
-	local c, s = math.cos(a[4]), math.sin(a[4])
-	return { -(c * a[1] + s * a[2]), -(-s * a[1] + c * a[2]), -a[3], -a[4] }
-end
-local function poseMat(p)
-	return api.type.Mat4f.rotZTransl(p[4], api.type.Vec3f.new(p[1], p[2], p[3]))
-end
--- turned phi about the axle (y): the top moves forwards (+x) for phi > 0
-local function axleMat(phi)
-	local c, s = math.cos(phi), math.sin(phi)
-	local V4 = api.type.Vec4f.new
-	return api.type.Mat4f.new(V4(c, 0, -s, 0), V4(0, 1, 0, 0), V4(s, 0, c, 0), V4(0, 0, 0, 1))
-end
 
 -- The track under the copy, as the run-around sends it: points at model x =
--- s0, s0 + ds, ... in the copy's own frame (x forwards, y left). Between and
--- beyond them, straight lines.
+-- s0, s0 + ds, ... in the copy's own frame (x forwards, y left). Between them a
+-- smooth curve through the points (Catmull-Rom), not straight lines: a part
+-- whose line nearly parallels its parent's turns about a point far away, so a
+-- small error in direction becomes a large one sideways (straight lines between
+-- points 2 m apart put an 8F's driving wheels 7.6 cm off a 150 m curve).
+-- Beyond the ends, straight on.
 local function trackPoint(tr, x)
 	local pts = tr.pts
 	local count = math.floor(#pts / 2)
 	local f = (x - tr.s0) / tr.ds
 	local i = math.max(0, math.min(count - 2, math.floor(f)))
 	local t = f - i
-	local x1, y1, x2, y2 = pts[2 * i + 1], pts[2 * i + 2], pts[2 * i + 3], pts[2 * i + 4]
-	return x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+	local function P(k)
+		if k < 0 then return 2 * pts[1] - pts[3], 2 * pts[2] - pts[4] end
+		if k > count - 1 then return 2 * pts[2 * count - 1] - pts[2 * count - 3], 2 * pts[2 * count] - pts[2 * count - 2] end
+		return pts[2 * k + 1], pts[2 * k + 2]
+	end
+	local x0, y0 = P(i - 1)
+	local x1, y1 = P(i)
+	local x2, y2 = P(i + 1)
+	local x3, y3 = P(i + 2)
+	if t < 0 or t > 1 then -- beyond the ends: straight on
+		return x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+	end
+	local t2, t3 = t * t, t * t * t
+	local function cr(a, b, c, d) return 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3) end
+	return cr(x0, x1, x2, x3), cr(y0, y1, y2, y3)
 end
 local function trackYaw(tr, a, b)
 	if a - b < 0.5 then a, b = a + 1.0, b - 1.0 end -- one point: the direction there
@@ -286,16 +227,15 @@ end
 -- the copy runs backwards). A free entity has no user transforms (seen live:
 -- none listed, and writing them does nothing), so this plays the animations
 -- ghost_build gave those parts at load: runaround_yawJ (-30..+30 degrees over
--- 0..6000 ms) and runaround_spinK (a turn over 3600 ms), J and K counting the
--- full-detail spec's parts and axles. A part's turn is relative to its parent:
--- node = parent * rest * turn.
+-- 1..6001 ms, about the part's pivot, which ghost_build put in the keyframes;
+-- frame 0 is no turn) and runaround_spinK (a turn over 3600 ms), J and K
+-- counting the full-detail spec's parts and axles. Each part is turned to the
+-- line through the track under its reference points, measured from the part it
+-- is turned with (the spec's parent: the nearest placed part above it, or the
+-- copy's own frame, which lies along the track at its origin).
 local YAW_MAX, YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 30, 100, 10
 local SPIN_OFFSET_DEG = 360000 -- (a thousand turns, so that the frame stays positive going backwards)
 local copyReported = false
--- TEMPORARY (testing which way the tender turns): the copy's part turns are
--- drawn this many times larger, and logged every few seconds with which way
--- the track curves. Back to 1 once seen right.
-local PARTS_TEST_SCALE = 4
 local lastPartsLog = nil
 local function placeParts(params, st, transfsOutput, signedDist)
 	local tcp = params.transformatorConfigParams
@@ -309,17 +249,37 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	local turned = 0
 	local turns = {}
 	if trackKnown then
-		local poses = {}
+		-- Each part as drawn: a rotation (c, s) and a shift, from the model into
+		-- the copy's frame. A part turns about its pivot, carried with the part it
+		-- turns with, by the angle that puts its reference points nearest the
+		-- track (a single point: with the track's direction there too). Where
+		-- its line meets its parent's (pivotX) that is exactly its line along the
+		-- track; where the two lines are nearly parallel, a slight turn about a
+		-- far pivot: a shift sideways.
+		local drawn = {} -- by node index; 0: the copy's own frame
+		drawn[0] = { 1.0, 0.0, 0.0, 0.0 }
+		local function apply(q, x, y) return q[1] * x - q[2] * y + q[3], q[2] * x + q[1] * y + q[4] end
 		for j, g in ipairs(spec.groups) do
-			local m = g.model
-			local want = { m[1], m[2], m[3], m[4] + trackYaw(tr, g.a, g.b) }
-			local parent = poses[g.parent] or g.parentModel
-			local turn = composeP(inverseP(g.lcl), composeP(inverseP(parent), want))[4]
-			turn = atan2(math.sin(turn), math.cos(turn)) -- (-pi..pi)
-			poses[g.idx] = want
-			turns[#turns + 1] = string.format("%.2f", math.deg(turn))
-			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn) * PARTS_TEST_SCALE))
-			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, (deg + YAW_MAX) * YAW_MS_PER_DEG, false, false)
+			local q = drawn[g.parent] or drawn[0]
+			local cx, cy = apply(q, g.pivot, 0.0)
+			local xs = (math.abs(g.a - g.b) < 0.5) and { g.a - 1.0, g.a, g.a + 1.0 } or { g.a, g.b }
+			local sc, sd = 0.0, 0.0
+			for _, x in ipairs(xs) do
+				local ux, uy = apply(q, x, 0.0)
+				local tx, ty = trackPoint(tr, x)
+				ux, uy, tx, ty = ux - cx, uy - cy, tx - cx, ty - cy
+				sc = sc + (ux * ty - uy * tx)
+				sd = sd + (ux * tx + uy * ty)
+			end
+			local turn = (sc == 0.0 and sd == 0.0) and 0.0 or atan2(sc, sd)
+			local deg = math.max(-YAW_MAX, math.min(YAW_MAX, math.deg(turn)))
+			local c, sn = math.cos(math.rad(deg)), math.sin(math.rad(deg))
+			-- turned about (cx, cy): p' = R (p - c) + c, after q
+			local rc, rs = c * q[1] - sn * q[2], sn * q[1] + c * q[2]
+			local ox, oy = q[3] - cx, q[4] - cy
+			drawn[g.idx] = { rc, rs, c * ox - sn * oy + cx, sn * ox + c * oy + cy }
+			turns[#turns + 1] = string.format("%.2f", deg)
+			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, 1 + (deg + YAW_MAX) * YAW_MS_PER_DEG, false, false)
 			turned = turned + 1
 		end
 	end
@@ -336,8 +296,8 @@ local function placeParts(params, st, transfsOutput, signedDist)
 		lastPartsLog = now
 		-- (the track's turn from 8 m behind the copy's origin to 8 m ahead: + is to the left)
 		local bend = math.deg(trackYaw(tr, 9, 7) - trackYaw(tr, -7, -9))
-		print(string.format("[RunAroundHelper] loco copy parts: track bends %.1f deg (%s) over 16 m; parts turned %s deg (drawn x%d for the test)",
-			bend, bend > 0.05 and "left" or (bend < -0.05 and "right" or "straight"), table.concat(turns, ", "), PARTS_TEST_SCALE))
+		print(string.format("[RunAroundHelper] loco copy parts: track bends %.1f deg (%s) over 16 m; parts turned %s deg",
+			bend, bend > 0.05 and "left" or (bend < -0.05 and "right" or "straight"), table.concat(turns, ", ")))
 	end
 end
 

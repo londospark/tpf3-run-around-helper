@@ -216,7 +216,8 @@ covers tenders on bogies (the Su), tenders and bodies with their node at the
 loco's centre (the A4), articulated locos (the Big Boy), and modded locos built
 other ways. On a steady curve the wheels sit on the rails; where a curve
 starts or reverses under a long loco, they can be a few centimetres off for a
-moment.
+moment. The coach and wagon copies' bogies follow a curved platform the same
+way while the loco is away.
 
 Known in this alpha, seen with a steam loco:
 

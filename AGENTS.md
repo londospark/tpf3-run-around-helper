@@ -181,9 +181,9 @@ So that nobody repeats them:
 ## Where we are (2026-10-09, desktop: tenders fixed offline)
 
 All pushed. **On the other machine: `git pull`, `dev/sync_staging.sh`,
-restart the game** (`mod.json` has a `runScript`: a full restart is needed). On this laptop the game is at
-`/data/games/SteamLibrary/steamapps/common/Transport Fever 3/`; on the desktop
-`/mnt/games/...`.
+restart the game** (`mod.json` has a `runScript`: a full restart is needed).
+The game is at `/data/games/SteamLibrary/steamapps/common/Transport Fever 3/`
+on the laptop and `/mnt/games/SteamLibrary/...` on the desktop.
 
 The day's work, in order:
 
@@ -359,11 +359,10 @@ only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;
 5. The coupling: no snap (`coupling place: ...`).
 6. Then remove the probe.
 
-**Not started, raised by the owner:** the coach copies' bogies on a curved
-platform stay straight (no track is sent for coaches, and they stand there the
-whole run). Plan: send each coach copy a track strip once, at the pull, from
-the route's first pieces and the way back, which cover the platform; the same
-`placeParts` then turns their bogies.
+**Done offline, raised by the owner:** the coach copies' bogies on a curved
+platform (`2dce5ba`, `coachStrips`; see "Coach copies' bogies" above). Live
+check: on a curved platform the coach copies' bogies follow the curve, and the
+pull's `ghost rake:` line says how curved the platform is.
 
 **Known, not looked into:** a steam loco's copy doesn't chuff (the rest of its
 sound plays).

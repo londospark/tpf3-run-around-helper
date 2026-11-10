@@ -252,7 +252,7 @@ fresh()
 TRACK.y0 = 5
 start()
 assert(#saved.runs == 0 and #sent == 0, "N1: not started, nothing sent")
-assert(loop.lastProblem and loop.lastProblem:find("not at the platform the route starts from", 1, true), "N1: the card says why: " .. tostring(loop.lastProblem))
+assert(loop.lastProblem and loop.lastProblem:find("stopped at a different platform", 1, true), "N1: the card says why: " .. tostring(loop.lastProblem))
 say("N1 other platform: " .. loop.lastProblem .. "\n")
 -- ... but a loco a little off the track's centre line (2 m) is still on it.
 fresh()
@@ -266,7 +266,7 @@ fresh()
 TRACK.x0, TRACK.dx = -60, 100 -- under the loco, but heading +x, into the train
 start()
 assert(#saved.runs == 0 and #sent == 0, "N2: not started, nothing sent")
-assert(loop.lastProblem and loop.lastProblem:find("towards the coaches", 1, true), "N2: the card says why: " .. tostring(loop.lastProblem))
+assert(loop.lastProblem and loop.lastProblem:find("going back through the train", 1, true), "N2: the card says why: " .. tostring(loop.lastProblem))
 say("N2 route into the train: " .. loop.lastProblem .. "\n")
 -- the next run that does start clears the note
 TRACK.x0, TRACK.dx = -20, -100
@@ -322,14 +322,14 @@ fresh()
 train.parts = { train.parts[2], train.parts[1], train.parts[3], train.parts[4] }
 start()
 assert(#saved.runs == 0 and #sent == 0, "no loco at an end: not started")
-assert(loop.lastProblem == "there is no loco at either end of the train", tostring(loop.lastProblem))
+assert(loop.lastProblem == "There's no loco at either end of this train.", tostring(loop.lastProblem))
 say("no loco at either end: " .. loop.lastProblem .. "\n")
 
 -- The route starts at the coaches' end of the platform: the loco is at the wrong end.
 fresh()
 TRACK.x0, TRACK.dx = 30, -45 -- under the coaches only, stopping 18 m short of the loco
 start()
-assert(#saved.runs == 0 and loop.lastProblem and loop.lastProblem:find("at the other end of the train", 1, true), tostring(loop.lastProblem))
+assert(#saved.runs == 0 and loop.lastProblem and loop.lastProblem:find("arrived at the other end of the train", 1, true), tostring(loop.lastProblem))
 say("loco at the wrong end: " .. loop.lastProblem .. "\n")
 
 -- The card's numbers are clamped (a command from elsewhere could send 0, and the

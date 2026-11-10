@@ -67,6 +67,20 @@ local CONFIG = {
 	-- ghosts. The game's vehicle marker only re-attaches three times.
 	ghostRake = true,
 	rakePullSpeed = 2.0,  -- m/s: top speed of the train drawing forward before the uncouple
+	-- The coaches never move (the usual case now). The game keeps a train's middle
+	-- where it is when the train is turned, so with the loco at the other end the
+	-- hidden real coaches stand a loco length nearer the buffers than their
+	-- copies. Instead of sliding the copies there (the pull), the copies stay
+	-- where the train arrived, the loco copy uncouples, runs around and couples
+	-- on, and then the HIDDEN train makes the move: it is let go, loads and
+	-- departs as its line says, held to a crawl (topSpeedScale), and is stopped a
+	-- loco length on, exactly under its copies, where it is shown again and sent
+	-- on its way (see advanceDepart). false = the pull, as before.
+	staticCoaches = true,
+	creepSpeed = 2.5,        -- m/s: the hidden train's speed limit while it moves up
+	creepFinalSpeed = 0.35,  -- m/s: over the last creepFinalMetres, to stop to the centimetre
+	creepFinalMetres = 1.2,
+	alignSpeed = 0.4,        -- m/s: the copies easing onto the real train if it stopped a little off
 	uncouplePause = 2.5,  -- seconds the train stands before the loco uncouples and sets off
 	-- Once the loco is back on, check its real facing against the ghost's and
 	-- correct it if they differ (a safety net; see verifyRun).
@@ -1252,7 +1266,10 @@ local function placeTarget(run)
 	local hx, hy = math.cos(h.yaw), math.sin(h.yaw)
 	local same = hx * math.cos(run.gyaw) + hy * math.sin(run.gyaw) >= 0
 	local shift = (cx ~= nil and not same) and 2 * cx or 0.0
-	run.target = { x = h.x + shift * hx, y = h.y + shift * hy, z = h.z }
+	-- (static coaches: the hidden train has still to move up a loco length; the
+	-- loco will be that much further on, see advanceRake)
+	local sh = run.targetShift
+	run.target = { x = h.x + shift * hx + (sh and sh.x or 0.0), y = h.y + shift * hy + (sh and sh.y or 0.0), z = h.z + (sh and sh.z or 0.0) }
 	if not run.targetLogged then
 		run.targetLogged = true
 		logInfo(string.format("coupling place: %s - the loco's origin %.2f m from the hidden loco's", same and "facing as the hidden loco" or "turned round from the hidden loco", math.abs(shift)))
@@ -1289,7 +1306,11 @@ local function advanceApproach(run, dt)
 	pushGhostState(run, run.speed, vx, vy, dt)
 	local transf = api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))
 	api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost, transf))
-	if arrived then run.phase = "finish" end
+	if arrived then
+		-- static coaches: coupled on (as copies); now the hidden train moves up
+		local static = run.rake ~= nil and run.rake.static and run.rake.stage == "done" and not run.departDone and not run.aborted
+		run.phase = static and "depart" or "finish"
+	end
 	return false
 end
 
@@ -1305,6 +1326,9 @@ end
 
 -- Phases the watchdog leaves alone: already ending, or held on purpose.
 local WATCHDOG_SKIP = { finish = true, done = true, verify = true, retry = true, stuck = true }
+-- Phases with no time limit: the hidden train loads and departs when its line
+-- says (minutes, with "wait for full load"). A train that has gone is still seen.
+local WATCHDOG_UNTIMED = { depart = true }
 
 -- Every stage waits for a command callback or a position, and if one never comes
 -- the train would stay held for ever. So: a run whose train has gone, or that has
@@ -1319,6 +1343,7 @@ local function watchdog(run, dt)
 		run.phase, run.aborted = "finish", true
 		return
 	end
+	if WATCHDOG_UNTIMED[run.phase or ""] then return end
 	run.age = (run.age or 0.0) + dt
 	if run.timeLimit == nil then
 		local loop = run.loop or {}
@@ -1471,6 +1496,8 @@ end
 
 -- Advances one run by dt seconds. Returns true when the run needs its next
 -- step done in postUpdate (recouple, or the facing check after it).
+local advanceDepart -- defined with the ghost rake, below
+
 local function advanceGhost(run, dt)
 	local loop = run.loop
 	if run.track == nil and run.gx == nil and run.phase ~= "finish" and run.phase ~= "done" then
@@ -1510,6 +1537,7 @@ local function advanceGhost(run, dt)
 		return false
 	end
 	if run.phase == "approach" then return advanceApproach(run, dt) end
+	if run.phase == "depart" then return advanceDepart(run, dt) end
 	if run.phase == "verify" then
 		run.verifyWait = (run.verifyWait or 0) + 1
 		return run.verifyWait >= 4
@@ -1791,6 +1819,37 @@ local function destroyCoachGhosts(coaches)
 	end
 end
 
+-- The train's top speed scale (TransportVehicle.Modifiers.topSpeedScale, the
+-- way the game's own vehicle window reads it), or nil.
+local function readSpeedScale(vehicleEntity)
+	local ok, v = pcall(function()
+		return api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE).modifiers.topSpeedScale
+	end)
+	return (ok and type(v) == "number") and v or nil
+end
+
+-- Sets it, keeping the train's other modifiers. False if the game would not.
+local function setSpeedScale(vehicleEntity, scale)
+	local ok = pcall(function()
+		local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
+		local m = api.type.TransportVehicle.Modifiers.new(tv.modifiers)
+		m.topSpeedScale = scale
+		api.cmd.sendCommand(api.cmd.makeVehicleSetModifiersCmd(vehicleEntity, m))
+	end)
+	return ok
+end
+
+-- Gives a train back the top speed it had before its hidden move up (static
+-- coaches). On every way out of a run: a train left on the crawl would never
+-- get anywhere.
+local function restoreSpeedScale(run)
+	if run.speedScale0 == nil then return end
+	if not setSpeedScale(run.vehicleEntity, run.speedScale0) then
+		logInfo("could not give vehicle", run.vehicleEntity, "its top speed back (scale", run.speedScale0, ") - check its speed in the vehicle window")
+	end
+	run.speedScale0 = nil
+end
+
 -- Ends a run: the ghost goes, the train is released. The game reports the train
 -- arriving at the same stop again straight after (traced live: OnArriveAtStop at
 -- the same second, the train not having moved), so the stop is remembered and
@@ -1804,8 +1863,10 @@ local function finalizeRun(state, run)
 		state:set(data)
 	end
 	if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
+	restoreSpeedScale(run)
 	releaseTrain(run.vehicleEntity)
-	api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity))
+	-- (a train that has already left, static coaches, simply carries on)
+	if run.depart == nil then api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end
 	if run.restore then
 		logInfo("train put back as it was for vehicle", run.vehicleEntity, "loop", loopLabel(run.loop), "- no run-around this time")
 	else
@@ -2189,6 +2250,168 @@ local function pullFrame(c, f)
 	return x, y, z, math.atan2(vy, vx) + (backwards and math.pi or 0.0)
 end
 
+-- The hidden train's speed (MOVE_PATH, as the game's own windows read it), or nil.
+local function trainSpeed(vehicleEntity)
+	local ok, v = pcall(function()
+		return api.engine.getComponent(vehicleEntity, api.type.ComponentType.MOVE_PATH).dyn.speed
+	end)
+	return (ok and type(v) == "number") and math.abs(v) or nil
+end
+
+local function smooth(f) return f * f * (3.0 - 2.0 * f) end
+
+-- Static coaches, the end of the run: the loco copy has coupled on, and the
+-- copies stand where the train arrived. The real train, hidden and already
+-- turned, stands a loco length short of them (the game keeps a train's middle
+-- where it is). It makes the move itself, out of sight:
+--
+--   release   it is let go (as at the end of any run): the game has it arrive
+--             again, load and depart as its line says. Its top speed is scaled
+--             down first, so that it moves up at a crawl;
+--   await     nothing moves until it leaves: seconds, or minutes with "wait for
+--             full load". The copies simply stand at the platform, coupled;
+--   creep     it draws forward; over the last metre slower still; and it is
+--             stopped (as the vehicle window's stop button would) so as to
+--             come to rest exactly under its copies;
+--   stopping  until it stands;
+--   align     if it stopped a little off, the copies ease onto it (centimetres;
+--             the whole way if the game would not hold it to a crawl);
+--
+-- then "finish": the real train is shown in place of the copies, gets its top
+-- speed back and is un-stopped (recoupleRake, finalizeRun), and carries on to
+-- its next stop from where it stands. Nothing here waits on a command
+-- callback, and every exit goes through finalizeRun, which restores the speed.
+advanceDepart = function(run, dt)
+	local R, D = run.rake, run.depart
+	local ref = R.coaches[1]
+	pushGhostState(run, 0.0, 0.0, 0.0, dt) -- (the loco copy stands, idling)
+	if D == nil then
+		D = { stage = "await", t = 0.0 }
+		run.depart = D
+		local top = run.trainTopSpeed or run.topSpeed or 27.8
+		local scale0 = readSpeedScale(run.vehicleEntity) or 1.0
+		D.cruise = math.max(math.min(CONFIG.creepSpeed / top, 1.0) * scale0, 0.001)
+		D.final = math.max(math.min(CONFIG.creepFinalSpeed / top, 1.0) * scale0, 0.001)
+		run.speedScale0 = scale0
+		D.capped = setSpeedScale(run.vehicleEntity, D.cruise)
+		releaseTrain(run.vehicleEntity)
+		pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end)
+		logInfo(string.format("coupled on (as copies). The hidden train is let go: it loads and leaves as its line says, and moves up %.1f m to its copies at %.1f m/s%s",
+			R.pullLen or 0.0, CONFIG.creepSpeed, D.capped and "" or " (its speed could NOT be limited: it is stopped as near as can be, and the copies ease onto it)"))
+		return false
+	end
+
+	local okP, p = pcall(carriagePos, ref.mirror)
+	if not okP or p == nil then
+		-- the hidden train can't be read: show it where it is (the copies go)
+		logInfo("moving up: the hidden train's position can't be read - it is shown where it is")
+		run.departDone = true
+		run.phase = "finish"
+		return false
+	end
+	local here = { x = p.x, y = p.y }
+	local h, s = ref.hidden or ref.target, ref.start
+	-- how far it has come from where it stood, and how far it has to go (signed:
+	-- negative once past), along the line from there to its copy
+	local ux, uy = s.x - h.x, s.y - h.y
+	local len = math.sqrt(ux * ux + uy * uy)
+	if len > 1e-6 then ux, uy = ux / len, uy / len end
+	local moved = math.sqrt((here.x - h.x) ^ 2 + (here.y - h.y) ^ 2)
+	local toGo = (s.x - here.x) * ux + (s.y - here.y) * uy
+	local step = D.last and math.sqrt((here.x - D.last.x) ^ 2 + (here.y - D.last.y) ^ 2) or 0.0
+	local v = trainSpeed(run.vehicleEntity) or ((dt > 0) and step / dt or 0.0)
+	D.last = here
+	D.t = D.t + dt
+
+	if D.stage == "await" or D.stage == "creep" then
+		if D.stage == "await" and moved > 0.05 then
+			D.stage = "creep"
+			logInfo(string.format("moving up: the hidden train has left after %.0f s", D.t))
+		end
+		if D.stage == "creep" then
+			local brake = math.max(run.trainBrake or 1.0, 0.1)
+			local stopIn = v * v / (2.0 * brake)
+			if not D.slow and toGo <= CONFIG.creepFinalMetres + stopIn then
+				D.slow = true
+				setSpeedScale(run.vehicleEntity, D.final)
+			end
+			-- stop it now if it would otherwise pass its place before the next look
+			if toGo <= stopIn + 0.5 * v * dt + 0.01 then
+				pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleSetStoppedByUserCmd(run.vehicleEntity, true)) end)
+				D.stage, D.still, D.t = "stopping", 0, 0.0
+				D.stopAt, D.stopSpeed = toGo, v
+			end
+		end
+		return false
+	end
+
+	if D.stage == "stopping" then
+		D.still = (step < 0.002) and (D.still + 1) or 0
+		if D.still < 3 and D.t < 20.0 then return false end
+		-- Where everything really is now: the copies go onto it.
+		local okF, frames = pcall(carriageFrames, run.vehicleEntity)
+		if not okF then
+			logInfo("moving up: the stopped train can't be read - it is shown where it is")
+			run.departDone = true
+			run.phase = "finish"
+			return false
+		end
+		local worst = 0.0
+		for _, c in ipairs(R.coaches) do
+			for _, f in ipairs(frames) do
+				if f.entity == c.mirror then
+					c.target = f
+					worst = math.max(worst, math.sqrt((f.x - c.start.x) ^ 2 + (f.y - c.start.y) ^ 2))
+				end
+			end
+		end
+		for _, f in ipairs(frames) do
+			if f.modelId == run.locoPart.modelId then
+				run.hiddenLoco = { x = f.x, y = f.y, z = f.z, yaw = f.yaw }
+				break
+			end
+		end
+		run.targetShift = nil
+		placeTarget(run)
+		local locoOff = math.sqrt((run.target.x - run.gx) ^ 2 + (run.target.y - run.gy) ^ 2)
+		logInfo(string.format("moving up: the hidden train stands %.2f m from its coach copies and %.2f m from the loco copy (told to stop %.2f m short at %.2f m/s)",
+			worst, locoOff, D.stopAt or 0.0, D.stopSpeed or 0.0))
+		worst = math.max(worst, locoOff)
+		if worst < 0.01 then
+			run.departDone = true
+			run.phase = "finish"
+			return false
+		end
+		D.stage, D.f = "align", 0.0
+		D.dur = math.min(math.max(worst / CONFIG.alignSpeed, 0.4), 8.0)
+		D.g0 = { x = run.gx, y = run.gy, z = run.gz }
+		return false
+	end
+
+	if D.stage == "align" then
+		D.f = math.min(D.f + dt / D.dur, 1.0)
+		local f = smooth(D.f)
+		for _, c in ipairs(R.coaches) do
+			local x, y, z, yaw = pullFrame(c, f)
+			pcall(function()
+				api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(c.ghost,
+					api.type.Mat4f.rotZTransl(yaw, api.type.Vec3f.new(x, y, z))))
+			end)
+		end
+		run.gx = D.g0.x + (run.target.x - D.g0.x) * f
+		run.gy = D.g0.y + (run.target.y - D.g0.y) * f
+		run.gz = D.g0.z + (run.target.z - D.g0.z) * f
+		api.cmd.sendCommand(api.cmd.makeCustomEntityUpdateTransformationCmd(run.ghost,
+			api.type.Mat4f.rotZTransl(run.gyaw, api.type.Vec3f.new(run.gx, run.gy, run.gz))))
+		if D.f >= 1.0 then
+			run.departDone = true
+			run.phase = "finish"
+		end
+		return false
+	end
+	return false
+end
+
 -- Moves the ghost rake on. Returns true when the invisible train needs flipping.
 local function advanceRake(run, dt)
 	local R = run.rake
@@ -2228,10 +2451,36 @@ local function advanceRake(run, dt)
 			c.mirror = coachFrames[i].entity -- the real coach under this ghost: its load nodes
 			poses[#poses + 1] = { x = c.target.x, y = c.target.y, yaw = c.target.yaw, coach = c }
 		end
-		pcall(coachStrips, poses, run.locoPos or locoFrame) -- (where they will stand: the same platform)
+		-- (where they will stand: the same platform. Static coaches stand where
+		-- they are, with the strips they were given when they appeared)
+		if not R.static then pcall(coachStrips, poses, run.locoPos or locoFrame) end
 		for _, c in ipairs(R.coaches) do pushCoachState(c, 0.0, nil) end
 		run.target = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z }
 		run.hiddenLoco = { x = locoFrame.x, y = locoFrame.y, z = locoFrame.z, yaw = locoFrame.yaw }
+		if R.static then
+			-- The coaches stay. The hidden train stands a loco length short of them
+			-- and moves up at the end (advanceDepart), so the loco copy couples on
+			-- where the hidden loco WILL be: as far on from where it is as the coach
+			-- next to it has to go, measured in that coach's own frame and applied
+			-- in the loco's (exact on a steady curve, where a straight shift is not).
+			local far = 0
+			for _, c in ipairs(R.coaches) do
+				c.slide = math.sqrt((c.start.x - c.target.x) ^ 2 + (c.start.y - c.target.y) ^ 2)
+				c.hidden = { x = c.target.x, y = c.target.y, z = c.target.z, yaw = c.target.yaw }
+				if c.slide > far then far = c.slide end
+			end
+			local last = R.coaches[#R.coaches]
+			local dx, dy = last.start.x - last.target.x, last.start.y - last.target.y
+			local yc, yl = last.target.yaw, locoFrame.yaw
+			if math.cos(yl - yc) < 0 then yl = yl + math.pi end -- (facing the other way: the same axis)
+			local a, b = dx * math.cos(yc) + dy * math.sin(yc), -dx * math.sin(yc) + dy * math.cos(yc)
+			run.targetShift = { x = a * math.cos(yl) - b * math.sin(yl), y = a * math.sin(yl) + b * math.cos(yl), z = last.start.z - last.target.z }
+			R.pullLen = math.max(far, 0.01)
+			R.stage = "uncouple"
+			R.t = 0
+			logInfo(string.format("ghost rake: the coaches stay where they are; the hidden train stands %.1f m short of them and moves up when it leaves. The loco uncouples", R.pullLen))
+			return false
+		end
 		-- The pull: the loco ghost draws forward along its route by as far as the
 		-- coaches have to go (a loco length), and the coach ghosts go with it.
 		local far, turn = 0, 0
@@ -2519,6 +2768,15 @@ local function startRunAround(state, vehicleEntity, loop)
 	end
 	local locoTopSpeed = tonumber(modelMeta(locoSnap.modelId, "landVehicle", "topSpeed"))
 	if locoTopSpeed ~= nil and locoTopSpeed <= 1 then locoTopSpeed = nil end
+	-- the whole train's: its slowest part's top speed and weakest brake (for
+	-- the hidden train's move up, see advanceDepart)
+	local trainTopSpeed, trainBrake = nil, nil
+	for _, part in ipairs(tvc.vehicles) do
+		local v = tonumber(modelMeta(part.part.modelId, "landVehicle", "topSpeed"))
+		local b = tonumber(modelMeta(part.part.modelId, "landVehicle", "brakeDeceleration"))
+		if v ~= nil and v > 1 and (trainTopSpeed == nil or v < trainTopSpeed) then trainTopSpeed = v end
+		if b ~= nil and b > 0.05 and (trainBrake == nil or b < trainBrake) then trainBrake = b end
+	end
 	local startHead, startSign = nil, nil
 	do
 		local okH, hx, hy = pcall(headDirection, vehicleEntity)
@@ -2618,7 +2876,9 @@ local function startRunAround(state, vehicleEntity, loop)
 			locoPart = locoSnap,
 			locoIdx = locoIdx,
 			partCount = #tvc.vehicles,
-			rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches } or nil,
+			rake = rakeInfo and { stage = "flip", busy = false, coaches = rakeInfo.coaches, static = CONFIG.staticCoaches or nil } or nil,
+			trainTopSpeed = trainTopSpeed,
+			trainBrake = trainBrake,
 			startHead = startHead,
 			startSign = startSign,
 			startReversed = locoSnap.reversed and true or false,

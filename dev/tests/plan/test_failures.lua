@@ -90,6 +90,7 @@ local log = {}
 local function load_script()
   M = assert(load(io.open(arg[1]):read("*a") .. "\nreturn {start=startRunAround, finishRun=finishRun, CONFIG=CONFIG, data=data}", "s"))()
   M.CONFIG.LOG_TRACES = false
+  M.CONFIG.staticCoaches = false -- these are the failure paths of the pull (test_static.lua has the static coaches')
 end
 print = (function(op) return function(...) local t = {} for i = 1, select("#", ...) do t[i] = tostring(select(i, ...)) end log[#log + 1] = table.concat(t, " ") end end)(print)
 local say = io.write

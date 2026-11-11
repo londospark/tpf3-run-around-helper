@@ -283,9 +283,9 @@ gently/normally/briskly = 1.0/2.0/3.5 m/s2 on a 3-step slider).
 ### Left to do on this branch
 
 - The live checks above, then merge or drop.
-- A third review in `CODE_REVIEW.md` (not written yet).
-- `finalizeRun`'s `TryToDepart` has been there since the first commit: it may
-  make a train leave without waiting for a full load. Not looked into.
+- The open points of the third review in `CODE_REVIEW.md` (R6-R14). R6 first:
+  `finalizeRun`'s `TryToDepart` may make a train leave without waiting for a
+  full load.
 
 ## Where we are (2026-10-09, desktop: tenders fixed offline)
 

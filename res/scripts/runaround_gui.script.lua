@@ -442,19 +442,24 @@ function data()
 			loop.lastProblem ~= nil and Row({ Icon(ICON.warn), Text("Last time, the loco didn't run around. " .. loop.lastProblem, "font-scale-body") }) or nil,
 			RunStatus(loop, param.runs, param.vehicleEntity),
 			Buttons({
-				IconButton(ICON.edit, editing and "Done" or "Edit route on map",
-					"Draws the route on the track. Click a few points along where the loco should go, in order; the route and the reversals are worked out for you. Right-click or Esc when done.",
-					function() toggleRouteTool(loop.id, true, param.vehicleEntity) end, editing and "secondary" or "primary"),
-				IconButton(ICON.eye, viewing and "Hide" or "Show",
-					"Show the route on the track",
-					function() toggleRouteTool(loop.id, false, param.vehicleEntity) end, "secondary"),
+				(not editing and (loop.routeLength == nil or loop.routeWarning ~= nil)) and IconButton(ICON.route, "Find the route for me",
+					"Looks for a track beside the platform that the loco can use to pass its train, and works out the whole way round.",
+					function() sendGuiCmd("AutoRoute", { loopId = loop.id }) end, "primary") or nil,
+				IconButton(ICON.edit, editing and "Done drawing" or "Draw the route",
+					"Click the track the loco should use to pass its train. The rest of the way round, and where it reverses, is worked out for you.",
+					function() toggleRouteTool(loop.id, true, param.vehicleEntity) end, editing and "primary" or "secondary"),
+				loop.routeLength ~= nil and IconButton(ICON.eye, viewing and "Hide the route" or "Show the route",
+					"Draws the loco's way round on the track: blue where it sets off, orange where it couples on, purple where it reverses.",
+					function() toggleRouteTool(loop.id, false, param.vehicleEntity) end, "secondary") or nil,
 			}),
 		}
 		if editing then
-			children[#children + 1] = Text("Click track to add points in order (a piece of the loop, then track at the far end of the train). Right-click or Esc to finish.", "font-scale-annotation")
+			children[#children + 1] = Text("Click the track the loco should use to pass its train: usually the loop beside the platform. One click is often enough. For a longer way round, click more pieces in the order the loco reaches them. Right-click or Esc when you're done.", "font-scale-annotation")
 			children[#children + 1] = Buttons({
-				IconButton(ICON.undo, "Undo point", "Remove the last point", function() sendGuiCmd("RemoveLastLoopEdge", { loopId = loop.id }) end, "secondary"),
-				IconButton(ICON.trash, "Clear points", "Remove every point", function() sendGuiCmd("ClearLoopPoints", { loopId = loop.id }) end, "secondary"),
+				IconButton(ICON.undo, "Undo last click", "Takes back your last click", function() sendGuiCmd("RemoveLastLoopEdge", { loopId = loop.id }) end, "secondary"),
+				IconButton(ICON.trash, "Start again", "Clears the route so you can draw it afresh", function() sendGuiCmd("ClearLoopPoints", { loopId = loop.id }) end, "secondary"),
+				IconButton(ICON.route, "Find the route for me", "Looks for a track beside the platform and works out the way round",
+					function() sendGuiCmd("AutoRoute", { loopId = loop.id }) end, "secondary"),
 			})
 		end
 		return Column(children, "box-plugin-vertical-space")

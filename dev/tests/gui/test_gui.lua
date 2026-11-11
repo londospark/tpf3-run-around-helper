@@ -66,11 +66,11 @@ local function findCard(n) if type(n)~="table" then return nil end if n.kind=="C
 local settings = findCard(tree).p.recipeAndParamCollapsible
 local sk = count(settings.r(settings.p))
 print("settings:", sk.Slider, "sliders,", sk.Button, "buttons")
--- press "Edit route on map": find the button and click it
+-- press "Draw the route": find the button and click it
 local function findButton(n, text) if type(n) ~= "table" then return nil end
   if n.kind == "Button" then local s = tostring(n.p.content and n.p.content.p and n.p.content.p.children and n.p.content.p.children[2] and n.p.content.p.children[2].p.text) if s == text then return n end end
   for _, v in pairs(n) do local r = findButton(v, text) if r then return r end end end
-local edit = findButton(tree, "Edit route on map"); assert(edit, "edit button"); edit.p.onClick()
+local edit = findButton(tree, "Draw the route"); assert(edit, "edit button"); edit.p.onClick()
 assert(toolStack.active == "RunAroundRoute:edit:7", toolStack.active)
 -- render the tool action: NodeViewer + Selector
 local desc = actionFn()
@@ -86,19 +86,19 @@ assert(sent[#sent].id == "AddLoopEdgeFromWorldClick" and sent[#sent].p.index == 
 -- Show turns into Hide and back
 local function render() return exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {} }) end
 toolStack.active = nil
-local t1 = render(); local show = findButton(t1, "Show"); assert(show, "show"); show.p.onClick()
-assert(findButton(render(), "Hide"), "becomes Hide")
-findButton(render(), "Hide").p.onClick(); assert(findButton(render(), "Show"), "back to Show")
+local t1 = render(); local show = findButton(t1, "Show the route"); assert(show, "show"); show.p.onClick()
+assert(findButton(render(), "Hide the route"), "becomes Hide")
+findButton(render(), "Hide the route").p.onClick(); assert(findButton(render(), "Show the route"), "back to Show")
 -- default loop name shows the station
 loops[1].name = "Loop 1"
 local function findText(n, t) if type(n) ~= "table" then return false end if n.kind == "TextView" and n.p.text == t then return true end for _, v in pairs(n) do if findText(v, t) then return true end end return false end
 local function findCardTitle(n) if type(n)~="table" then return nil end if n.kind=="ContentCard" then return n.p.title end for _,v in pairs(n) do local r=findCardTitle(v) if r then return r end end end
 assert(findCardTitle(render()) == "Run-around: Name55", tostring(findCardTitle(render())))
 -- leaving the route tool with Esc resets the button
-local t3 = render(); findButton(t3, "Edit route on map").p.onClick()
-assert(findButton(render(), "Done"), "Done while editing")
+local t3 = render(); findButton(t3, "Draw the route").p.onClick()
+assert(findButton(render(), "Done drawing"), "Done while editing")
 actionFn().p.onBack()
-assert(findButton(render(), "Edit route on map"), "Esc resets Done back to Edit")
+assert(findButton(render(), "Draw the route"), "Esc resets Done back to Edit")
 -- no-loop case: the set-up card
 loops[1].stopIndex = 3
 local tree2 = exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {} })
@@ -133,6 +133,13 @@ local keepLen = loops[1].routeLength
 loops[1].routeLength, loops[1].routeHint = nil, "Couldn't find a way round automatically."
 assert(findText(render(), "Couldn't find a way round automatically."), "hint shown")
 loops[1].routeLength, loops[1].routeHint = keepLen, nil
+-- "Find the route for me": offered when there is no route (or a wrong one), and sends the command
+assert(not findButton(render(), "Find the route for me"), "not offered for a good route")
+loops[1].routeLength = nil
+local find = findButton(render(), "Find the route for me"); assert(find, "offered with no route")
+find.p.onClick(); assert(sent[#sent].id == "AutoRoute" and sent[#sent].p.loopId == 7)
+assert(not findButton(render(), "Show the route"), "nothing to show yet")
+loops[1].routeLength = keepLen
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

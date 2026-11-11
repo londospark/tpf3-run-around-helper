@@ -428,3 +428,95 @@ little as possible.
 6. The module split, after the live probe and the alpha feedback.
 7. Later: route-planning cost, `LOG_TRACES` off for a non-alpha release, M7
    (test a save and a mod removal mid-run).
+
+---
+
+## Third review (2026-11-10/11, on the branch `static-coaches-friendly-ui`)
+
+By reading `runaround.script.lua` and `runaround_gui.script.lua` while adding
+static coaches and the new card. `ghost_real.script.lua` and
+`ghost_build.script.lua` were not re-read: the tender work there has its own
+offline checks (`parts_sim`, `parts_audit`). Nothing here was seen live.
+
+### Fixed on the branch
+
+- **R1. A leg that doubled back was costed as one reversal.** `findCuspLeg`
+  added one reversal penalty to every candidate, but a candidate whose first
+  path began by going back over the piece it started on has two. So "out, and
+  back the way it came" could beat the way round. Seen offline: a single point
+  on the loop gave `PLb+ T+ T- L1+ Lm+ Lm- L1- T+ T- PLb-`. `legCost` now
+  counts every reversal in a leg (`test_auto_route.lua`).
+- **R2. A long headshunt counted against a route.** A reversing piece was
+  costed at its full length, twice, though the loco only drives `CLEAR_M` into
+  it. `legCost` costs it as driven.
+- **R3. The planner didn't know which end the loco is at.** From the stop node
+  the pathfinder may set off either way, so a route could start back through
+  the train and be refused at every arrival (N2), with nothing said while
+  drawing it. The planner now takes the piece trains arrive on
+  (`arrivalPiece`), plans away from it first, and the card warns about a route
+  that goes through the train or returns to the same end (`routeWarning`).
+- **R4. A run-around with no route said nothing.** `startRunAround` logged and
+  returned. It now sets the card's "last time" line.
+- **R5. (New code.) A hidden train leaving the wrong way was never stopped.**
+  `advanceDepart` only stopped it as it neared its copies. Fixed:
+  `test_static.lua` case 7.
+
+### Open
+
+- **R6 (medium). `finalizeRun` sends `makeVehicleTryToDepartCmd`.** The API
+  says that command makes a train at a terminal close its doors and leave
+  "ignoring any departure condition". It has been there since the first commit
+  and is sent the moment the train is released. If it takes effect, a line set
+  to wait for a full load leaves empty after every run-around. If it doesn't
+  (the train isn't "waiting at the terminal" yet), it does nothing and can go.
+  **To check live:** a line with a minimum wait at the run-around stop; see
+  whether the train waits. Static coaches send it at the same moment as before
+  (the release), so the behaviour is unchanged either way.
+- **R7 (medium). The whole state is written every tick.** `update()` ends with
+  `state:set(data)` whether or not anything changed, and a run holds its
+  coaches, a copy of the loop with every route piece, and a 25-point track
+  strip. The GUI reads all of it back every 10 frames. With no run active it
+  is small. Worth measuring with several runs at once; a cheap first step is
+  to skip the write when `data.runs` is empty and nothing was queued.
+- **R8 (low). Planning runs inside the event handler.** A click, and now
+  adding a run-around (up to five plans), blocks the game for as long as the
+  pathfinder takes. Fine on small networks; unmeasured on dense ones (already
+  noted in the first review). A plan could be spread over ticks.
+- **R9 (low). `data.ranAt` is never pruned.** An entry is removed when its
+  train arrives somewhere else. A train sold straight after a run-around
+  leaves its entry for good. A few bytes each; prune entries whose vehicle no
+  longer exists when a run finishes.
+- **R10 (low). A run keeps its own copy of the loop.** Edits to a route, the
+  speed or the loco mid-run don't apply until the next arrival (documented),
+  and deleting a run-around mid-run lets the run finish. Both are reasonable;
+  the card could say "applies from the next arrival".
+- **R11 (low). The script is past 3,500 lines.** The second review's advice to
+  split it stands, and so does its condition (a live probe of how a mod
+  `ug_require`s its own files). The route planner (about 700 lines, no game
+  state) is the obvious first module; it is also what the tests load most.
+- **R12 (low). Two ways to run remain.** `staticCoaches = false` keeps the
+  pull, with its own tests. Once static coaches are proven live, the pull
+  (`pullFrame`'s use in `advanceRake`, `rakePullSpeed`, `PULL_BRAKE`, the
+  `pull` stage) can go, and `pullFrame` stays for the align.
+- **R13 (design). Static coaches hide the train while it loads.** Doors don't
+  open and passengers walk to a train a loco length from where it appears to
+  be. If that looks wrong live, the alternative is to let the train load
+  first, visibly, and run around when it is about to depart
+  (`loadState == Departing`): more to prove (holding a departing train, a
+  second arrival to skip), but nothing hidden during loading.
+- **R14 (idea). `makeEntitySetColorCmd` hides without a replace.** It is the
+  vehicle window's paint bucket: whole vehicle, any time, no purchase. A train
+  whose parts share one colour could be hidden and shown with it alone. The
+  detach still needs its replace (it reorders the coaches), so this only helps
+  the final repaint.
+
+### What's solid
+
+- Every way out of a run still goes through `finishRun` / `finalizeRun`, and
+  the new speed limit is restored there and nowhere else, so it can't be
+  forgotten on a failure path (`test_static.lua` case 6).
+- Nothing in the new departure waits on a command callback, so it can't stall
+  on one that never comes; the only unbounded wait is for the game's own
+  departure, which is what a player expects.
+- The planner's earlier results are unchanged (`test_plan3.lua` passes as it
+  was), and the GUI uses only widgets it already used live.

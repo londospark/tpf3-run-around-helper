@@ -50,7 +50,7 @@ local function physics(dt)
   else
     train.v = math.min(train.v + ACCEL * dt, cap)
   end
-  train.mid = train.mid + train.dir * train.v * dt
+  train.mid = train.mid + (opt.wrongWay and -1 or 1) * train.dir * train.v * dt
   train.maxV = math.max(train.maxV, train.v)
 end
 
@@ -273,5 +273,17 @@ saved.runs[1].phase = "finish"; saved.runs[1].aborted = true
 for _ = 1, 20 do tick(0.1) end
 assert(#saved.runs == 0 and train.scale == 0.5, "an aborted run restores the speed scale: " .. tostring(train.scale))
 say("aborted run: speed scale restored\n")
+-- 7. The hidden train sets off the WRONG way: it is stopped within metres, never
+--    left to drive away unseen, and the copies go to it. ---------------------------
+fresh({ wrongWay = true })
+local ph7 = runOut(0.1, 600)
+if #saved.runs ~= 0 then dump() error("did not finish: " .. table.concat(ph7, " > ")) end
+assert(logged("further than its copies"), "noticed")
+assert(math.abs(train.mid) < 25, string.format("stopped near the station, not %.0f m away", train.mid))
+assert(liveCount() == 0 and train.scale == 1.0 and not train.stopped, "ends cleanly")
+local hid7 = 0
+for _, p in ipairs(train.parts) do if math.abs(p.part.color.x - 0.1234567) < 1e-6 then hid7 = hid7 + 1 end end
+assert(hid7 == 0, "shown again")
+say(string.format("wrong way: stopped %.1f m from the stop, shown again there\n", math.abs(train.mid)))
 print = nil
 say("static ok\n")

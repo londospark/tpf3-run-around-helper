@@ -2580,8 +2580,16 @@ advanceDepart = function(run, dt)
 				D.slow = true
 				setSpeedScale(run.vehicleEntity, D.final)
 			end
+			-- Gone further from where it stood than its copies are (it set off the
+			-- other way, or was missed): stopped at once, wherever it is, rather than
+			-- left to drive off unseen. The copies then go to it (align).
+			local astray = moved > len + 2.0
+			if astray and not D.astray then
+				D.astray = true
+				logInfo(string.format("moving up: the hidden train is %.1f m from where it stood, further than its copies (%.1f m) - stopping it where it is", moved, len))
+			end
 			-- stop it now if it would otherwise pass its place before the next look
-			if toGo <= stopIn + 0.5 * v * dt + 0.01 then
+			if astray or toGo <= stopIn + 0.5 * v * dt + 0.01 then
 				pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleSetStoppedByUserCmd(run.vehicleEntity, true)) end)
 				D.stage, D.still, D.t = "stopping", 0, 0.0
 				D.stopAt, D.stopSpeed = toGo, v

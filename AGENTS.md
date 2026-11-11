@@ -178,6 +178,115 @@ So that nobody repeats them:
 - **Wheel animation frame wrapped to one turn:** blends backwards. Use a
   frame that keeps increasing, computed from a motion segment.
 
+## Branch `static-coaches-friendly-ui` (2026-11-10/11, desktop; NOT merged, NOT seen live)
+
+Asked for by the owner: no moving the coaches, a friendlier card, on a branch.
+Everything here is offline-tested only. To try it: check out the branch,
+`dev/sync_staging.sh`, restart the game. To go back: check out `master`, sync,
+restart. `master` is untouched.
+
+### Static coaches (`CONFIG.staticCoaches`, default true on this branch)
+
+**Why the coaches moved:** the game keeps a train's middle fixed when it is
+turned, so after the detach and flip the real (hidden) coaches stand a loco
+length nearer the buffers than where they arrived. The pull slid the copies
+there.
+
+**Now:** the copies stay. `advanceRake` goes settle -> uncouple (no pull) and
+sets `run.targetShift` (how far on the hidden loco will be, taken from the
+last coach's move in its own frame and applied in the loco's: exact on a
+curve). The loco copy runs the route and couples on there. Then phase
+`depart` (`advanceDepart`), stages:
+
+- `release`: `topSpeedScale` set to a crawl (`makeVehicleSetModifiersCmd`, the
+  train's other modifiers kept; the old scale in `run.speedScale0`), then
+  `releaseTrain` and `TryToDepart` exactly as `finalizeRun` always did.
+- `await`: the game has the train arrive again, load and depart as the line
+  says. No time limit (`WATCHDOG_UNTIMED`); a sold train is still noticed.
+- `creep`: the hidden train moves; over the last `creepFinalMetres` the scale
+  drops again; `makeVehicleSetStoppedByUserCmd(true)` when it would otherwise
+  pass its place before the next tick.
+- `stopping`: until it stands (3 still ticks).
+- `align`: copies ease onto the real frames if more than 1 cm off.
+
+Then `finish` -> `recoupleRake` (the replace: paint back) -> `verify` ->
+`finalizeRun`, which now restores the speed scale (`restoreSpeedScale`, on
+every way out of a run) and un-stops; it sends `TryToDepart` only for runs
+that never reached `depart`.
+
+**Found in the API for this** (`api/tealdef/api/cmd.d.tl`, `engine.d.tl`):
+`TransportVehicle.Modifiers.topSpeedScale` (the vehicle window shows a speed
+icon when it isn't 1); `makeEntitySetColorCmd(vehicle, colour)` is the vehicle
+window's paint bucket (whole vehicle, no replace: could hide a train without a
+replace, unused so far); `MOVE_PATH.dyn.speed`; the game's own UI and mission
+scripts send `makeVehicleReplaceCmd` at vehicles wherever they are.
+
+**To confirm live** (log lines in quotes):
+
+1. `topSpeedScale` limits a train's speed, and a low value is accepted.
+2. A released, flipped, hidden train loads and departs by itself, forwards.
+3. The user stop halts a moving train promptly; the replace works on a train
+   stopped en route; un-stopping sends it on.
+4. Accuracy: `moving up: the hidden train stands X m from its coach copies
+   ... (told to stop Y m short at Z m/s)`. Offline: 3 cm; 0.3 m with no
+   speed limit.
+5. `coupled on (as copies). The hidden train is let go ...` then `moving up:
+   the hidden train has left after N s`.
+6. Nothing odd while it waits hidden: passengers board a train a loco length
+   from its copies, doors don't show, the vehicle marker sits a loco length off.
+7. A train left crawling would be the worst failure: after any run, the
+   vehicle window must show no speed icon.
+
+If 1 fails the design still works but coarsely (the copies slide up to a few
+decimetres at the end). If 2 or 3 fail, set `staticCoaches = false`.
+
+Tests: `test_static.lua` (a mock train that drives: dwell, acceleration, speed
+scale, braking), `test_static_curve.lua`. `test_failures.lua` pins
+`staticCoaches = false`: it covers the pull's failure paths.
+
+### Routes
+
+- **One click:** `planRouteTo` takes a single point when the route starts and
+  ends at the stop.
+- **Automatic** (`autoRoute`, on `AddLoopAtStop` and the `AutoRoute` command):
+  `autoRouteCandidates` lists `BASE_EDGE` entities within 250 m
+  (`octree.findEntitiesInCircle`), drops streets (`BASE_EDGE_STREET`) and the
+  platform's own piece, keeps one piece per track 2-30 m to the side of the
+  platform (from `stopPlatform`: `terminal.vehicleEdges[1]`), and plans the
+  nearest five as if clicked. The cheapest with no warning and at most 3
+  reversals wins; `loop.auto = true`. A click replaces an automatic route.
+- **Direction:** `arrivalPiece` = last piece of the pathfinder's route from the
+  line's previous stop. With it, `planRoute` first asks for a route that sets
+  off the other way (`leavesBack`) and whose way back comes in along it
+  (`legToNode`'s `arriveBy`), then falls back to any route.
+- **Costs:** `legCost` = length (a reversing piece counted as `CLEAR_M`) plus
+  the penalty per reversal in the leg. Before, a cusp leg that began by
+  doubling back had two reversals costed as one.
+- **For the card:** `loop.routeState` (`none`/`ok`/`problem`), `routeHint`,
+  `routeWarning` (`routeWarning()`: through the train, or back to the same
+  end), `routeDrive`; `loop.lastProblem` is now a sentence (`PROBLEM_TEXT`),
+  the exact reason stays in the log.
+- **To confirm live:** `automatic route for loop ...: by the track N m to the
+  left/right of the platform (K tried)`, or `... - none: <why>`. Unknowns: that
+  station tracks are `BASE_EDGE` entities whose first transport-network edge is
+  the track; how long five plans take on a busy network (one hitch when a
+  run-around is added). Test: `test_auto_route.lua`.
+
+### The card (`runaround_gui.script.lua`)
+
+Same widgets as before (nothing new to go wrong in the game's GUI), new words:
+the route as a sentence with distance and time (`routeLine`, `tripTime`);
+`Find the route for me` / `Draw the route` / `Show the route`; `Coupled on.
+Ready to leave` and `Leaving` (`DEPART_STAGES`); options in words (pace
+gently/normally/briskly = 1.0/2.0/3.5 m/s2 on a 3-step slider).
+
+### Left to do on this branch
+
+- The live checks above, then merge or drop.
+- A third review in `CODE_REVIEW.md` (not written yet).
+- `finalizeRun`'s `TryToDepart` has been there since the first commit: it may
+  make a train leave without waiting for a full load. Not looked into.
+
 ## Where we are (2026-10-09, desktop: tenders fixed offline)
 
 All pushed. **On the other machine: `git pull`, `dev/sync_staging.sh`,

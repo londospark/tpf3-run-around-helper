@@ -93,7 +93,7 @@ findButton(render(), "Hide the route").p.onClick(); assert(findButton(render(), 
 loops[1].name = "Loop 1"
 local function findText(n, t) if type(n) ~= "table" then return false end if n.kind == "TextView" and n.p.text == t then return true end for _, v in pairs(n) do if findText(v, t) then return true end end return false end
 local function findCardTitle(n) if type(n)~="table" then return nil end if n.kind=="ContentCard" then return n.p.title end for _,v in pairs(n) do local r=findCardTitle(v) if r then return r end end end
-assert(findCardTitle(render()) == "Run-around: Name55", tostring(findCardTitle(render())))
+assert(findCardTitle(render()) == "Run-around at Name55", tostring(findCardTitle(render())))
 -- leaving the route tool with Esc resets the button
 local t3 = render(); findButton(t3, "Draw the route").p.onClick()
 assert(findButton(render(), "Done drawing"), "Done while editing")
@@ -102,7 +102,7 @@ assert(findButton(render(), "Draw the route"), "Esc resets Done back to Edit")
 -- no-loop case: the set-up card
 loops[1].stopIndex = 3
 local tree2 = exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {} })
-local add = findButton(tree2, "Name55  (this stop)"); assert(add, "add-at-this-stop button")
+local add = findButton(tree2, "Name55  (this train's stop)"); assert(add, "add-at-this-stop button")
 add.p.onClick(); assert(sent[#sent].id == "AddLoopAtStop" and sent[#sent].p.name == "Name55" and sent[#sent].p.stopIndex == 0)
 loops[1].stopIndex = 0
 -- run status: the ghost rake's stages before the loco sets off, and a stuck recouple

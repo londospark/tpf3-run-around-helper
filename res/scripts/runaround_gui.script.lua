@@ -470,10 +470,15 @@ function data()
 		local renaming = react.useState(false)
 		local confirmDelete = react.useState(false)
 		local speed = kmh(loop.speed)
-		local accel = math.floor((loop.accel or 2.0) * 10 + 0.5)
+		-- how briskly the loco pulls away and brakes: three settings, in words
+		local PACE = { { 1.0, "gently" }, { 2.0, "normally" }, { 3.5, "briskly" } }
+		local pace = 1
+		for i, pc in ipairs(PACE) do
+			if math.abs((loop.accel or 2.0) - pc[1]) < math.abs((loop.accel or 2.0) - PACE[pace][1]) then pace = i end
+		end
 		local locoText = loop.locoManual
-			and ("Part " .. tostring(loop.locoCandidateIndex) .. " of the train (" .. tostring(loop.locoModelName or loop.locoModelId) .. ")")
-			or "Automatic: the part nearest the first route point"
+			and ("vehicle " .. tostring(loop.locoCandidateIndex) .. " of the train" .. (loop.locoModelName and (" (" .. tostring(loop.locoModelName) .. ")") or ""))
+			or "picked automatically (the one at the end of the train)"
 		return Column({
 			Row({
 				renaming:old() and gui_react_util.FocusTextInputField{
@@ -487,31 +492,32 @@ function data()
 				} or Text(loopName(loop), "font-scale-body"),
 				not renaming:old() and IconButton(ICON.edit, nil, "Rename", function() renaming:set(true) end, "secondary") or nil,
 			}),
-			Text("Speed: " .. speed .. " km/h", "font-scale-body"),
+			Text("The loco runs around at up to " .. speed .. " km/h", "font-scale-body"),
 			builtin.Slider{
 				min = 10, max = 100, step = 5, pageStep = 10, value = speed,
 				onValueChange = function(v)
 					sendGuiCmd("SetLoopNumberField", { loopId = loop.id, field = "speed", value = v / 3.6 })
 				end,
 			},
-			Text(string.format("Acceleration: %.1f m/s²", accel / 10), "font-scale-body"),
+			Text("It pulls away and brakes " .. PACE[pace][2], "font-scale-body"),
 			builtin.Slider{
-				min = 5, max = 40, step = 1, pageStep = 5, value = accel,
+				min = 1, max = 3, step = 1, pageStep = 1, value = pace,
 				onValueChange = function(v)
-					sendGuiCmd("SetLoopNumberField", { loopId = loop.id, field = "accel", value = v / 10 })
+					local pc = PACE[math.floor(v + 0.5)]
+					if pc ~= nil then sendGuiCmd("SetLoopNumberField", { loopId = loop.id, field = "accel", value = pc[1] }) end
 				end,
 			},
-			Text("Loco: " .. locoText, "font-scale-body"),
-			param.vehicleEntity ~= nil and IconButton(ICON.train, "Change loco choice", "Step through automatic and each part of this train",
+			Text("The loco: " .. locoText, "font-scale-body"),
+			param.vehicleEntity ~= nil and IconButton(ICON.train, "Choose a different loco", "Only needed if the wrong vehicle runs around. Each press picks the next vehicle of this train, then back to automatic.",
 				function() sendGuiCmd("CycleLocoCandidate", { loopId = loop.id, vehicleEntity = param.vehicleEntity }) end, "secondary") or nil,
 			confirmDelete:old() and Row({
-				Text("Delete this run-around?", "font-scale-body"),
-				IconButton(nil, "Delete", "Delete it", function()
+				Text("Remove this run-around? Trains will turn on the spot here again.", "font-scale-body"),
+				IconButton(nil, "Remove", "Remove it", function()
 					sendGuiCmd("RemoveLoop", { loopId = loop.id })
 					confirmDelete:set(false)
 				end, "negative"),
 				IconButton(nil, "Keep", "Keep it", function() confirmDelete:set(false) end, "secondary"),
-			}) or IconButton(ICON.trash, "Delete run-around", "Delete this run-around", function() confirmDelete:set(true) end, "negative"),
+			}) or IconButton(ICON.trash, "Remove this run-around", "Trains of this line will turn on the spot here again", function() confirmDelete:set(true) end, "negative"),
 		})
 	end)
 
@@ -526,7 +532,7 @@ function data()
 		if content_card == nil or params == nil then return Card(loopName(loop), summary, settings) end
 		local key = "runaround_settings_" .. tostring(loop.id)
 		return content_card.ContentCard{
-			title = "Run-around: " .. loopName(loop),
+			title = "Run-around at " .. loopName(loop),
 			extraChildrenPermanent = { summary },
 			hasPermanentFocusables = true,
 			initialCalloutTextCollapsible = "",
@@ -573,16 +579,16 @@ function data()
 		for _, s in ipairs(stops) do
 			if not taken[s] then
 				local station = stopStationName(line, s) or ("stop " .. tostring(s + 1))
-				addButtons[#addButtons + 1] = IconButton(ICON.add, station .. (s == stop and "  (this stop)" or ""),
-					"Set up a run-around for this line at " .. station,
+				addButtons[#addButtons + 1] = IconButton(ICON.add, station .. (s == stop and "  (this train's stop)" or ""),
+					"Trains of this line will have their loco run around at " .. station .. ". The way round is looked for automatically.",
 					function() sendGuiCmd("AddLoopAtStop", { lineEntity = line, stopIndex = s, name = station, vehicleEntity = vehicleEntity }) end,
 					(#cards == 0 and s == stop) and "primary" or "secondary")
 			end
 		end
 		if #addButtons > 0 then
 			local intro = Column({
-				Text(#cards == 0 and "Have the loco run around its train at a terminus instead of the instant flip. Add a run-around at:"
-					or "Add a run-around at:", "font-scale-body"),
+				Text(#cards == 0 and "At a terminus, the loco can uncouple, run around its train and couple on at the other end, instead of the train turning on the spot. Set it up at:"
+					or "Set up another at:", "font-scale-body"),
 				Buttons(addButtons),
 			}, "box-plugin-vertical-space")
 			if content_card ~= nil and #cards == 0 then

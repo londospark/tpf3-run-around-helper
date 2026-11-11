@@ -8,6 +8,27 @@
 
 - Locos run around their train at any terminus you set up, instead of the
   instant flip.
+- **The coaches stay where they stopped.** The loco uncouples, runs around and
+  couples on, and the train then leaves from where it stands. (Before, the
+  train drew forward a loco length before the loco uncoupled.) The game keeps
+  a turned train's middle fixed, so the real train, out of sight, makes up
+  that loco length as it departs, at a crawl, and is shown again under its
+  copies. NOT YET SEEN IN THE GAME: tested offline only.
+- **The route is found for you.** Adding a run-around looks for a track beside
+  the platform and works out the whole way round. If it can't, or you want
+  another way, **Draw the route**: one click on the loop is usually enough.
+  NOT YET SEEN IN THE GAME.
+- **A friendlier card.** It says in a sentence whether the run-around is
+  ready, how far the loco goes and about how long it takes; warns when a route
+  goes through the train or comes back to the same end; says in plain words
+  why a train didn't run around; and shows "Coupled on. Ready to leave" while
+  the train waits for its departure time. The options are in words too.
+- Route planning: a route sets off ahead of the loco and comes back onto the
+  train from behind when the line shows which way trains arrive; a leg that
+  doubled back on itself was costed as one reversal instead of two (so "out
+  and back the same way" could beat the way round); a headshunt's length no
+  longer counts against a route, since the loco only reverses just clear of
+  the points.
 - Set up in the train window. Click a few points on the track: the route and the
   reversing spots are planned for you. The route is drawn on the track while you
   edit.

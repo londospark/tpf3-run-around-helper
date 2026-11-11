@@ -87,7 +87,7 @@ In the train window, one card per run-around on the train's line.
   - **Undo last click**, **Start again** and **Find the route for me** appear
     while drawing.
 - **Show the route / Hide the route**: draws the route without changing it.
-- **Options** (the collapsible part):
+- **Options** (a button that shows and hides them):
   - **Name**: click the pencil to rename.
   - **Speed** the loco runs around at, and whether it pulls away and brakes
     *gently*, *normally* or *briskly*.

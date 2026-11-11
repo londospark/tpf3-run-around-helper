@@ -23,6 +23,9 @@
   goes through the train or comes back to the same end; says in plain words
   why a train didn't run around; and shows "Coupled on. Ready to leave" while
   the train waits for its departure time. The options are in words too.
+- Fixed: the card's expand arrows were drawn outside the train window when the
+  card was scrolled out of view. The options now open from a plain
+  **Options** button.
 - Route planning: a route sets off ahead of the loco and comes back onto the
   train from behind when the line shows which way trains arrive; a leg that
   doubled back on itself was costed as one reversal instead of two (so "out

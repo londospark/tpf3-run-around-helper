@@ -53,21 +53,20 @@ run-arounds set up is safe too: trains then flip as normal.
 2. **Add a run-around.** The card lists the stops of that line, with the one the
    train is at first. Click the station where the loco should run around. The
    run-around is named after the station.
-3. **Draw the route.** Click **Edit route on map**, then click a few points on
-   the track where the loco should go, in order. For a simple loop that's
-   usually:
-   1. a piece of track beyond the points, where the loco will stop and reverse;
-   2. a piece of the loop, or the other road through the station;
-   3. a piece of track beyond the far end of the train.
-
-   You don't click every piece of track, the station, or the exact reversing
-   spot. The route is planned with the game's pathfinder, and the loco reverses
-   just clear of the points (10 m past them). After your last point, the route
-   goes on back into the station by itself, reversing past the points if it
-   has to, so the loco sets back onto its coaches along the track. Right-click, **Esc** or **Done**
-   when finished.
-4. **Check it.** The card shows the route's length, reversals and points. A
-   warning says which two points could not be joined.
+3. **The route is found for you.** The mod looks for a track beside the
+   platform that the loco can use to pass its train, and works out the whole
+   way round: out past the points, back along the loop, and onto the far end of
+   the train. The card then says **Ready**, with how far the loco goes and
+   about how long it takes. **Show the route** draws it on the track.
+4. **If it couldn't find one, or you want another way,** click **Draw the
+   route** and click the track the loco should use to pass its train: usually
+   the loop beside the platform. One click is often enough. For a longer way
+   round (a wye, say), click more pieces in the order the loco reaches them.
+   You don't click every piece of track or the reversing spots: the route is
+   planned with the game's pathfinder, and the loco reverses just clear of the
+   points (10 m past them). Right-click, **Esc** or **Done drawing** when
+   finished. The card warns you if a route goes through the train or brings
+   the loco back to the same end.
 5. **That's it.** The next time a train on that line arrives there, its loco
    runs around.
 
@@ -75,21 +74,30 @@ run-arounds set up is safe too: trains then flip as normal.
 
 In the train window, one card per run-around on the train's line.
 
-- **Route line**: length, reversals and points, or what's missing.
+- **The route, in a sentence**: *Ready*, with how far the loco goes and about
+  how long it takes; or a warning (the route goes through the train, or comes
+  back to the same end); or what to do if there's no route yet.
+- **Last time, the loco didn't run around...**: why, if an arrival was skipped.
 - **While a run-around is happening**: a progress bar and what the loco is doing
-  (running around, turning the train, coupling on).
-- **Edit route on map / Done**: draws the route and adds clicked points.
-  - **Undo point** and **Clear points** appear while editing.
-- **Show / Hide**: draws the route without editing.
-- **Settings** (the collapsible part):
+  (uncoupling, running around, coupling on, coupled on and ready to leave,
+  leaving).
+- **Find the route for me**: shown when there's no route, or one with a
+  warning. Looks for a track beside the platform and works out the way round.
+- **Draw the route / Done drawing**: click the track the loco should use.
+  - **Undo last click**, **Start again** and **Find the route for me** appear
+    while drawing.
+- **Show the route / Hide the route**: draws the route without changing it.
+- **Options** (the collapsible part):
   - **Name**: click the pencil to rename.
-  - **Speed** and **Acceleration** of the loco while it runs around.
-  - **Loco**: *automatic* (the default) or a chosen part of the train.
-    Automatic picks the loco at whichever end of the train has one (a part with
-    an engine, never a coach or wagon). With a loco at each end, it picks the
-    one nearer the first route point. A chosen part must have an engine too.
-  - **Delete run-around**: asks for confirmation first.
-- **Add a run-around at...**: buttons for the line's other stops.
+  - **Speed** the loco runs around at, and whether it pulls away and brakes
+    *gently*, *normally* or *briskly*.
+  - **The loco**: *picked automatically* (the default) or a chosen vehicle of
+    the train. Automatic picks the loco at whichever end of the train has one
+    (a vehicle with an engine, never a coach or wagon). With a loco at each
+    end, it picks the one nearer the start of the route. **Choose a different
+    loco** is only needed if the wrong vehicle runs around.
+  - **Remove this run-around**: asks for confirmation first.
+- **Set up another at...**: buttons for the line's other stops.
 
 ### The route on the map
 
@@ -107,15 +115,16 @@ While editing or showing:
    loco, coaches and wagons all stay in the train, just hidden, so **passengers
    and goods stay aboard and nothing is bought or sold**. Out of sight, the
    hidden train is turned round.
-3. The train draws forward one loco length, gently, with the loco still coupled,
-   and stops. See [The coaches move forward](#the-coaches-move-forward).
-4. A short pause while the loco uncouples.
-5. The loco drives the route, reversing where planned. It keeps facing the way
+3. A short pause while the loco uncouples. **The coaches stay where they
+   stopped.**
+4. The loco drives the route, reversing where planned. It keeps facing the way
    it was facing.
-6. It comes back along the track, onto the platform, and brakes to a stop
-   against the far coach. The real loco and
-   coaches reappear exactly where their copies are, and the copies go.
-7. The train loads as normal and leaves, with the loco leading.
+5. It comes back along the track and brakes to a stop against the far coach.
+   The card says **Coupled on. Ready to leave**.
+6. The train loads and waits for its departure time as its line says. When it
+   leaves, the real train (still out of sight) first moves up a loco length
+   under its copies, is shown again there, and pulls away. See
+   [The coaches stay put](#the-coaches-stay-put).
 
 ### If something goes wrong
 
@@ -170,15 +179,20 @@ A train is never left stuck or broken by a run-around:
   If you insert or remove stops earlier in the line, check it still points at
   the right station.
 
-### The coaches move forward
+### The coaches stay put
 
 When the loco couples on at the far end, the train is a loco length further
-along the track than it was. In this game that can only happen by the coaches
-moving: a vehicle swap keeps the middle of the train fixed, and the flip mirrors
-the train about its middle. So before the loco uncouples, the whole train draws
-forward a loco length, as if pulling up to the buffers, and the coaches don't
-move again after that. The game's vehicle marker only re-attaches three times:
-at the detach, the turn and the recouple.
+along the track than it was. But the game keeps the middle of a train fixed
+when it is turned, so the real coaches, hidden, stand a loco length nearer the
+buffers than the copies you see. The copies don't move. Instead, when the train
+leaves, the hidden real train creeps forward that loco length, is stopped
+exactly under its copies, is shown again in their place, and carries on. You see
+a train that stands still until it departs. Doors don't open on the copies
+while it loads, and the departure takes a few seconds longer than usual.
+
+This is new and has only been tested offline so far. The old way (the whole
+train draws forward a loco length before the loco uncouples) is still there:
+set `staticCoaches = false` in [Advanced settings](#advanced-settings).
 
 This works for passenger coaches and goods wagons alike. Nothing is taken out of
 the train: the coaches and wagons are the same vehicles throughout, so their
@@ -263,7 +277,10 @@ These are in the files, for tinkering. Most people won't need them.
 | `detachEnabled` | `true` | turns the run-around off entirely |
 | `reverseBeforeRecouple` | `true` | turn the train before the loco couples on, so the game doesn't flip it back |
 | `ghostRake` | `true` | show the loco and coaches as copies, hide the real train, turn it out of sight and draw it forward before the uncouple (the smooth way) |
-| `rakePullSpeed` | `2.0` | top speed, in m/s, of the train drawing forward before the uncouple |
+| `staticCoaches` | `true` | the coaches stay where they stopped, and the hidden train moves up a loco length as it leaves. `false`: the train draws forward a loco length before the loco uncouples (the earlier way) |
+| `creepSpeed`, `creepFinalSpeed`, `creepFinalMetres` | `2.5`, `0.35`, `1.2` | the hidden train's speed limit as it moves up, in m/s, and over the last metres |
+| `alignSpeed` | `0.4` | how fast, in m/s, the copies ease onto the real train if it stopped a little off |
+| `rakePullSpeed` | `2.0` | with `staticCoaches = false`: top speed, in m/s, of the train drawing forward before the uncouple |
 | `uncouplePause` | `2.5` | seconds the train stands before the loco uncouples and sets off |
 | `useRealModel` | `true` | run around as the loco's own model when possible |
 | `useEffectGhosts` | `true` | otherwise use the copy with smoke and sound |

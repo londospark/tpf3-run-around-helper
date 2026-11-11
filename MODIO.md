@@ -36,7 +36,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 
 <h2>Features</h2>
 <ul>
-<li>Set up entirely in game: click a few points on the track and the route is worked out for you with the game's own pathfinder, including where to reverse.</li>
+<li>Set up entirely in game, usually in one click: the way round is found for you with the game's own pathfinder, including where to reverse. Or draw it yourself with a click on the loop.</li>
 <li>The route is drawn on the track while you edit it.</li>
 <li>Any number of stations, on any number of lines. Every train on the line does it, clones included.</li>
 <li>Your loco runs around as itself: its own model, sound, smoke, turning wheels and paint.</li>
@@ -47,15 +47,8 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 <ol>
 <li><strong>Open a train's window.</strong> Pick any train on the line. It has a new <strong>Run-around</strong> card.</li>
 <li><strong>Add a run-around.</strong> The card lists the stops of that line, with the one the train is at first. Click the station where the loco should run around.</li>
-<li><strong>Draw the route.</strong> Click <strong>Edit route on map</strong>, then click a few points on the track where the loco should go, in order. For a simple loop that's usually:
-  <ol>
-  <li>a piece of track beyond the points, where the loco will stop and reverse;</li>
-  <li>a piece of the loop, or the other road through the station;</li>
-  <li>a piece of track beyond the far end of the train.</li>
-  <li>After your last point, the route goes back into the station by itself, so the loco sets back onto its coaches along the track.</li>
-  </ol>
-You don't click every piece of track, the station, or the exact reversing spot. The loco reverses just clear of the points. Right-click, Esc or <strong>Done</strong> when finished.</li>
-<li><strong>Check it.</strong> The card shows the route's length, reversals and points. A warning says which two points couldn't be joined.</li>
+<li><strong>The route is found for you.</strong> The mod looks for a track beside the platform that the loco can use to pass its train, and works out the whole way round. The card then says <strong>Ready</strong>, with how far the loco goes and about how long it takes.</li>
+<li><strong>If it couldn't find one, or you want another way,</strong> click <strong>Draw the route</strong> and click the track the loco should use to pass its train: usually the loop beside the platform. One click is often enough. You don't click every piece of track or the reversing spots. Right-click, Esc or <strong>Done drawing</strong> when finished.</li>
 <li><strong>That's it.</strong> The next time a train on that line arrives there, its loco runs around.</li>
 </ol>
 
@@ -65,7 +58,7 @@ You don't click every piece of track, the station, or the exact reversing spot. 
 <ul>
 <li><strong>One loco plus coaches or wagons.</strong> Multiple units and double-heading are not handled yet.</li>
 <li><strong>The running loco ignores signals.</strong> Use a loop that other trains won't be on at the same time.</li>
-<li><strong>The train draws forward one loco length before the loco uncouples.</strong> A train that has had its loco run around really is a loco length further along the track. In this game that can only happen by the coaches moving, so the train pulls up first, with the loco still coupled, and then stays put.</li>
+<li><strong>The coaches stay where they stopped.</strong> The loco uncouples, runs around and couples on, and the train leaves from where it stands. (Out of sight, the real train makes up a loco length as it departs, because the game keeps a turned train's middle fixed; so departures take a few seconds longer, and doors don't open while it loads.)</li>
 <li><strong>Nothing is bought or sold, and passengers and goods stay aboard.</strong> The loco, coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>
 <li><strong>The loco must be at one end of the train.</strong> For the smooth sequence (the train drawing forward, then the loco uncoupling) it should be at the front when the train arrives, as it is at a terminus.</li>
 <li><strong>The card tells you when an arrival didn't run around, and why:</strong> the train stopped at a different platform from the one the route starts at, the route's first points head back into the train, or there's no loco at either end. The train then simply leaves as normal.</li>

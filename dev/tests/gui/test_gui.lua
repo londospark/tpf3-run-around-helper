@@ -120,10 +120,19 @@ runs[1].rake, runs[1].phase = nil, "stuck"
 assert(findText(render(), "Stuck: the loco could not be coupled back on. The train is held while it keeps trying."), "stuck")
 runs[1].phase = nil
 -- why the last arrival didn't run around
-loops[1].lastProblem = "the route sets off towards the coaches, not away from them: check the route's first points"
-assert(findText(render(), "Last arrival didn't run around: the route sets off towards the coaches, not away from them: check the route's first points"), "last problem shown")
+loops[1].lastProblem = "The train stopped at a different platform from the one this route starts at."
+assert(findText(render(), "Last time, the loco didn't run around. The train stopped at a different platform from the one this route starts at."), "last problem shown")
 loops[1].lastProblem = nil
-assert(not findText(render(), "Last arrival didn't run around: the route sets off towards the coaches, not away from them: check the route's first points"), "and gone once cleared")
+-- the route in a sentence: ready with its length and time; a warning; a hint when there is none
+loops[1].routeDrive, loops[1].routeReversals = 280, 2
+assert(findText(render(), "Ready. The loco's way round is 280 m, about 55 s."), "ready line")
+loops[1].routeWarning = "This route brings the loco back to the same end of the train it left from, so it doesn't run around."
+assert(findText(render(), loops[1].routeWarning), "warning shown")
+loops[1].routeWarning = nil
+local keepLen = loops[1].routeLength
+loops[1].routeLength, loops[1].routeHint = nil, "Couldn't find a way round automatically."
+assert(findText(render(), "Couldn't find a way round automatically."), "hint shown")
+loops[1].routeLength, loops[1].routeHint = keepLen, nil
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

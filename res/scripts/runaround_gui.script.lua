@@ -379,13 +379,33 @@ function data()
 		uncouple = "Uncoupling",
 	}
 
+	-- "about 1 min 20 s" for the loco's trip: the distance at its speed, a start
+	-- and a stop for each stretch, the pauses to reverse and to uncouple.
+	local function tripTime(loop)
+		local drive = loop.routeDrive or loop.routeLength
+		if drive == nil then return nil end
+		local speed, accel = math.max(loop.speed or 8.0, 1.0), math.max(loop.accel or 2.0, 0.1)
+		local rev = loop.routeReversals or 0
+		local secs = drive / speed + (rev + 1) * speed / accel + rev * 1.5 + 2.5
+		secs = math.floor(secs / 5 + 0.5) * 5
+		if secs < 60 then return string.format("about %d s", math.max(secs, 5)) end
+		local m, r = math.floor(secs / 60), secs % 60
+		return r == 0 and string.format("about %d min", m) or string.format("about %d min %d s", m, r)
+	end
+
+	-- The route in a sentence, and its icon: ready, something wrong with it, or
+	-- none yet (with what to do about it).
 	local function routeLine(loop)
 		local points = loop.waypoints and #loop.waypoints or 0
-		if points == 0 then return "No route yet: click a few points on the track.", ICON.warn end
-		if loop.routeLength == nil then return tostring(loop.pathStatus or "No route yet"), ICON.warn end
-		local rev = loop.routeReversals or 0
-		return string.format("%d m, %d reversal%s, %d point%s", math.floor(loop.routeLength + 0.5), rev, rev == 1 and "" or "s",
-			points, points == 1 and "" or "s"), ICON.ok
+		if loop.routeLength == nil then
+			if loop.routeHint ~= nil then return loop.routeHint, ICON.warn end
+			if points == 0 then return "No route yet. Find one automatically, or draw it on the map.", ICON.warn end
+			return "No route could be worked out from these clicks.", ICON.warn
+		end
+		if loop.routeWarning ~= nil then return loop.routeWarning, ICON.warn end
+		local time = tripTime(loop)
+		return string.format("Ready. The loco's way round is %d m%s.", math.floor((loop.routeDrive or loop.routeLength) + 0.5),
+			time and (", " .. time) or ""), ICON.ok
 	end
 
 	local function RunStatus(loop, runs, vehicleEntity)
@@ -419,7 +439,7 @@ function data()
 		local children = {
 			Text(loopPlace(loop), "font-scale-annotation"),
 			Row({ Icon(icon), Text(text, "font-scale-body") }),
-			loop.lastProblem ~= nil and Row({ Icon(ICON.warn), Text("Last arrival didn't run around: " .. loop.lastProblem, "font-scale-body") }) or nil,
+			loop.lastProblem ~= nil and Row({ Icon(ICON.warn), Text("Last time, the loco didn't run around. " .. loop.lastProblem, "font-scale-body") }) or nil,
 			RunStatus(loop, param.runs, param.vehicleEntity),
 			Buttons({
 				IconButton(ICON.edit, editing and "Done" or "Edit route on map",

@@ -360,6 +360,15 @@ function data()
 		verify = "Coupled",
 		retry = "Coupling on (trying again)",
 		stuck = "Stuck: the loco could not be coupled back on. The train is held while it keeps trying.",
+		depart = "Coupled on. Ready to leave",
+	}
+	-- Static coaches, once the loco is on: the train waits for its departure
+	-- time, then moves off (the hidden train moving up under its copies).
+	local DEPART_STAGES = {
+		await = "Coupled on. Ready to leave",
+		creep = "Leaving",
+		stopping = "Leaving",
+		align = "Leaving",
 	}
 
 	-- Before the loco sets off (ghost rake): what the train is doing.
@@ -384,6 +393,7 @@ function data()
 			if run.loop ~= nil and run.loop.id == loop.id and (vehicleEntity == nil or run.vehicleEntity == vehicleEntity) then
 				local text = PHASES[run.phase or ""] or "Running around"
 				if run.phase == nil and run.rake ~= nil and RAKE_STAGES[run.rake.stage] then text = RAKE_STAGES[run.rake.stage] end
+				if run.phase == "depart" and run.depart ~= nil and DEPART_STAGES[run.depart.stage] then text = DEPART_STAGES[run.depart.stage] end
 				local progress = 0.0
 				local total = run.driveTotal or loop.routeLength or 0
 				if run.phase == nil and total > 0 then

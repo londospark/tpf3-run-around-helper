@@ -111,6 +111,11 @@ runs[1].rake = { stage = "pull" }
 assert(findText(render(), "Drawing forward"), "drawing forward")
 runs[1].rake.stage = "uncouple"
 assert(findText(render(), "Uncoupling"), "uncoupling")
+runs[1].phase = "depart"
+assert(findText(render(), "Coupled on. Ready to leave"), "waiting to leave")
+runs[1].depart = { stage = "creep" }
+assert(findText(render(), "Leaving"), "leaving")
+runs[1].depart = nil
 runs[1].rake, runs[1].phase = nil, "stuck"
 assert(findText(render(), "Stuck: the loco could not be coupled back on. The train is held while it keeps trying."), "stuck")
 runs[1].phase = nil

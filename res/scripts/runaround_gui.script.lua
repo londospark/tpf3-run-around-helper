@@ -49,6 +49,8 @@ function data()
 		ok = "::/gui/entity_window/icons/circle_check.tga",
 		warn = "::/gui/hud/icons/line_vehicle_warning.tga",
 		add = "::/gui/camera_tool/icons/plus19.tga",
+		expand = "::/gui/entity_window/design/collapse_down.tga",
+		collapse = "::/gui/entity_window/design/collapse_up.tga",
 	}
 
 	-- ------------------------------------------------------------------
@@ -526,19 +528,45 @@ function data()
 		return Column({ Text(title, "font-scale-title-4"), permanent, collapsible }, "box-plugin-vertical-space")
 	end
 
+	-- The options of a run-around, behind a button that shows and hides them.
+	-- Not the content card's own collapsible part: the card draws that part's
+	-- arrow in a FloatingLayoutChild with overflowMode = Overflow (content_card.tl,
+	-- makeArrow), which may leave its parent's rectangle, so the arrow isn't
+	-- clipped by the window's scroll area (seen live: arrows drawn outside the
+	-- window when scrolled away). Plain widgets in the layout clip.
+	-- Which one is open is the window's own state when it gives it (one card
+	-- open at a time, as for its own cards), else kept here.
+	local LoopOptions = react.RegisterRecipe("RunAroundLoopOptions", function(param)
+		local own = react.useState(false)
+		local expanded = own:old()
+		if param.getExpanded ~= nil then expanded = param.getExpanded() == true end
+		local toggle = function()
+			if param.setExpanded ~= nil then param.setExpanded(not expanded) else own:set(not expanded) end
+		end
+		return Column({
+			IconButton(expanded and ICON.collapse or ICON.expand, expanded and "Hide options" or "Options",
+				"The loco's speed, which vehicle runs around, the name, and removing this run-around.", toggle, "secondary"),
+			expanded and LoopSettings{ loop = param.loop, vehicleEntity = param.vehicleEntity } or nil,
+		}, "box-plugin-vertical-space")
+	end)
+
 	local function LoopCard(loop, st, params, vehicleEntity)
 		local summary = LoopSummary{ loop = loop, runs = st.runs, vehicleEntity = vehicleEntity }
-		local settings = LoopSettings{ loop = loop, vehicleEntity = vehicleEntity }
-		if content_card == nil or params == nil then return Card(loopName(loop), summary, settings) end
+		if content_card == nil or params == nil then
+			return Card(loopName(loop), summary, LoopSettings{ loop = loop, vehicleEntity = vehicleEntity })
+		end
 		local key = "runaround_settings_" .. tostring(loop.id)
+		local options = LoopOptions{
+			loop = loop, vehicleEntity = vehicleEntity,
+			getExpanded = params.getCollapsibleExpanded and function() return params.getCollapsibleExpanded(key) end or nil,
+			setExpanded = params.setCollapsibleExpanded and function(v) params.setCollapsibleExpanded(key, v) end or nil,
+		}
+		-- permanent content only, as the game's "Basics" card: no collapsible
+		-- part, so the card draws no arrow
 		return content_card.ContentCard{
 			title = "Run-around at " .. loopName(loop),
-			extraChildrenPermanent = { summary },
+			extraChildrenPermanent = { summary, options },
 			hasPermanentFocusables = true,
-			initialCalloutTextCollapsible = "",
-			recipeAndParamCollapsible = content_card.makeRecipeAndParam(LoopSettings, { loop = loop, vehicleEntity = vehicleEntity }),
-			setCollapsibleExpanded = params.setCollapsibleExpanded and function(v) params.setCollapsibleExpanded(key, v) end or nil,
-			collapsibleExpanded = params.getCollapsibleExpanded and params.getCollapsibleExpanded(key) or nil,
 			gameCtx = params.gameCtx,
 			showOnRightSide = params.showCalloutOnRightSide,
 		}

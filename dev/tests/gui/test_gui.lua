@@ -61,15 +61,32 @@ local tree = exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {},
 local function count(n, k) k = k or {} if type(n) ~= "table" then return k end if n.kind then k[n.kind] = (k[n.kind] or 0) + 1 end for _, v in pairs(n) do if type(v) == "table" then count(v, k) end end return k end
 local kinds = count(tree)
 print("train window:", kinds.ContentCard, "cards,", kinds.Button, "buttons,", kinds.ProgressBar or 0, "progress bar")
--- the collapsible settings recipe
+-- the options: not the content card's collapsible part (its arrow overflows
+-- the window's scroll area unclipped), but a button in the layout tree that
+-- shows and hides them; which card is open is the window's state
 local function findCard(n) if type(n)~="table" then return nil end if n.kind=="ContentCard" then return n end for _,v in pairs(n) do local r=findCard(v) if r then return r end end end
-local settings = findCard(tree).p.recipeAndParamCollapsible
-local sk = count(settings.r(settings.p))
-print("settings:", sk.Slider, "sliders,", sk.Button, "buttons")
--- press "Draw the route": find the button and click it
 local function findButton(n, text) if type(n) ~= "table" then return nil end
   if n.kind == "Button" then local s = tostring(n.p.content and n.p.content.p and n.p.content.p.children and n.p.content.p.children[2] and n.p.content.p.children[2].p.text) if s == text then return n end end
   for _, v in pairs(n) do local r = findButton(v, text) if r then return r end end end
+do
+  local card = findCard(tree).p
+  assert(card.recipeAndParamCollapsible == nil and card.setCollapsibleExpanded == nil and card.collapsibleExpanded == nil
+    and card.initialCalloutTextCollapsible == nil, "the card has no collapsible part, so no arrow")
+  assert(#card.extraChildrenPermanent == 2, "summary and options are the card's permanent content")
+  assert((kinds.Slider or 0) == 0, "options hidden to start with")
+  local open = {}
+  local function win() return exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {},
+    setCollapsibleExpanded = function(k, v) open = { [k] = v } end, getCollapsibleExpanded = function(k) return open[k] == true end }) end
+  local b = findButton(findCard(win()).p.extraChildrenPermanent, "Options"); assert(b, "Options button inside the card")
+  b.p.onClick(); assert(open.runaround_settings_7 == true, "opens through the window's state")
+  local sk = count(findCard(win()).p.extraChildrenPermanent)
+  print("options:", sk.Slider, "sliders,", sk.Button, "buttons"); assert(sk.Slider == 2, "options shown inside the card")
+  local h = findButton(win(), "Hide options"); assert(h, "Hide options"); h.p.onClick()
+  assert(open.runaround_settings_7 == false and not count(win()).Slider, "hidden again")
+  -- a window that gives no state: the options keep their own
+  assert(findButton(exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {} }), "Options"), "Options without window state")
+end
+-- press "Draw the route": find the button and click it
 local edit = findButton(tree, "Draw the route"); assert(edit, "edit button"); edit.p.onClick()
 assert(toolStack.active == "RunAroundRoute:edit:7", toolStack.active)
 -- render the tool action: NodeViewer + Selector

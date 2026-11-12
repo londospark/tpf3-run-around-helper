@@ -814,20 +814,143 @@ end
 -- ---------------------------------------------------------------------
 local CUSP_RADIUS = 300.0        -- metres around the source exit / target / stop
 local CUSP_MAX_CANDIDATES = 100  -- pathfinder calls stay bounded
+local CUSP_BEYOND = 25.0         -- a reversing place is about this far past a set of points (a loco length)
+local RAIL_MAX_ENTITIES = 4000   -- entities read per search for track near a place
 
+local function piecePos(edgeDef, t)
+	return api.engine.util.transport.calcPosition(getEdgeGeometry(edgeDef), t)
+end
+
+-- What the planner found out on the way, for one log line per plan (the next
+-- live run then says which step came up empty). planHints: track nodes worth
+-- trying as reversing places whatever the searches below find (the line's way
+-- into the stop: the way back onto the train from behind reverses on it).
+local planNotes, planNoteSeen, planCache, planHints = {}, {}, {}, {}
+local planKeep = false -- several plans in a row over the same track (the automatic route): what was read is kept
+local function planNote(text)
+	if planNoteSeen[text] or #planNotes >= 12 then return end
+	planNoteSeen[text] = true
+	planNotes[#planNotes + 1] = text
+end
+local function resetPlan()
+	planNotes, planNoteSeen, planHints = {}, {}, {}
+	if not planKeep then planCache = {} end
+end
+
+local function nodeKey(nd) return tostring(nd.entity) .. ":" .. tostring(nd.index) end
+
+-- A list of places without the gaps a missing one would leave (a nil in the
+-- middle of a list ends it early: with the stop's position unknown, no
+-- reversing place was ever looked for on the way out).
+local function places(...)
+	local out = {}
+	for i = 1, select("#", ...) do
+		local p = select(i, ...)
+		if p ~= nil then out[#out + 1] = p end
+	end
+	return out
+end
+
+local function placesKey(centres, radius)
+	local parts = { tostring(radius) }
+	for _, c in ipairs(centres) do parts[#parts + 1] = string.format("%d:%d", math.floor(c.x / 5.0 + 0.5), math.floor(c.y / 5.0 + 0.5)) end
+	return table.concat(parts, "|")
+end
+
+-- The track around some places, as the pieces and how they join: every piece
+-- of every track entity within the radius (streets left out), each with the
+-- two nodes it runs between. Station tracks are ordinary track pieces too (the
+-- game's stations lay them as edge lists). Nodes are told apart by their id,
+-- and two ids at the same spot count as one node, so a set of points is found
+-- however the game numbers it.
+-- Returns { pieces = { { entity, index, nodes = {id, id}, n = {key, key}, p = {pos, pos}, len } },
+--           at = { [key] = { { piece, e } } }, listed, failed }.
+local function railGraphNear(centres, radius)
+	local ckey = "g|" .. placesKey(centres, radius)
+	if planCache[ckey] ~= nil then return planCache[ckey] end
+	local graph = { pieces = {}, at = {}, pos = {}, canon = {}, listed = 0, failed = nil }
+	planCache[ckey] = graph
+	local calc = api.engine.util.transport.calcPosition
+	local street = api.type.ComponentType.BASE_EDGE_STREET
+	local seenEnt, byPos, canon = {}, {}, graph.canon
+	local function canonical(nd, p)
+		local raw = nodeKey(nd)
+		if canon[raw] == nil then
+			local pk = string.format("%d:%d:%d", math.floor(p.x * 2.0 + 0.5), math.floor(p.y * 2.0 + 0.5), math.floor((p.z or 0.0) / 2.0 + 0.5))
+			if byPos[pk] == nil then byPos[pk] = raw end
+			canon[raw] = byPos[pk]
+		end
+		return canon[raw]
+	end
+	-- an entity's pieces of track as read from the game (kept for the plan: the
+	-- same entities come up for every leg)
+	local function read(ent)
+		local key = "e|" .. tostring(ent)
+		if planCache[key] == nil then
+			local list = {}
+			planCache[key] = list
+			pcall(function()
+				if street ~= nil and api.engine.getComponent(ent, street) ~= nil then return end
+				local tn = api.engine.getComponent(ent, api.type.ComponentType.TRANSPORT_NETWORK)
+				if tn == nil or tn.edges == nil then return end
+				for idx = 1, math.min(#tn.edges, 8) do
+					local te = tn.edges[idx]
+					local p1, p2 = calc(te.geometry, 0.0), calc(te.geometry, 1.0)
+					list[#list + 1] = { entity = ent, index = idx - 1, p = { p1, p2 },
+						nodes = { { entity = te.conns[1].entity, index = te.conns[1].index }, { entity = te.conns[2].entity, index = te.conns[2].index } },
+						len = math.sqrt((p2.x - p1.x) ^ 2 + (p2.y - p1.y) ^ 2) }
+				end
+			end)
+		end
+		return planCache[key]
+	end
+	for _, c in ipairs(centres) do
+		local ok, ents = pcall(api.engine.util.octree.findEntitiesInCircle, api.type.Vec2f.new(c.x, c.y), radius, api.type.ComponentType.BASE_EDGE)
+		if not ok or ents == nil then
+			graph.failed = tostring(ents)
+		else
+			for i = 1, math.min(#ents, RAIL_MAX_ENTITIES) do
+				local ent = ents[i]
+				if not seenEnt[ent] then
+					seenEnt[ent] = true
+					graph.listed = graph.listed + 1
+					local spans = {}
+					for _, raw in ipairs(read(ent)) do
+						local k1, k2 = canonical(raw.nodes[1], raw.p[1]), canonical(raw.nodes[2], raw.p[2])
+						local span = (k1 < k2) and (k1 .. "|" .. k2) or (k2 .. "|" .. k1)
+						if not spans[span] then -- (two lanes over the same stretch are one piece of track)
+							spans[span] = true
+							local piece = { entity = raw.entity, index = raw.index, nodes = raw.nodes, n = { k1, k2 }, p = raw.p, len = raw.len }
+							graph.pieces[#graph.pieces + 1] = piece
+							for e = 1, 2 do
+								local key = piece.n[e]
+								graph.at[key] = graph.at[key] or {}
+								graph.at[key][#graph.at[key] + 1] = { piece = piece, e = e }
+								graph.pos[key] = graph.pos[key] or piece.p[e]
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return graph
+end
+
+-- Track nodes around some places, whatever they belong to (also streets and
+-- footpaths): what the reversal search used before it could tell track apart.
+-- Kept for when the track near a place can't be listed.
 local function nodesNear(positions)
 	local seen, out = {}, {}
 	for _, pos in ipairs(positions) do
-		if pos ~= nil then
-			local ok, nodes = pcall(api.engine.util.octree.findTransportNetworkNodesInCircle, api.type.Vec2f.new(pos.x, pos.y), CUSP_RADIUS)
-			if ok and nodes ~= nil then
-				for i = 1, #nodes do
-					local nd = nodes[i]
-					local key = tostring(nd.entity) .. ":" .. tostring(nd.index)
-					if not seen[key] then
-						seen[key] = true
-						out[#out + 1] = nd
-					end
+		local ok, nodes = pcall(api.engine.util.octree.findTransportNetworkNodesInCircle, api.type.Vec2f.new(pos.x, pos.y), CUSP_RADIUS)
+		if ok and nodes ~= nil then
+			for i = 1, #nodes do
+				local nd = nodes[i]
+				local key = nodeKey(nd)
+				if not seen[key] then
+					seen[key] = true
+					out[#out + 1] = nd
 				end
 			end
 		end
@@ -835,19 +958,88 @@ local function nodesNear(positions)
 	return out
 end
 
-local function piecePos(edgeDef, t)
-	return api.engine.util.transport.calcPosition(getEdgeGeometry(edgeDef), t)
+-- Places to reverse near some places: a loco reverses just past a set of
+-- points (out by one branch, back by another), so the candidates are the track
+-- nodes about a loco length beyond each set of points, along each of its
+-- branches; the nearest sets of points first. A station's tracks are many
+-- short pieces (2 m and 16 m in the game's own), so "every node nearby" is
+-- hundreds of nodes that are no use, and the few that matter were lost among
+-- them.
+local function reversingNodes(centres)
+	local ckey = "r|" .. placesKey(centres, CUSP_RADIUS)
+	if planCache[ckey] ~= nil then return planCache[ckey] end
+	local out, seen = {}, {}
+	planCache[ckey] = out
+	local graph = railGraphNear(centres, CUSP_RADIUS)
+	local points = 0
+	for key, ends in pairs(graph.at) do
+		if #ends >= 3 then
+			points = points + 1
+			local jp, d = graph.pos[key], math.huge
+			for _, c in ipairs(centres) do d = math.min(d, (jp.x - c.x) ^ 2 + (jp.y - c.y) ^ 2) end
+			for _, en in ipairs(ends) do
+				-- along this branch, through plain joins, until far enough past the points
+				local cur, far, total = en.piece, 3 - en.e, en.piece.len
+				while total < CUSP_BEYOND do
+					local nextEnds = graph.at[cur.n[far]]
+					if nextEnds == nil or #nextEnds ~= 2 then break end
+					local nxt = (nextEnds[1].piece == cur) and nextEnds[2] or nextEnds[1]
+					if nxt.piece == cur then break end
+					cur, far = nxt.piece, 3 - nxt.e
+					total = total + cur.len
+				end
+				local nd = cur.nodes[far]
+				local k = nodeKey(nd)
+				if not seen[k] then
+					seen[k] = true
+					out[#out + 1] = { node = nd, d = d, key = k }
+				end
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.d ~= b.d then return a.d < b.d end
+		return a.key < b.key
+	end)
+	if #out > 0 then
+		planNote(string.format("%d reversing place(s) at %d set(s) of points (%d track piece(s) among %d entities near)", #out, points, #graph.pieces, graph.listed))
+	elseif graph.failed ~= nil then
+		planNote("the track near could not be listed (" .. graph.failed .. ")")
+	else
+		planNote(string.format("no set of points among %d track piece(s) (%d entities near)", #graph.pieces, graph.listed))
+	end
+	return out
+end
+
+-- The track nodes to try reversing at, in order: the plan's own hints, the
+-- places past the sets of points nearby, and, only if those can't be found,
+-- any node nearby.
+local function cuspCandidates(centres)
+	local out, seen = {}, {}
+	local function add(nd)
+		local k = nodeKey(nd)
+		if not seen[k] and #out < CUSP_MAX_CANDIDATES then
+			seen[k] = true
+			out[#out + 1] = nd
+		end
+	end
+	for _, nd in ipairs(planHints) do add(nd) end
+	local found = reversingNodes(centres)
+	for _, c in ipairs(found) do add(c.node) end
+	if #found == 0 then
+		local any = nodesNear(centres)
+		planNote(string.format("any node nearby tried instead: %d of %d", math.min(#any, CUSP_MAX_CANDIDATES), #any))
+		for _, nd in ipairs(any) do add(nd) end
+	end
+	return out
 end
 
 -- firstEdges: pieces already driven to reach uNode. Returns the full list of
 -- edges up to (not including) the target piece, or nil.
 local function findCuspLeg(firstEdges, uNode, targetExitNode, b, dB, centres, leaveNot)
 	local best, bestCost = nil, math.huge
-	local tried = 0
-	for _, v in ipairs(nodesNear(centres)) do
+	for _, v in ipairs(cuspCandidates(centres)) do
 		if not sameNode(v, uNode) then
-			tried = tried + 1
-			if tried > CUSP_MAX_CANDIDATES then break end
 			local p1 = pathBetweenNodes(uNode, v)
 			if p1 ~= nil and #p1 > 0 and not (#firstEdges == 0 and leavesBack(p1, leaveNot)) then
 				local c = p1[#p1]
@@ -884,7 +1076,7 @@ local function legPathAuto(a, dA, b, dB)
 	if ea == nil or eb == nil then return nil, err end
 	local uNode = dA and ea.conns[2] or ea.conns[1]
 	local first = { { entity = a.entity, index = a.index, forward = dA } }
-	local raw = findCuspLeg(first, uNode, exitNodeOf(eb, dB), b, dB, { piecePos(first[1], dA and 1.0 or 0.0), piecePos(b, 0.5) })
+	local raw = findCuspLeg(first, uNode, exitNodeOf(eb, dB), b, dB, places(piecePos(first[1], dA and 1.0 or 0.0), piecePos(b, 0.5)))
 	if raw == nil then return nil, err end
 	return dedupeEdges(raw)
 end
@@ -894,7 +1086,7 @@ local function legFromNodeAuto(startNode, startPos, b, dB, leaveNot)
 	if edges ~= nil then return edges end
 	local eb = getTnEdge(b.entity, b.index)
 	if eb == nil then return nil, err end
-	local raw = findCuspLeg({}, startNode, exitNodeOf(eb, dB), b, dB, { startPos, piecePos(b, 0.5) }, leaveNot)
+	local raw = findCuspLeg({}, startNode, exitNodeOf(eb, dB), b, dB, places(startPos, piecePos(b, 0.5)), leaveNot)
 	if raw == nil then return nil, err end
 	return dedupeEdges(raw)
 end
@@ -922,7 +1114,7 @@ local function legToNodeAuto(a, dA, node, nodePos, arriveBy)
 	local ea = getTnEdge(a.entity, a.index)
 	if ea == nil then return nil, err end
 	local first = { { entity = a.entity, index = a.index, forward = dA } }
-	local raw = findCuspLeg(first, dA and ea.conns[2] or ea.conns[1], node, arriveBy, arriveBy and arriveBy.forward, { piecePos(first[1], dA and 1.0 or 0.0), nodePos })
+	local raw = findCuspLeg(first, dA and ea.conns[2] or ea.conns[1], node, arriveBy, arriveBy and arriveBy.forward, places(piecePos(first[1], dA and 1.0 or 0.0), nodePos))
 	if raw == nil then return nil, err end
 	return dedupeEdges(raw)
 end
@@ -1073,74 +1265,199 @@ end
 -- what is wrong with it).
 local function planRoute(waypoints, startNode, startPos, leaveNot)
 	if startNode ~= nil then
+		local strictErr = nil
 		if leaveNot ~= nil then
 			local route, info = planRouteTo(waypoints, startNode, startPos, startNode, leaveNot)
-			if route ~= nil then return route, info end
+			if route ~= nil then
+				info.strict = true
+				return route, info
+			end
+			strictErr = info
 		end
 		local route, info = planRouteTo(waypoints, startNode, startPos, startNode)
-		if route ~= nil then return route, info end
+		if route ~= nil then
+			info.strictErr = strictErr
+			return route, info
+		end
 	end
 	return planRouteTo(waypoints, startNode, startPos, nil)
 end
 
--- The track node where trains stop at a line's stop, or nil. Resolved the way
--- the base game's line_util.tl does: line -> stop -> station group -> station
--- -> terminal.vehicleNodeId (raw Line component indices are zero-based).
-local function getStopNode(lineEntity, stopIndex)
-	if lineEntity == nil or stopIndex == nil then return nil end
+-- The terminal of a line's stop, or nil and which step came up empty. Resolved
+-- the way the base game's line_util.tl does: line -> stop -> station group ->
+-- station -> terminal (raw Line component indices are zero-based).
+local function stopTerminal(lineEntity, stopIndex)
+	if lineEntity == nil or stopIndex == nil then return nil, "no line or stop given" end
 	local line = api.engine.getComponent(lineEntity, api.type.ComponentType.LINE)
-	local stop = line and line.stops[stopIndex + 1]
-	if stop == nil then return nil end
+	if line == nil then return nil, "line " .. tostring(lineEntity) .. " has no line data" end
+	local stop = line.stops[stopIndex + 1]
+	if stop == nil then return nil, "the line has no stop " .. tostring(stopIndex) end
 	local group = api.engine.getComponent(stop.stationGroup, api.type.ComponentType.STATION_GROUP)
-	local stationEntity = group and group.stations[stop.station + 1]
-	if stationEntity == nil then return nil end
+	if group == nil then return nil, "station group " .. tostring(stop.stationGroup) .. " unreadable" end
+	local stationEntity = group.stations[stop.station + 1]
+	if stationEntity == nil then return nil, "the station group has no station " .. tostring(stop.station) end
 	local station = api.engine.getComponent(stationEntity, api.type.ComponentType.STATION)
-	local terminal = station and station.terminals[stop.terminal + 1]
-	if terminal == nil then return nil end
-	-- A position on the platform, for centring the reversal search.
-	local pos = nil
-	local ok, res = pcall(function()
-		local ep = terminal.vehicleEdges[1]
-		return piecePos({ entity = ep.edgeId.entity, index = ep.edgeId.index }, ep.param)
-	end)
-	if ok then pos = res end
-	return terminal.vehicleNodeId, pos
+	if station == nil then return nil, "station " .. tostring(stationEntity) .. " unreadable" end
+	local terminal = station.terminals[stop.terminal + 1]
+	if terminal == nil then return nil, "station " .. tostring(stationEntity) .. " has no terminal " .. tostring(stop.terminal) end
+	return terminal
 end
 
--- The stop's platform track: the piece trains stand on and the way it runs
--- there ({ edge, pos, tx, ty }), or nil.
-local function stopPlatform(lineEntity, stopIndex)
+-- The terminal's own stopping place on the track ({ entity, index, u }), if it
+-- lists one. The game's own stations don't: their terminals carry only the
+-- stop node (vehicleNodeId) and the waiting area (modular_station.script.lua
+-- builds them with vehicleNode, personNodes and personEdges and nothing else),
+-- so this list is empty there. Stations from mods may fill it.
+local function terminalPiece(terminal)
+	local ok, res = pcall(function()
+		local list = terminal.vehicleEdges
+		local ep = list and list[1]
+		if ep == nil then return nil end
+		return { entity = ep.edgeId.entity, index = ep.edgeId.index, u = ep.param or 0.5 }
+	end)
+	if ok and res ~= nil and getTnEdge(res.entity, res.index) ~= nil then return res end
+	return nil
+end
+
+-- The track pieces that meet at a track node, each as { entity, index, u } (u:
+-- the piece's end at the node, 0 or 1), and a note of what each way of asking
+-- gave. Asked three ways, since which of them the game answers for a station's
+-- stop node has not been seen live: the node's own entity; the network's node
+-- data (as line_util.tl reads a terminal's track); the track joined at the
+-- node (as the game's own windows do for a set of points).
+local function nodePieces(node)
+	local out, seen, notes = {}, {}, {}
+	local function addFrom(entity, index)
+		local te = getTnEdge(entity, index)
+		if te == nil then return end
+		for e = 1, 2 do
+			if sameNode(te.conns[e], node) then
+				local key = entity .. ":" .. index
+				if not seen[key] then
+					seen[key] = true
+					out[#out + 1] = { entity = entity, index = index, u = (e == 2) and 1.0 or 0.0 }
+				end
+			end
+		end
+	end
+	local function try(label, fn)
+		local before = #out
+		local ok, err = pcall(fn)
+		notes[#notes + 1] = label .. ": " .. (ok and (tostring(#out - before) .. " piece(s)") or ("failed (" .. tostring(err) .. ")"))
+	end
+	try("the node's own entity", function()
+		local tn = api.engine.getComponent(node.entity, api.type.ComponentType.TRANSPORT_NETWORK)
+		for i = 1, math.min(tn and #tn.edges or 0, 64) do addFrom(node.entity, i - 1) end
+	end)
+	if #out == 0 then
+		try("the network's node data", function()
+			local nd = api.engine.system.transportNetworkSystem.getTpNetData():getNodeData(node)
+			for i = 1, #nd.ports do addFrom(nd.ports[i].edgeId.entity, nd.ports[i].edgeId.index) end
+		end)
+	end
+	if #out == 0 then
+		try("the track joined at the node", function()
+			local segs = api.engine.system.streetSystem.getNodeTrackSegments(node.entity)
+			for i = 1, #segs do
+				local tn = api.engine.getComponent(segs[i], api.type.ComponentType.TRANSPORT_NETWORK)
+				for j = 1, math.min(tn and #tn.edges or 0, 8) do addFrom(segs[i], j - 1) end
+			end
+		end)
+	end
+	return out, table.concat(notes, "; ")
+end
+
+-- The track node where trains stop at a line's stop and its position (nil if
+-- that can't be read), or nil and why.
+local function getStopNode(lineEntity, stopIndex)
+	local terminal, why = stopTerminal(lineEntity, stopIndex)
+	if terminal == nil then return nil, why end
+	local node = terminal.vehicleNodeId
+	if node == nil then return nil, "the terminal has no stop node" end
+	local pos = nil
+	pcall(function()
+		local piece = terminalPiece(terminal) or nodePieces(node)[1]
+		if piece ~= nil then pos = piecePos(piece, piece.u) end
+	end)
+	return node, pos
+end
+
+-- The pieces of track by which trains of this line come into the stop (the
+-- pathfinder's route from the stop before it on the line), or nil and why (a
+-- line with one stop, no route).
+local function arrivalPath(lineEntity, stopIndex, stopNode)
 	local line = api.engine.getComponent(lineEntity, api.type.ComponentType.LINE)
-	local stop = line and line.stops[stopIndex + 1]
-	if stop == nil then return nil end
-	local group = api.engine.getComponent(stop.stationGroup, api.type.ComponentType.STATION_GROUP)
-	local station = group and api.engine.getComponent(group.stations[stop.station + 1], api.type.ComponentType.STATION)
-	local terminal = station and station.terminals[stop.terminal + 1]
-	local ep = terminal and terminal.vehicleEdges and terminal.vehicleEdges[1]
-	if ep == nil then return nil end
-	local edge = { entity = ep.edgeId.entity, index = ep.edgeId.index }
+	local n = line and #line.stops or 0
+	if n < 2 then return nil, "the line has only " .. n .. " stop(s)" end
+	local prevNode, why = getStopNode(lineEntity, (stopIndex - 1) % n)
+	if prevNode == nil then return nil, "the stop before it: " .. tostring(why) end
+	if sameNode(prevNode, stopNode) then return nil, "the stop before it is this same platform" end
+	local path, err = pathBetweenNodes(prevNode, stopNode)
+	if path == nil or #path == 0 then return nil, "from the stop before it: " .. tostring(err or "no track route") end
+	return path
+end
+
+-- The piece of track on which trains of this line come into the stop, or nil
+-- when that can't be told. A loco arrives at the front of its train, so a
+-- run-around that sets off back along this piece would drive through its own
+-- coaches.
+local function arrivalPiece(loop, stopNode)
+	local path, why = arrivalPath(loop.lineEntity, loop.stopIndex, stopNode)
+	if path == nil then return nil, why end
+	return path[#path], path
+end
+
+-- Track nodes along the way into the stop, one every 20 m or so going back
+-- from it: where a loco coming round onto its train from behind can reverse.
+local function arrivalHints(path)
+	local out, total, since = {}, 0.0, 0.0
+	for k = #path, 1, -1 do
+		local e = path[k]
+		local ok, len = pcall(function()
+			local a, b = piecePos(e, 0.0), piecePos(e, 1.0)
+			return math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+		end)
+		local te = getTnEdge(e.entity, e.index)
+		if not ok or te == nil then break end
+		total, since = total + len, since + len
+		if since >= 20.0 then
+			since = 0.0
+			out[#out + 1] = e.forward and te.conns[1] or te.conns[2]
+		end
+		if total > CUSP_RADIUS or #out >= 15 then break end
+	end
+	return out
+end
+
+-- The stop's platform track: a piece trains stand on, the place on it where
+-- they stop and the way the track runs there ({ edge, pos, tx, ty, how }), or
+-- nil and why. From the terminal's own stopping place if it lists one;
+-- otherwise from the stop node: the piece trains come in on (arrive, if
+-- known), or any piece that meets at the node.
+local function stopPlatform(lineEntity, stopIndex, stopNode, arrive)
+	local terminal, why = stopTerminal(lineEntity, stopIndex)
+	if terminal == nil then return nil, why end
+	local piece, how, notes = terminalPiece(terminal), "the terminal's own stopping place", nil
+	if piece == nil and arrive ~= nil then
+		piece, how = { entity = arrive.entity, index = arrive.index, u = arrive.forward and 1.0 or 0.0 }, "the piece trains come in on"
+	end
+	if piece == nil and stopNode ~= nil then
+		local list
+		list, notes = nodePieces(stopNode)
+		piece, how = list[1], "a piece at the stop node"
+	end
+	if piece == nil then
+		return nil, "the terminal lists no stopping place, the way in is not known" .. (notes and (", and no piece was found at the stop node - " .. notes) or "")
+	end
+	local edge = { entity = piece.entity, index = piece.index }
 	local g = getEdgeGeometry(edge)
 	local calc = api.engine.util.transport.calcPosition
-	local u = math.min(math.max(ep.param or 0.5, 0.02), 0.98)
-	local pa, pb, pos = calc(g, u - 0.02), calc(g, u + 0.02), calc(g, u)
+	local u = math.min(math.max(piece.u, 0.02), 0.98)
+	local pa, pb, pos = calc(g, u - 0.02), calc(g, u + 0.02), calc(g, piece.u)
 	local dx, dy = pb.x - pa.x, pb.y - pa.y
 	local d = math.sqrt(dx * dx + dy * dy)
-	if d < 1e-9 then return nil end
-	return { edge = edge, pos = pos, tx = dx / d, ty = dy / d }
-end
-
--- The piece of track on which trains of this line come into the stop (from the
--- stop before it on the line), or nil when that can't be told (a line with one
--- stop, no route). A loco arrives at the front of its train, so a run-around
--- that sets off back along this piece would drive through its own coaches.
-local function arrivalPiece(loop, stopNode)
-	local line = api.engine.getComponent(loop.lineEntity, api.type.ComponentType.LINE)
-	local n = line and #line.stops or 0
-	if n < 2 then return nil end
-	local prevNode = getStopNode(loop.lineEntity, (loop.stopIndex - 1) % n)
-	if prevNode == nil or sameNode(prevNode, stopNode) then return nil end
-	local path = pathBetweenNodes(prevNode, stopNode)
-	return path and path[#path] or nil
+	if d < 1e-9 then return nil, "the platform piece has no length (" .. how .. ")" end
+	return { edge = edge, pos = pos, tx = dx / d, ty = dy / d, how = how }
 end
 
 -- What is wrong with a planned route for a run-around, in words for the card, or
@@ -1206,17 +1523,49 @@ local function recomputeLoopRoute(loop)
 		loop.pathStatus = "no points yet"
 		return
 	end
+	resetPlan()
 	local okNode, startNode, startPos = pcall(getStopNode, loop.lineEntity, loop.stopIndex)
 	if not okNode or startNode == nil then
-		logInfo("could not find the stop's track node for loop", loopLabel(loop), "- planning from the first point instead:", tostring(startNode))
-		startNode = nil
+		logInfo("could not find the stop's track node for loop", loopLabel(loop), "- planning from the first point instead:", tostring(okNode and startPos or startNode))
+		startNode, startPos = nil, nil
 	end
-	local arrive = nil
+	-- the way trains come in: the route must set off the other way and come
+	-- back in along it
+	local arrive, arriveWhy = nil, nil
 	if startNode ~= nil then
-		local okA, a = pcall(arrivalPiece, loop, startNode)
-		if okA then arrive = a end
+		local okA, a, path = pcall(arrivalPiece, loop, startNode)
+		if okA and a ~= nil then
+			arrive = a
+			local okH, hints = pcall(arrivalHints, path)
+			if okH then planHints = hints end
+			if startPos == nil then
+				-- (the game's own stations give the stop no position: it is where the way in ends)
+				local okP, p = pcall(piecePos, a, a.forward and 1.0 or 0.0)
+				if okP then startPos = p end
+			end
+		else
+			arriveWhy = tostring(path or a)
+		end
+		if startPos == nil then planNote("the stop's position could not be read") end
 	end
 	local ok, route, info = pcall(planRoute, loop.waypoints, startNode, startPos, arrive)
+	-- what the planner had to go on, for the log (one line per plan)
+	local function planLog()
+		local parts = {}
+		if startNode ~= nil then
+			parts[#parts + 1] = arrive and "the way trains come in is known" or ("the way trains come in is NOT known (" .. tostring(arriveWhy) .. ")")
+		end
+		if ok and route ~= nil and startNode ~= nil then
+			if info.strict then
+				parts[#parts + 1] = "planned as a run-around (off ahead of the loco, back onto the train from behind)"
+			elseif info.strictErr ~= nil then
+				parts[#parts + 1] = "no run-around this way (" .. tostring(info.strictErr) .. "): the nearest route kept"
+			end
+		end
+		for _, t in ipairs(planNotes) do parts[#parts + 1] = t end
+		if #parts > 0 then logInfo("route planning for loop", loopLabel(loop), "-", table.concat(parts, "; ")) end
+	end
+	planLog()
 	if not ok then
 		loop.loopEdges = {}
 		loop.pathStatus = "route error: " .. tostring(route)
@@ -1315,28 +1664,52 @@ local AUTO_ALONG_MAX = 200.0  -- along the platform from the stop
 local AUTO_TRIES = 5          -- tracks tried (each is a full plan)
 local AUTO_MAX_REVERSALS = 3
 
-local function autoRouteCandidates(plat)
-	local okE, ents = pcall(api.engine.util.octree.findEntitiesInCircle, api.type.Vec2f.new(plat.pos.x, plat.pos.y), AUTO_RADIUS, api.type.ComponentType.BASE_EDGE)
-	if not okE or ents == nil then return nil end
-	local street = api.type.ComponentType.BASE_EDGE_STREET
-	local perTrack = {}
-	for i = 1, math.min(#ents, 1000) do
-		local ent = ents[i]
-		pcall(function()
-			if street ~= nil and api.engine.getComponent(ent, street) ~= nil then return end
-			local tn = api.engine.getComponent(ent, api.type.ComponentType.TRANSPORT_NETWORK)
-			if tn == nil or tn.edges == nil or #tn.edges == 0 then return end
-			local e = { entity = ent, index = 0 }
-			if sameEdge(e, plat.edge) then return end
-			local m = piecePos(e, 0.5)
-			local dx, dy = m.x - plat.pos.x, m.y - plat.pos.y
+-- The tracks beside the platform, one piece each, nearest first; and a note of
+-- what the search found. nil and why if the track around can't be listed.
+-- stopNode, arrivePath: the platform's own track is left out (the pieces
+-- trains come in over, and the track on from the stop as far as the next set
+-- of points: on a curve they are "to the side" of the stop too).
+local function autoRouteCandidates(plat, stopNode, arrivePath)
+	local graph = railGraphNear({ plat.pos }, AUTO_RADIUS)
+	if #graph.pieces == 0 then
+		return nil, graph.failed and ("the track around the stop could not be listed (" .. graph.failed .. ")")
+			or string.format("no track among the %d entities around the stop", graph.listed)
+	end
+	local own = { [plat.edge.entity .. ":" .. plat.edge.index] = true }
+	for _, e in ipairs(arrivePath or {}) do own[e.entity .. ":" .. e.index] = true end
+	local start = stopNode and graph.canon[nodeKey(stopNode)]
+	for _, en in ipairs(start and graph.at[start] or {}) do
+		local cur, far, total = en.piece, 3 - en.e, 0.0
+		while true do
+			own[cur.entity .. ":" .. cur.index] = true
+			total = total + cur.len
+			local nextEnds = graph.at[cur.n[far]]
+			if total > 400.0 or nextEnds == nil or #nextEnds ~= 2 then break end
+			local nxt = (nextEnds[1].piece == cur) and nextEnds[2] or nextEnds[1]
+			if nxt.piece == cur then break end
+			cur, far = nxt.piece, 3 - nxt.e
+		end
+	end
+	local perTrack, beside = {}, 0
+	for _, piece in ipairs(graph.pieces) do
+		if not own[piece.entity .. ":" .. piece.index] then
+			local mx, my = (piece.p[1].x + piece.p[2].x) / 2.0, (piece.p[1].y + piece.p[2].y) / 2.0
+			pcall(function()
+				local m = piecePos(piece, 0.5)
+				mx, my = m.x, m.y
+			end)
+			local dx, dy = mx - plat.pos.x, my - plat.pos.y
 			local along, side = dx * plat.tx + dy * plat.ty, -dx * plat.ty + dy * plat.tx
-			if math.abs(side) < AUTO_SIDE_MIN or math.abs(side) > AUTO_SIDE_MAX or math.abs(along) > AUTO_ALONG_MAX then return end
-			-- one piece per track: tracks are told apart by how far to the side they run
-			local key = (side < 0 and "L" or "R") .. tostring(math.floor(math.abs(side) / 2.5 + 0.5))
-			local c = perTrack[key]
-			if c == nil or math.abs(along) < math.abs(c.along) then perTrack[key] = { edge = e, side = side, along = along } end
-		end)
+			if math.abs(side) >= AUTO_SIDE_MIN and math.abs(side) <= AUTO_SIDE_MAX and math.abs(along) <= AUTO_ALONG_MAX then
+				beside = beside + 1
+				-- one piece per track: tracks are told apart by how far to the side they run
+				local key = (side < 0 and "L" or "R") .. tostring(math.floor(math.abs(side) / 2.5 + 0.5))
+				local c = perTrack[key]
+				if c == nil or math.abs(along) < math.abs(c.along) then
+					perTrack[key] = { edge = { entity = piece.entity, index = piece.index }, side = side, along = along }
+				end
+			end
+		end
 	end
 	local list = {}
 	for _, c in pairs(perTrack) do list[#list + 1] = c end
@@ -1344,12 +1717,12 @@ local function autoRouteCandidates(plat)
 		if math.abs(a.side) ~= math.abs(b.side) then return math.abs(a.side) < math.abs(b.side) end
 		return a.side < b.side
 	end)
-	return list
+	return list, string.format("%d track piece(s) among %d entities around the stop, %d beside the platform on %d track(s)", #graph.pieces, graph.listed, beside, #list)
 end
 
 -- Gives the loop a route by itself. True if it found one; otherwise the loop is
 -- left with no points and a hint for the card.
-local function autoRoute(loop)
+local function autoRouteNow(loop)
 	local function none(why, hint)
 		loop.waypoints = {}
 		replanLoop(loop)
@@ -1358,10 +1731,18 @@ local function autoRoute(loop)
 		logInfo("automatic route for loop", loopLabel(loop), "- none:", why)
 		return false
 	end
-	local okP, plat = pcall(stopPlatform, loop.lineEntity, loop.stopIndex)
-	if not okP or plat == nil then return none("the stop's platform track could not be read (" .. tostring(plat) .. ")") end
-	local list = autoRouteCandidates(plat)
-	if list == nil then return none("the track around the stop could not be listed") end
+	local okN, stopNode, nodeWhy = pcall(getStopNode, loop.lineEntity, loop.stopIndex)
+	if not okN or stopNode == nil then return none("the stop's track node could not be read (" .. tostring(okN and nodeWhy or stopNode) .. ")") end
+	local okA, arrive, arrivePath = pcall(arrivalPiece, loop, stopNode)
+	if not okA or arrive == nil then
+		logInfo("automatic route for loop", loopLabel(loop), "- the way trains come in is not known:", tostring(arrivePath or arrive))
+		arrive, arrivePath = nil, nil
+	end
+	local okP, plat, platWhy = pcall(stopPlatform, loop.lineEntity, loop.stopIndex, stopNode, arrive)
+	if not okP or plat == nil then return none("the stop's platform track could not be read (" .. tostring(okP and platWhy or plat) .. ")") end
+	local okC, list, found = pcall(autoRouteCandidates, plat, stopNode, arrivePath)
+	if not okC or list == nil then return none(tostring(found or list)) end
+	logInfo(string.format("automatic route for loop %s: platform track read from %s; %s", loopLabel(loop), plat.how, found))
 	if #list == 0 then
 		return none("no other track beside the platform",
 			"There's no other track beside this platform for the loco to run round on. Build a loop, or use Draw route to show a longer way round.")
@@ -1373,7 +1754,10 @@ local function autoRoute(loop)
 		replanLoop(loop)
 		if loop.routeState == "ok" and loop.backFrom ~= nil and loop.routeWarning == nil and (loop.routeReversals or 0) <= AUTO_MAX_REVERSALS then
 			local cost = (loop.routeLength or 0.0) + REVERSAL_PENALTY * (loop.routeReversals or 0)
-			if best == nil or cost < best.cost then best = { edge = list[k].edge, cost = cost, side = list[k].side } end
+			-- (of tracks that give the same route, the piece level with the stop)
+			if best == nil or cost < best.cost - 1.0 or (cost < best.cost + 1.0 and math.abs(list[k].along) < math.abs(best.along)) then
+				best = { edge = list[k].edge, cost = cost, side = list[k].side, along = list[k].along }
+			end
 		end
 	end
 	if best == nil then return none(string.format("%d track(s) beside the platform tried, none gives a run-around", tried)) end
@@ -1382,6 +1766,18 @@ local function autoRoute(loop)
 	loop.auto = true
 	logInfo(string.format("automatic route for loop %s: by the track %.1f m to the %s of the platform (%d tried)", loopLabel(loop), math.abs(best.side), best.side < 0 and "right" or "left", tried))
 	return true
+end
+
+local function autoRoute(loop)
+	planCache, planKeep = {}, true
+	local ok, res = pcall(autoRouteNow, loop)
+	planKeep = false
+	if not ok then
+		logInfo("automatic route failed for loop", loopLabel(loop), "-", tostring(res))
+		loop.routeHint = "Couldn't find a way round automatically. Use Draw route and click the track the loco should use to pass its train."
+		return false
+	end
+	return res
 end
 
 -- On the way back to the station (from piece k0, off0 metres in), the point the

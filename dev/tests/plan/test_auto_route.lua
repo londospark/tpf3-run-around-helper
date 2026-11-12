@@ -1,6 +1,10 @@
 math.atan2 = math.atan2 or math.atan
 -- The route found without being shown it, and a route from ONE click.
 --
+-- (A simple layout: one piece per stretch, and a terminal that lists its
+-- stopping place. test_auto_route_station.lua has track as the game's own
+-- stations really have it: no stopping place listed, many short pieces.)
+--
 -- A terminus platform (PLa, PLb; the stop at N6) with a run-round loop beside
 -- it (L1, Lm, L2), a headshunt each end (T, ML), a dead-end siding on the other
 -- side (S1) and a street. Trains come in from the west (ML -> PLa).

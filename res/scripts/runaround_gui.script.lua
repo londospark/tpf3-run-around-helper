@@ -49,8 +49,6 @@ function data()
 		ok = "::/gui/entity_window/icons/circle_check.tga",
 		warn = "::/gui/hud/icons/line_vehicle_warning.tga",
 		add = "::/gui/camera_tool/icons/plus19.tga",
-		expand = "::/gui/entity_window/design/collapse_down.tga",
-		collapse = "::/gui/entity_window/design/collapse_up.tga",
 	}
 
 	-- ------------------------------------------------------------------
@@ -544,7 +542,7 @@ function data()
 			if param.setExpanded ~= nil then param.setExpanded(not expanded) else own:set(not expanded) end
 		end
 		return Column({
-			IconButton(expanded and ICON.collapse or ICON.expand, expanded and "Hide options" or "Options",
+			IconButton(nil, expanded and "Hide options" or "Options",
 				"The loco's speed, which vehicle runs around, the name, and removing this run-around.", toggle, "secondary"),
 			expanded and LoopSettings{ loop = param.loop, vehicleEntity = param.vehicleEntity } or nil,
 		}, "box-plugin-vertical-space")

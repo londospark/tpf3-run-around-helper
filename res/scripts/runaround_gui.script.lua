@@ -510,14 +510,15 @@ function data()
 			Text("The loco: " .. locoText, "font-scale-body"),
 			param.vehicleEntity ~= nil and IconButton(ICON.train, "Choose a different loco", "Only needed if the wrong vehicle runs around. Each press picks the next vehicle of this train, then back to automatic.",
 				function() sendGuiCmd("CycleLocoCandidate", { loopId = loop.id, vehicleEntity = param.vehicleEntity }) end, "secondary") or nil,
-			confirmDelete:old() and Row({
+			-- (one above the other: side by side, the row was wider than the window)
+			confirmDelete:old() and Column({
 				Text("Remove this run-around? Trains will turn on the spot here again.", "font-scale-body"),
 				IconButton(nil, "Remove", "Remove it", function()
 					sendGuiCmd("RemoveLoop", { loopId = loop.id })
 					confirmDelete:set(false)
 				end, "negative"),
 				IconButton(nil, "Keep", "Keep it", function() confirmDelete:set(false) end, "secondary"),
-			}) or IconButton(ICON.trash, "Remove this run-around", "Trains of this line will turn on the spot here again", function() confirmDelete:set(true) end, "negative"),
+			}, "box-plugin-vertical-space") or IconButton(ICON.trash, "Remove this run-around", "Trains of this line will turn on the spot here again", function() confirmDelete:set(true) end, "negative"),
 		})
 	end)
 

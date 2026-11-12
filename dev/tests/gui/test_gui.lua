@@ -40,12 +40,13 @@ api = {
     getComponent = function(e, c)
       if c == "GS" then return { state = { loops = loops, runs = runs } } end
       if c == "TV" then return { line = 100, stopIndex = 0 } end
-      if c == "LINE" then return { stops = { { stationGroup = 55 } } } end
+      if c == "LINE" then return { stops = { { stationGroup = 55, station = 0, terminal = 0 } } } end
+      if c == "SG" then return { stations = { 600 } } end
       if c == "TN" then return { edges = { { geometry = { x0 = e * 1000 } }, { geometry = { x0 = e * 1000 + 500 } } } } end
     end,
     util = { getEntityName = function(e) return "Name" .. e end, transport = { calcPosition = function(g, u) return { x = g.x0 + u * 100, y = 0, z = 0 } end } },
   },
-  type = { ComponentType = { GAME_SCRIPT = "GS", TRANSPORT_VEHICLE = "TV", LINE = "LINE", TRANSPORT_NETWORK = "TN", BASE_EDGE = "BE" },
+  type = { ComponentType = { GAME_SCRIPT = "GS", TRANSPORT_VEHICLE = "TV", LINE = "LINE", STATION_GROUP = "SG", TRANSPORT_NETWORK = "TN", BASE_EDGE = "BE" },
     Vec4f = { new = function(...) return { ... } end }, Vec3f = { new = function(x, y, z) return { x = x, y = y, z = z } end },
     NodeViewerData = { new = function() return {} end } },
   gui = { spawnEphemeralHudImage = function() spawned = spawned + 1 end, byId = { setVisible = function() end },
@@ -157,6 +158,17 @@ local find = findButton(render(), "Find the route for me"); assert(find, "offere
 find.p.onClick(); assert(sent[#sent].id == "AutoRoute" and sent[#sent].p.loopId == 7)
 assert(not findButton(render(), "Show the route"), "nothing to show yet")
 loops[1].routeLength = keepLen
+-- a run-around at the same platform, set up from another line, shows here too
+-- (and is not offered again)
+local shared = { id = 8, name = "Shared", lineEntity = 999, stopIndex = 3, station = 600, terminal = 0, speed = 8, accel = 2, waypoints = {}, loopEdges = {} }
+local mine = loops[1]
+loops[1] = shared
+local t5 = render()
+assert(findCardTitle(t5) == "Run-around at Shared", "the platform's run-around shows for this line: " .. tostring(findCardTitle(t5)))
+assert(not findButton(t5, "Name55  (this train's stop)"), "not offered again")
+loops[1].terminal = 1
+assert(findCardTitle(render()) ~= "Run-around at Shared", "another platform's: not shown")
+loops[1] = mine
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

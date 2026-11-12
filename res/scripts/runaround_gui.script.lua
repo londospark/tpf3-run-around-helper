@@ -586,21 +586,38 @@ function data()
 		local line, stop = vehicleLineAndStop(vehicleEntity)
 		if line == nil or line < 0 then return Column({}) end
 
+		-- The line's stops and their platforms (station and terminal). A
+		-- run-around belongs to a platform, so it shows for every line that
+		-- stops there; one saved before that, for the line and stop it was set
+		-- up for.
+		local stops, places = {}, {}
+		pcall(function()
+			local l = api.engine.getComponent(line, api.type.ComponentType.LINE)
+			for i = 1, #l.stops do
+				stops[#stops + 1] = i - 1
+				pcall(function()
+					local st = l.stops[i]
+					local group = api.engine.getComponent(st.stationGroup, api.type.ComponentType.STATION_GROUP)
+					places[i - 1] = { station = group.stations[st.station + 1], terminal = st.terminal }
+				end)
+			end
+		end)
 		local cards = {}
 		local taken = {}
 		for _, loop in ipairs(state.loops) do
-			if loop.lineEntity == line then
-				cards[#cards + 1] = LoopCard(loop, state, params, vehicleEntity)
-				taken[loop.stopIndex] = true
+			local at = nil
+			for _, sIdx in ipairs(stops) do
+				local p = places[sIdx]
+				if (loop.station ~= nil and p ~= nil and p.station == loop.station and p.terminal == loop.terminal)
+					or (loop.station == nil and loop.lineEntity == line and loop.stopIndex == sIdx) then
+					at = at or sIdx
+					taken[sIdx] = true
+				end
 			end
+			if at ~= nil then cards[#cards + 1] = LoopCard(loop, state, params, vehicleEntity) end
 		end
-		-- "Add a run-around at <station>" for every stop of the line without one,
-		-- the stop the train is at first.
-		local stops = {}
-		pcall(function()
-			local l = api.engine.getComponent(line, api.type.ComponentType.LINE)
-			for i = 1, #l.stops do stops[#stops + 1] = i - 1 end
-		end)
+		-- "Set up at <station>" for every stop of the line without one, the stop
+		-- the train is at first.
 		table.sort(stops, function(a, b) return (a == stop) and b ~= stop end)
 		local addButtons = {}
 		for _, s in ipairs(stops) do

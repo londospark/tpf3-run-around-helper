@@ -72,7 +72,9 @@ run-arounds set up is safe too: trains then flip as normal.
 
 ## The Run-around card
 
-In the train window, one card per run-around on the train's line.
+In the train window, one card for each run-around at a platform the train's
+line stops at. The station window shows the run-arounds at its platforms too
+(set them up from a train's window: the way trains come in matters).
 
 - **The route, in a sentence**: *Ready*, with how far the loco goes and about
   how long it takes; or a warning (the route goes through the train, or comes
@@ -95,6 +97,8 @@ In the train window, one card per run-around on the train's line.
     the train. Automatic picks the loco at whichever end of the train has one
     (a vehicle with an engine, never a coach or wagon). **Choose a different
     loco** is only needed if the wrong vehicle runs around.
+  - **Run around on this line / Don't run around on this line**: whether this
+    train's line runs around here. Other lines aren't affected.
   - **Remove this run-around**: asks for confirmation first.
 - **Set up another at...**: buttons for the line's other stops.
 
@@ -172,12 +176,11 @@ A train is never left stuck or broken by a run-around:
   train leaves the normal way, and the card says why. The same happens if the
   route would set off towards the train's own coaches (check the first
   points).
-- **Run-arounds belong to a line and a stop, not to a train.** Every train on
-  the line does it there, clones included. A train moved to another line only
-  does it where that line has its own run-around.
-- **Stop numbers:** a run-around remembers its stop by its position in the line.
-  If you insert or remove stops earlier in the line, check it still points at
-  the right station.
+- **Run-arounds belong to a platform, not to a train or a line.** Every train
+  of every line that stops at that platform runs around there, clones
+  included, and editing a line's stops doesn't move it. To have one line's
+  trains turn as usual there, open one of its trains, then **Options** →
+  **Don't run around on this line**.
 
 ### The coaches stay put
 

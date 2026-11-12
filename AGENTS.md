@@ -318,9 +318,18 @@ descriptor like `runaround_vehicle.res.lua` with
 `type = "react-plugin ::StationGroupEowExtensionPoint"` should work.
 `LineEowExtensionPoint` exists too (for the per-line switch).
 
-Slices planned: data model (station, terminal) with a one-time conversion of
-line + stop loops; arrivals matched by the stop's station and terminal; the
-station card; the per-line switch; the train window's read-only line.
+**Done (2026-11-12, offline-tested):** `stopPlace`, `findLoopForArrival` by
+station + terminal (line + stop for a run-around whose platform can't be
+read), `placeLoop` converting old run-arounds in `ensureData` (logged once:
+`now belongs to its platform`), one per platform in `AddLoopAtStop`; the
+repeat-arrival record uses the train's own line (`run.arrivedLine`); the train
+window lists by platform; `loop.skipLines` and `SetLineRunsAround` (the
+per-line switch, in the train window's options); the station card
+(`runaround_station.res.lua`, `RunAroundHelperStationPlugin`, view only).
+Tests: `test_platform.lua`, `test_gui.lua`.
+**To confirm live:** the station window shows the card; an old run-around logs
+`now belongs to its platform`; a second line at the platform runs around
+there; the switch stops it.
 
 ### Left to do on this branch
 
@@ -570,11 +579,10 @@ there, the game loaded the mod under a different ID from `mod.json`'s (see M3).
 
 These are documented in the README:
 
-- One loco plus coaches or wagons. No multiple units or double-heading.
+- One loco plus coaches or wagons. Multiple units and trains with more than
+  one powered vehicle are refused (branch `static-coaches-friendly-ui`).
 - The running loco ignores signals and reservations.
-- Run-arounds belong to line plus stop **index**: inserting stops earlier in a
-  line breaks them. Following the station instead was offered to the owner but
-  not decided.
+- (On the branch: run-arounds belong to a platform, see above.)
 - Wheel radius is assumed to be 0.9 m.
 - Modded vehicles with their own transformator or sound set can't be hidden or
   driven as themselves. They use copies; such coaches stay in view (simple
@@ -591,4 +599,5 @@ These are documented in the README:
    their video.
 3. Add a chapter on the hidden-coach technique to the modding guide (new source
    needed, see above).
-4. Later: loops keyed by station rather than stop index; multiple units.
+4. Later: setting a run-around up from the station window (needs a line to
+   plan from: which way trains come in).

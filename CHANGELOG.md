@@ -14,6 +14,11 @@
   a turned train's middle fixed, so the real train, out of sight, makes up
   that loco length as it departs, at a crawl, and is shown again under its
   copies. NOT YET SEEN IN THE GAME: tested offline only.
+- **Run-arounds belong to a platform.** Every line stopping there shares it,
+  editing a line's stops no longer moves it to another station, and a line can
+  be switched off (**Options** → **Don't run around on this line**). The
+  station window shows them too. Run-arounds from earlier versions move to
+  their platform by themselves.
 - Multiple units, and trains with more than one loco or powered car, no
   longer run around: they turn as usual, and the card says why.
 - The train now loads at the run-around stop before it leaves. (It was told

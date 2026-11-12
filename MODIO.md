@@ -45,7 +45,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 
 <h2>How to set up a run-around</h2>
 <ol>
-<li><strong>Open a train's window.</strong> Pick any train on the line. It has a new <strong>Run-around</strong> card.</li>
+<li><strong>Open the station's window, or a train's.</strong> Either has a new <strong>Run-around</strong> card. In the station window, pick the platform; in a train's window, the station.</li>
 <li><strong>Add a run-around.</strong> The card lists the stops of that line, with the one the train is at first. Click the station where the loco should run around.</li>
 <li><strong>The route is found for you.</strong> The mod looks for a track beside the platform that the loco can use to pass its train, and works out the whole way round. The card then says <strong>Ready</strong>, with how far the loco goes and about how long it takes.</li>
 <li><strong>If it couldn't find one, or you want another way,</strong> click <strong>Draw the route</strong> and click the track the loco should use to pass its train: usually the loop beside the platform. One click is often enough. You don't click every piece of track or the reversing spots. Right-click, Esc or <strong>Done drawing</strong> when finished.</li>

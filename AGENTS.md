@@ -280,6 +280,30 @@ the route as a sentence with distance and time (`routeLine`, `tripTime`);
 Ready to leave` and `Leaving` (`DEPART_STAGES`); options in words (pace
 gently/normally/briskly = 1.0/2.0/3.5 m/s2 on a 3-step slider).
 
+### Next: run-arounds belong to the platform (agreed with the owner 2026-11-11)
+
+After the two live fixes (automatic routes; arrows not clipping, done) and a
+live test of this branch. A run-around becomes a property of a station
+platform (station + terminal), not of line + stop index: it survives line
+edits and is shared by every line using the platform. Each line has an on/off
+switch (on by default). The train window keeps a read-only line.
+
+**Checked in the game's code (2026-11-12):** the station window can take a
+mod's card. `gui/entity_window/station_group/station_group_eow.script.tl`
+registers `StationGroupEowExtensionPoint` (the game puts no plugins of its own
+on it), and `station_group.tl` (line ~871) draws its plugins with
+`gui_react_util.usePlugins`, after the notifications, before the waiting halls
+and terminals. A plugin gets `entityId` (the station GROUP), `gameCtx`,
+`showCalloutOnRightSide`, `setCollapsibleExpanded`, `getCollapsibleExpanded`,
+`ownershipState`: the same shape as the train window's. So a second
+descriptor like `runaround_vehicle.res.lua` with
+`type = "react-plugin ::StationGroupEowExtensionPoint"` should work.
+`LineEowExtensionPoint` exists too (for the per-line switch).
+
+Slices planned: data model (station, terminal) with a one-time conversion of
+line + stop loops; arrivals matched by the stop's station and terminal; the
+station card; the per-line switch; the train window's read-only line.
+
 ### Left to do on this branch
 
 - The live checks above, then merge or drop.

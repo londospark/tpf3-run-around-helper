@@ -44,7 +44,7 @@ local CONFIG = {
 	-- Log every vehicle arrival (vehicle/line/stop ids).
 	LOG_ARRIVALS = true,
 	-- Log carriage positions around each step of a run (for layout problems).
-	LOG_TRACES = true,
+	LOG_TRACES = false,
 	-- Kill switch for the whole run-around.
 	detachEnabled = true,
 	-- Flip the train (the game's own reverse command) before putting the loco back,

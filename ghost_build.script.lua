@@ -592,23 +592,11 @@ local function partsSpecs(src, animate)
 	if animate ~= nil then pcall(animateParts, lodNodes, animate == "all") end
 	return out, frame or nil
 end
-local partsLogged = 0
 local function addPartsParams(tc, src, modelName)
 	if type(tc) ~= "table" then return end
 	-- (turns and spins on every rail vehicle: the loco copy's tender and bogies
 	-- follow the route, the coach copies' bogies the platform's curve)
 	local ok, specs, frame = pcall(partsSpecs, src, "all")
-	-- (logged for the first steam locos: what the game handed over, and what came of it)
-	local snd = src.metadata and src.metadata.soundConfig and src.metadata.soundConfig.soundSet and src.metadata.soundConfig.soundSet.name
-	if partsLogged < 3 and type(snd) == "string" and string.find(snd, "steam", 1, true) then
-		partsLogged = partsLogged + 1
-		local counts = {}
-		for _, spec in ipairs(ok and specs or {}) do counts[#counts + 1] = string.match(spec, "^(%d+ %d+ %d+)") end
-		local root = type(src.lods) == "table" and type(src.lods[1]) == "table" and src.lods[1].node or nil
-		log("loco parts:", tostring(modelName), "- lods:", type(src.lods) == "table" and #src.lods or type(src.lods),
-			"first root:", type(root) == "table" and tostring(root.name) or type(root),
-			"- specs (nodes placed axles):", ok and (#counts > 0 and table.concat(counts, ", ") or "none") or ("error " .. tostring(specs)))
-	end
 	if not ok or #specs == 0 then return end
 	if type(tc.params) ~= "table" then tc.params = {} end
 	for i, spec in ipairs(specs) do tc.params["runaround_parts" .. i] = spec end
@@ -636,16 +624,6 @@ local function plainParams(p)
 	end
 	return any and out or nil
 end
-local paramsLogged = 0
-local function logParams(modelName, raw, plain)
-	if paramsLogged >= 6 then return end
-	paramsLogged = paramsLogged + 1
-	local n = 0
-	for _ in pairs(plain or {}) do n = n + 1 end
-	log("loco params at setup:", tostring(modelName), "- given as", type(raw), "with", n, "entries; parts spec:",
-		(plain and plain.runaround_parts1) and "yes" or "NO", "; devers rest poses:", (plain and plain.devers_rest1) and "yes" or "no")
-end
-
 -- Points a vehicle with another transformator at the chaining one, keeping the
 -- original's name (and any params it already has) for ghost_real to call. False
 -- and why when it isn't chained.
@@ -684,7 +662,6 @@ local function patchLoco(modelId, modelName, src)
 	if type(md.transformatorConfig) == "table" then
 		local raw = md.transformatorConfig.params
 		md.transformatorConfig.params = plainParams(raw)
-		if type(soundName) == "string" and string.find(soundName, "steam", 1, true) then logParams(modelName, raw, md.transformatorConfig.params) end
 	end
 	if trfOk then
 		md.transformatorConfig.transformator.name = wrappedTrf

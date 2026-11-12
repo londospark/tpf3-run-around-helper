@@ -215,7 +215,6 @@ end
 local YAW_MS_PER_DEG, SPIN_MS_PER_DEG = 100, 10
 local SPIN_OFFSET_DEG = 360000 -- (a thousand turns, so that the frame stays positive going backwards)
 local copyReported = false
-local lastPartsLog = nil
 local function placeParts(params, st, transfsOutput, signedDist)
 	local tcp = params.transformatorConfigParams
 	local okS, s = pcall(function() return tcp.runaround_parts1 end)
@@ -226,7 +225,6 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	local tr = st.track
 	local trackKnown = tr ~= nil and type(tr.pts) == "table" and #tr.pts >= 4 and tr.ds and tr.ds > 0
 	local turned = 0
-	local turns = {}
 	if trackKnown then
 		-- Each part as drawn: a rotation (c, s) and a shift, from the model into
 		-- the copy's frame. A part turns about its pivot, carried with the part it
@@ -257,7 +255,6 @@ local function placeParts(params, st, transfsOutput, signedDist)
 			local rc, rs = c * q[1] - sn * q[2], sn * q[1] + c * q[2]
 			local ox, oy = q[3] - cx, q[4] - cy
 			drawn[g.idx] = { rc, rs, c * ox - sn * oy + cx, sn * ox + c * oy + cy }
-			turns[#turns + 1] = string.format("%.2f", deg)
 			transfsOutput:addAnimationState("runaround_yaw" .. j, -1, 1 + (deg + g.range) * YAW_MS_PER_DEG, false, false)
 			turned = turned + 1
 		end
@@ -269,14 +266,6 @@ local function placeParts(params, st, transfsOutput, signedDist)
 	if not copyReported and trackKnown then
 		copyReported = true
 		print("[RunAroundHelper] loco copy parts: turning " .. turned .. " part(s) and " .. #spec.axles .. " axle(s) by animation")
-	end
-	local now = params.currentInfo.world and params.currentInfo.world.gameTime
-	if trackKnown and now ~= nil and (lastPartsLog == nil or now - lastPartsLog > 3000 or now < lastPartsLog) then
-		lastPartsLog = now
-		-- (the track's turn from 8 m behind the copy's origin to 8 m ahead: + is to the left)
-		local bend = math.deg(trackYaw(tr, 9, 7) - trackYaw(tr, -7, -9))
-		print(string.format("[RunAroundHelper] loco copy parts: track bends %.1f deg (%s) over 16 m; parts turned %s deg",
-			bend, bend > 0.05 and "left" or (bend < -0.05 and "right" or "straight"), table.concat(turns, ", ")))
 	end
 end
 

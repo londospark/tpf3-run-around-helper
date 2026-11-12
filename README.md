@@ -260,7 +260,7 @@ Useful log lines:
 | `ghost model: using the loco's OWN model` | the loco runs around as itself |
 | `ghost first step N m from where the loco stood` | should be about 0 |
 | `ghost rake: ...` | the coaches shown as copies, the pull forward (how far, and how much the coaches turn on a curved platform; the loco ghost should be about 0 m from where it would be coupled) and the uncouple |
-| `trace ...` | carriage positions at each step (set `LOG_TRACES = false` to silence) |
+| `trace ...` | carriage positions at each step (off unless `LOG_TRACES = true`; turn it on when reporting a layout problem) |
 | `recouple FAILED ... try N ... train held` | the loco couldn't be put back on; it is tried again (`STUCK` after a few tries) |
 | `watchdog: ...` | a run stalled, or its train went, and was given up |
 | `train put back as it was ...` | a run couldn't start and the train was restored |
@@ -292,7 +292,7 @@ These are in the files, for tinkering. Most people won't need them.
 | `verifyFacing` | `true` | check the loco's facing after coupling, and correct it |
 | `watchdogFactor`, `watchdogExtraSeconds` | `3`, `60` | a run taking longer than factor × route ÷ speed + extra seconds is given up and the train put back |
 | `recoupleRetries`, `recoupleRetrySeconds`, `stuckRetrySeconds` | `3`, `1`, `30` | a refused recouple is retried this many times this far apart, then every `stuckRetrySeconds` |
-| `LOG_ARRIVALS`, `LOG_TRACES` | `true` | logging |
+| `LOG_ARRIVALS`, `LOG_TRACES` | `true`, `false` | logging: every arrival, and carriage positions at each step |
 
 `ghost_build.script.lua`: set `PATCH_LOCOS = false` to leave every loco
 untouched. Only the copies are then used.

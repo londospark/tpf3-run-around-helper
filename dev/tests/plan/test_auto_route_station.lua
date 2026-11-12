@@ -142,13 +142,13 @@ api = {
   engine = {
     getComponent = function(entity, ct)
       if ct == "TN" then
-        if entity >= 9000 then return { edges = { { conns = { nid(entity + 1000), nid(entity + 2000) }, geometry = { street = true } } } } end
+        if entity >= 9000 then return { edges = { { conns = { nid(entity + 1000), nid(entity + 2000) }, geometry = { street = true }, transportModes = { CAR = true, PERSON = true } } } } end
         local d = edges[entity]
-        return d and { edges = { { conns = { nid(d[1]), nid(d[2]) }, geometry = { e = entity } } } } or nil -- (a node's entity has no pieces of its own)
+        return d and { edges = { { conns = { nid(d[1]), nid(d[2]) }, geometry = { e = entity }, transportModes = { TRAIN = true } } } } or nil -- (a node's entity has no pieces of its own)
       end
       if ct == "BES" then return entity >= 9000 and {} or nil end
       -- a junction knows where it is (the decoys, streets and footpaths, are not asked for)
-      if ct == "BN" then local p = nodes[entity] or LANES[entity - 30000]; return p and { position = { x = p[1], y = p[2], z = 0 } } or nil end
+      if ct == "BN" then local p = nodes[entity] or LANES[entity - 30000] or (netData and entity > 20000 and entity <= 20600 and { -300 + (entity - 20000) * 1.5, 0 } or nil); return p and { position = { x = p[1], y = p[2], z = 0 } } or nil end
       if ct == "LINE" then return { stops = stops } end
       if ct == "SG" then return { stations = { entity + 100 } } end
       -- as the game's stations are: a stop node, a waiting area, and an EMPTY list of stopping places
@@ -190,6 +190,7 @@ api = {
       return { getNodeData = function(_, node)
         local ports = {}
         for _, e in ipairs(byNode[node.entity] or {}) do ports[#ports + 1] = { edgeId = { entity = e, index = 0 } } end
+        if node.entity > 20000 and node.entity <= 20600 then ports[1] = { edgeId = { entity = 9001, index = 0 } } end -- a street or path node
         return { ports = ports }
       end }
     end } },
@@ -299,5 +300,25 @@ M.replan(loop)
 assert(loop.routeState == "ok" and loop.routeReversals == 2 and loop.routeWarning == nil and loop.backFrom ~= nil, "one click: " .. fmt(loop) .. " / " .. tostring(loop.routeWarning) .. showLog())
 assert(logged("on the platform's line and"), "the ranking is logged" .. showLog())
 print("track can't be listed, ONE click:", fmt(loop))
+-- 7. The network's own data says which nodes are track: the street and path
+-- nodes (here lying right along the platform's line) are left out before any
+-- is tried, and none reaches the pathfinder.
+log = {}; LOG = log
+netData = true
+local asked = 0
+local fp = api.engine.util.pathfinding.findPathNodeToNode
+api.engine.util.pathfinding.findPathNodeToNode = function(a, b, m)
+  if b[1].entity > 20000 and b[1].entity <= 20600 then asked = asked + 1 end
+  return fp(a, b, m)
+end
+loop = newLoop()
+loop.waypoints = { { entity = LOOP + 8, index = 0 } }
+M.replan(loop)
+api.engine.util.pathfinding.findPathNodeToNode = fp
+assert(loop.routeState == "ok" and loop.routeReversals == 2 and loop.routeWarning == nil, "one click, network data read: " .. fmt(loop) .. showLog())
+assert(logged("600 street or path node(s) left out"), "the street and path nodes are left out" .. showLog())
+assert(asked == 0, asked .. " street or path node(s) were tried as reversing places")
+print("street and path nodes left out:", fmt(loop))
+netData = false
 listEdges = true
 print("auto route (station) ok")

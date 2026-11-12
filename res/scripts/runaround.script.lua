@@ -1038,6 +1038,34 @@ local function trackNodePos(nd)
 	return nil
 end
 
+-- Whether a train can use a node: true if an edge at it allows TRAIN (or
+-- ELECTRIC_TRAIN), false if none does (a street or footpath node), nil if that
+-- can't be read. The network's own edges say (Edge.transportModes), and a node's
+-- edges are its ports (getNodeData, as the game's line code reads them).
+local function isRailNode(nd)
+	local modes = api.type.enum.TransportMode
+	local ok, rail = pcall(function()
+		local data = api.engine.system.transportNetworkSystem.getTpNetData():getNodeData(nd)
+		local seen = false
+		for i = 1, #data.ports do
+			local edge = data.ports[i].edgeId
+			local te = getTnEdge(edge.entity, edge.index)
+			local tm = te and te.transportModes
+			if tm ~= nil then
+				seen = true
+				if tm[modes.TRAIN] or tm[modes.ELECTRIC_TRAIN] then return true end
+				for m, on in pairs(tm) do
+					if on and (m == modes.TRAIN or m == modes.ELECTRIC_TRAIN or tostring(m) == tostring(modes.TRAIN) or tostring(m) == tostring(modes.ELECTRIC_TRAIN)) then return true end
+				end
+			end
+		end
+		if seen then return false end
+		return nil
+	end)
+	if ok then return rail end
+	return nil
+end
+
 -- A place to reverse is nearly always on the track running straight on from
 -- the platform, past the points at either end. So, when the points themselves
 -- can't be told (seen live: no junction found among the station's pieces),
@@ -1053,7 +1081,16 @@ local CUSP_ON_LINE, CUSP_CORRIDOR, CUSP_PAST, CUSP_STEP = 3.0, 30.0, 20.0, 10.0
 local function rankAlongPlatform(nodes)
 	if planAxis == nil then return nodes, nil end
 	local tiers, rest, read = { {}, {} }, {}, { junction = 0, track = 0, none = 0 }
+	local kinds = { rail = 0, other = 0, unknown = 0 }
+	local railOnly = {}
 	for _, nd in ipairs(nodes) do
+		-- streets and footpaths can't be reversing places: left out
+		local rail = isRailNode(nd)
+		kinds[rail == true and "rail" or (rail == false and "other" or "unknown")] = kinds[rail == true and "rail" or (rail == false and "other" or "unknown")] + 1
+		if rail ~= false then railOnly[#railOnly + 1] = { nd = nd, rail = rail == true } end
+	end
+	for _, r in ipairs(railOnly) do
+		local nd = r.nd
 		local p, how = trackNodePos(nd)
 		read[how or "none"] = read[how or "none"] + 1
 		local placed = false
@@ -1064,10 +1101,15 @@ local function rankAlongPlatform(nodes)
 			if side <= CUSP_CORRIDOR and math.abs(along) >= CUSP_PAST then
 				local t = tiers[side <= CUSP_ON_LINE and 1 or 2]
 				local bin = (along < 0 and "-" or "+") .. tostring(math.floor(math.abs(along) / CUSP_STEP))
+				-- one per step: known track before unknown, then nearest the line
 				local have = t[bin]
-				if have == nil or side < have.side then t[bin] = { nd = nd, d = math.abs(along), side = side } end
-				if have ~= nil and side >= have.side then rest[#rest + 1] = nd end
-				if have ~= nil and side < have.side then rest[#rest + 1] = have.nd end
+				local better = have == nil or (r.rail and not have.rail) or (r.rail == have.rail and side < have.side)
+				if better then
+					t[bin] = { nd = nd, d = math.abs(along), side = side, rail = r.rail }
+					if have ~= nil then rest[#rest + 1] = have.nd end
+				else
+					rest[#rest + 1] = nd
+				end
 				placed = true
 			end
 		end
@@ -1082,8 +1124,8 @@ local function rankAlongPlatform(nodes)
 		for _, v in ipairs(list) do out[#out + 1] = v.nd end
 	end
 	for _, nd in ipairs(rest) do out[#out + 1] = nd end
-	return out, string.format("%d on the platform's line and %d beside it past its ends, one per %d m (positions read: %d junction, %d track, %d not)",
-		counts[1], counts[2], CUSP_STEP, read.junction, read.track, read.none)
+	return out, string.format("%d track node(s), %d street or path node(s) left out, %d not known; %d on the platform's line and %d beside it past its ends, one per %d m (positions read: %d junction, %d track, %d not)",
+		kinds.rail, kinds.other, kinds.unknown, counts[1], counts[2], CUSP_STEP, read.junction, read.track, read.none)
 end
 
 local function cuspCandidates(centres)

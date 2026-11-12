@@ -80,6 +80,7 @@
         "res/scripts/runaround.gs.lua",
         "res/scripts/runaround.script.lua",
         "res/scripts/runaround_gui.script.lua",
+        "res/scripts/runaround_station.res.lua",
         "res/scripts/runaround_vehicle.res.lua"
     ]
 }

@@ -34,6 +34,11 @@ function data()
 		print("[RunAroundHelper] no vehicle window extension point:", vehicle_eow)
 		vehicle_eow = nil
 	end
+	local okSg, station_group_eow = pcall(function() return ug_require "::/gui/entity_window/station_group/station_group_eow.script.tl" end)
+	if not okSg then
+		print("[RunAroundHelper] no station window extension point:", station_group_eow)
+		station_group_eow = nil
+	end
 
 	local V = builtin.type.Orientation.Vertical
 	local H = builtin.type.Orientation.Horizontal
@@ -447,10 +452,10 @@ function data()
 					function() sendGuiCmd("AutoRoute", { loopId = loop.id }) end, "primary") or nil,
 				IconButton(ICON.edit, editing and "Done drawing" or "Draw the route",
 					"Click the track the loco should use to pass its train. The rest of the way round, and where it reverses, is worked out for you.",
-					function() toggleRouteTool(loop.id, true, param.vehicleEntity) end, editing and "primary" or "secondary"),
+					function() toggleRouteTool(loop.id, true, param.windowEntity or param.vehicleEntity) end, editing and "primary" or "secondary"),
 				loop.routeLength ~= nil and IconButton(ICON.eye, viewing and "Hide the route" or "Show the route",
 					"Draws the loco's way round on the track: blue where it sets off, orange where it couples on, purple where it reverses.",
-					function() toggleRouteTool(loop.id, false, param.vehicleEntity) end, "secondary") or nil,
+					function() toggleRouteTool(loop.id, false, param.windowEntity or param.vehicleEntity) end, "secondary") or nil,
 			}),
 		}
 		if editing then
@@ -558,8 +563,10 @@ function data()
 		}, "box-plugin-vertical-space")
 	end)
 
-	local function LoopCard(loop, st, params, vehicleEntity)
-		local summary = LoopSummary{ loop = loop, runs = st.runs, vehicleEntity = vehicleEntity }
+	-- windowEntity: the window the card is in, shown again after the route tool
+	-- shelves it (the train's, or the station group's)
+	local function LoopCard(loop, st, params, vehicleEntity, windowEntity)
+		local summary = LoopSummary{ loop = loop, runs = st.runs, vehicleEntity = vehicleEntity, windowEntity = windowEntity }
 		if content_card == nil or params == nil then
 			return Card(loopName(loop), summary, LoopSettings{ loop = loop, vehicleEntity = vehicleEntity })
 		end
@@ -659,6 +666,46 @@ function data()
 		return Column(cards, "box-plugin-vertical-space")
 	end)
 
+	-- ------------------------------------------------------------------
+	-- Station window card: the run-arounds at this station's platforms. Setting
+	-- one up stays in a train's window (planning needs a line: which way its
+	-- trains come in).
+	-- ------------------------------------------------------------------
+	local StationPanel = react.RegisterRecipe("RunAroundStationPanel", function(params)
+		local groupEntity = params.entityId
+		local st = react.useState(readState())
+		local tick = react.useRef(0)
+		react.onStep(function()
+			tick:set(tick:get() + 1)
+			if tick:get() % 10 == 0 then st:set(readState()) end
+		end)
+		local state = st:old() or { loops = {}, runs = {} }
+		local stations = {}
+		pcall(function()
+			local g = api.engine.getComponent(groupEntity, api.type.ComponentType.STATION_GROUP)
+			for i = 1, #g.stations do stations[g.stations[i]] = true end
+		end)
+		local cards = {}
+		for _, loop in ipairs(state.loops) do
+			if loop.station ~= nil and stations[loop.station] then
+				cards[#cards + 1] = LoopCard(loop, state, params, nil, groupEntity)
+			end
+		end
+		if #cards == 0 then return Column({}) end
+		cards[#cards + 1] = Text("To set up another run-around here, open the window of a train that stops at the platform.", "font-scale-annotation")
+		return Column(cards, "box-plugin-vertical-space")
+	end)
+
+	local RunAroundHelperStationPlugin = nil
+	if station_group_eow ~= nil then
+		local ok, recipe = pcall(function()
+			return react.RegisterPluginRecipe(station_group_eow.StationGroupEowExtensionPoint, "RunAroundHelperStationPlugin", function(params)
+				return Column({ StationPanel(params) })
+			end)
+		end)
+		if ok then RunAroundHelperStationPlugin = recipe else print("[RunAroundHelper] station window plugin failed:", recipe) end
+	end
+
 	local RunAroundHelperVehiclePlugin = nil
 	if vehicle_eow ~= nil then
 		local ok, recipe = pcall(function()
@@ -675,5 +722,6 @@ function data()
 
 	return {
 		RunAroundHelperVehiclePlugin = RunAroundHelperVehiclePlugin,
+		RunAroundHelperStationPlugin = RunAroundHelperStationPlugin,
 	}
 end

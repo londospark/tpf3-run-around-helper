@@ -27,6 +27,7 @@ local modules = {
   ["::/gui/main/mod_entry_point.tl"] = { ModEntryPointExtension = {} },
   ["::/gui/main/content_card.tl"] = content_card,
   ["::/gui/entity_window/vehicle/vehicle_eow.script.tl"] = { VehicleEowExtensionPoint = {} },
+  ["::/gui/entity_window/station_group/station_group_eow.script.tl"] = { StationGroupEowExtensionPoint = {} },
   ["::/gui/main/game_react_globals.tl"] = { getDefaultToolStackApi = function() return toolStack end },
   ["::/gui/main/color_util.tl"] = { toVec4 = function() return {} end, withTransparency = function() return {} end },
 }
@@ -183,6 +184,18 @@ assert(findText(renderOpen(), "Trains of this line turn as usual here."), "switc
 local back = findButton(renderOpen(), "Run around on this line"); assert(back, "and can be switched back")
 back.p.onClick(); assert(sent[#sent].p.on == true)
 loops[1].skipLines = nil
+-- the station window: the run-arounds at its platforms, and how to set up another
+assert(exports.RunAroundHelperStationPlugin, "station window plugin registered")
+local sh = { id = 9, name = "AtStation", lineEntity = 999, stopIndex = 0, station = 600, terminal = 0, speed = 8, accel = 2, waypoints = {}, loopEdges = {} }
+local keepLoop = loops[1]
+loops[1] = sh
+local stw = exports.RunAroundHelperStationPlugin({ entityId = 55, gameCtx = {} })
+assert(findCardTitle(stw) == "Run-around at AtStation", "the platform's run-around in the station window: " .. tostring(findCardTitle(stw)))
+assert(findText(stw, "To set up another run-around here, open the window of a train that stops at the platform."), "how to set up another")
+assert(not findButton(stw, "Don't run around on this line"), "no per-line switch without a train")
+loops[1].station = 601
+assert(findCardTitle(exports.RunAroundHelperStationPlugin({ entityId = 55, gameCtx = {} })) == nil, "another station's: nothing")
+loops[1] = keepLoop
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

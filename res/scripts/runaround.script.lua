@@ -80,6 +80,9 @@ local CONFIG = {
 	creepSpeed = 2.5,        -- m/s: the hidden train's speed limit while it moves up
 	creepFinalSpeed = 0.35,  -- m/s: over the last creepFinalMetres, to stop to the centimetre
 	creepFinalMetres = 1.2,
+	-- If the released train hasn't moved after this long (seconds), it is told
+	-- to leave (a safety net: it should load and leave as its line says).
+	departNudgeSeconds = 600,
 	alignSpeed = 0.4,        -- m/s: the copies easing onto the real train if it stopped a little off
 	uncouplePause = 2.5,  -- seconds the train stands before the loco uncouples and sets off
 	-- Once the loco is back on, check its real facing against the ghost's and
@@ -3052,8 +3055,10 @@ advanceDepart = function(run, dt)
 		D.final = math.max(math.min(CONFIG.creepFinalSpeed / top, 1.0) * scale0, 0.001)
 		run.speedScale0 = scale0
 		D.capped = setSpeedScale(run.vehicleEntity, D.cruise)
+		-- (released only: the game then loads it and lets it leave as its line
+		-- says. Not makeVehicleTryToDepartCmd, which closes the doors and leaves
+		-- at once: seen live, "left after 2 s" and nobody boarded)
 		releaseTrain(run.vehicleEntity)
-		pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end)
 		logInfo(string.format("coupled on (as copies). The hidden train is let go: it loads and leaves as its line says, and moves up %.1f m to its copies at %.1f m/s%s",
 			R.pullLen or 0.0, CONFIG.creepSpeed, D.capped and "" or " (its speed could NOT be limited: it is stopped as near as can be, and the copies ease onto it)"))
 		return false
@@ -3085,6 +3090,11 @@ advanceDepart = function(run, dt)
 		if D.stage == "await" and moved > 0.05 then
 			D.stage = "creep"
 			logInfo(string.format("moving up: the hidden train has left after %.0f s", D.t))
+		end
+		if D.stage == "await" and not D.nudged and D.t > CONFIG.departNudgeSeconds then
+			D.nudged = true
+			logInfo(string.format("moving up: the hidden train hasn't left after %.0f s - telling it to leave", D.t))
+			pcall(function() api.cmd.sendCommand(api.cmd.makeVehicleTryToDepartCmd(run.vehicleEntity)) end)
 		end
 		if D.stage == "creep" then
 			local brake = math.max(run.trainBrake or 1.0, 0.1)

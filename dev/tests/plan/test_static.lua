@@ -216,7 +216,7 @@ assert(hidden == 0, "nothing left hidden")
 assert(logged("moves up 12.8 m"), "says how far")
 local departs = 0
 for _, c in ipairs(sent) do if c.kind == "depart" then departs = departs + 1 end end
-assert(departs == 1, "sent on its way once (at the release), not again from where it was stopped: " .. departs)
+assert(departs == 0, "never told to leave at once: it loads and leaves as its line says, got " .. departs)
 -- the train carries on from there
 for _ = 1, 50 do tick(0.1) end
 assert(train.v > 1.0 and train.mid > 12.8, "it drives on")
@@ -285,5 +285,12 @@ local hid7 = 0
 for _, p in ipairs(train.parts) do if math.abs(p.part.color.x - 0.1234567) < 1e-6 then hid7 = hid7 + 1 end end
 assert(hid7 == 0, "shown again")
 say(string.format("wrong way: stopped %.1f m from the stop, shown again there\n", math.abs(train.mid)))
+-- 8. A train that never leaves by itself is told to, after departNudgeSeconds.
+fresh({ dwell = 1e9 })
+local _, t8 = runOut(1.0, 2000)
+local nudged = 0
+for _, c in ipairs(sent) do if c.kind == "depart" then nudged = nudged + 1 end end
+assert(nudged == 1 and logged("hasn't left after"), "nudged once: " .. nudged)
+say(string.format("a train that won't leave: told to after %.0f s\n", M.CONFIG.departNudgeSeconds))
 print = nil
 say("static ok\n")

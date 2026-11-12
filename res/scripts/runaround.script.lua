@@ -826,6 +826,9 @@ end
 -- trying as reversing places whatever the searches below find (the line's way
 -- into the stop: the way back onto the train from behind reverses on it).
 local planNotes, planNoteSeen, planCache, planHints = {}, {}, {}, {}
+-- the platform's line for this plan: where the stop is and the way trains come
+-- in ({ x, y, tx, ty }), or nil; for ranking reversing places (cuspCandidates)
+local planAxis = nil
 local planKeep = false -- several plans in a row over the same track (the automatic route): what was read is kept
 local function planNote(text)
 	if planNoteSeen[text] or #planNotes >= 12 then return end
@@ -834,6 +837,7 @@ local function planNote(text)
 end
 local function resetPlan()
 	planNotes, planNoteSeen, planHints = {}, {}, {}
+	planAxis = nil
 	if not planKeep then planCache = {} end
 end
 
@@ -1014,6 +1018,59 @@ end
 -- The track nodes to try reversing at, in order: the plan's own hints, the
 -- places past the sets of points nearby, and, only if those can't be found,
 -- any node nearby.
+-- Where a track node is, or nil: its junction's position (BASE_NODE, as the
+-- game's track builder reads it), else the end of a piece that meets there
+-- (from the node data the game's line code reads).
+local function trackNodePos(nd)
+	local ok, p = pcall(function()
+		local bn = api.engine.getComponent(nd.entity, api.type.ComponentType.BASE_NODE)
+		return bn and bn.position
+	end)
+	if ok and p ~= nil and type(p.x) == "number" then return p, "junction" end
+	ok, p = pcall(function()
+		local data = api.engine.system.transportNetworkSystem.getTpNetData():getNodeData(nd)
+		local edge = data.ports[1].edgeId
+		local te = getTnEdge(edge.entity, edge.index)
+		local u = sameNode(te.conns[2], nd) and 1.0 or 0.0
+		return api.engine.util.transport.calcPosition(te.geometry, u)
+	end)
+	if ok and p ~= nil and type(p.x) == "number" then return p, "track" end
+	return nil
+end
+
+-- A place to reverse is nearly always on the track running straight on from
+-- the platform, past the points at either end. So, when the points themselves
+-- can't be told (seen live: no junction found among the station's pieces),
+-- nearby nodes are tried in that order: within CUSP_CORRIDOR metres of the
+-- platform's line and at least CUSP_PAST metres along it from the stop, nearest
+-- first; then any others. The pathfinder checks each, as before.
+local CUSP_CORRIDOR, CUSP_PAST = 30.0, 20.0
+local function rankAlongPlatform(nodes)
+	if planAxis == nil then return nodes, nil end
+	local near, rest, read = {}, {}, { junction = 0, track = 0, none = 0 }
+	for _, nd in ipairs(nodes) do
+		local p, how = trackNodePos(nd)
+		read[how or "none"] = read[how or "none"] + 1
+		if p ~= nil then
+			local dx, dy = p.x - planAxis.x, p.y - planAxis.y
+			local along = dx * planAxis.tx + dy * planAxis.ty
+			local side = -dx * planAxis.ty + dy * planAxis.tx
+			if math.abs(side) <= CUSP_CORRIDOR and math.abs(along) >= CUSP_PAST then
+				near[#near + 1] = { nd = nd, d = math.abs(along) }
+			else
+				rest[#rest + 1] = nd
+			end
+		else
+			rest[#rest + 1] = nd
+		end
+	end
+	table.sort(near, function(a, b) return a.d < b.d end)
+	local out = {}
+	for _, n in ipairs(near) do out[#out + 1] = n.nd end
+	for _, nd in ipairs(rest) do out[#out + 1] = nd end
+	return out, string.format("%d on the platform's line past its ends (positions read: %d junction, %d track, %d not)", #near, read.junction, read.track, read.none)
+end
+
 local function cuspCandidates(centres)
 	local out, seen = {}, {}
 	local function add(nd)
@@ -1027,8 +1084,8 @@ local function cuspCandidates(centres)
 	local found = reversingNodes(centres)
 	for _, c in ipairs(found) do add(c.node) end
 	if #found == 0 then
-		local any = nodesNear(centres)
-		planNote(string.format("any node nearby tried instead: %d of %d", math.min(#any, CUSP_MAX_CANDIDATES), #any))
+		local any, ranked = rankAlongPlatform(nodesNear(centres))
+		planNote(string.format("any node nearby tried instead: %d of %d%s", math.min(#any, CUSP_MAX_CANDIDATES), #any, ranked and ("; " .. ranked) or ""))
 		for _, nd in ipairs(any) do add(nd) end
 	end
 	return out
@@ -1538,6 +1595,9 @@ local function recomputeLoopRoute(loop)
 			arrive = a
 			local okH, hints = pcall(arrivalHints, path)
 			if okH then planHints = hints end
+			local okX, tx, ty = pcall(travelDir, a, true)
+			local okS, sp = pcall(piecePos, a, a.forward and 1.0 or 0.0)
+			if okX and tx ~= nil and okS and sp ~= nil then planAxis = { x = sp.x, y = sp.y, tx = tx, ty = ty } end
 			if startPos == nil then
 				-- (the game's own stations give the stop no position: it is where the way in ends)
 				local okP, p = pcall(piecePos, a, a.forward and 1.0 or 0.0)

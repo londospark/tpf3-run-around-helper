@@ -131,7 +131,7 @@ end
 local stops = { { stationGroup = 100, station = 0, terminal = 0 }, { stationGroup = 101, station = 0, terminal = 0 } }
 local listEdges, netData = true, false
 api = {
-  type = { ComponentType = { TRANSPORT_NETWORK = "TN", LINE = "LINE", STATION_GROUP = "SG", STATION = "ST", BASE_EDGE = "BE", BASE_EDGE_STREET = "BES" },
+  type = { ComponentType = { TRANSPORT_NETWORK = "TN", LINE = "LINE", STATION_GROUP = "SG", STATION = "ST", BASE_EDGE = "BE", BASE_EDGE_STREET = "BES", BASE_NODE = "BN" },
     Vec3f = { distance = function(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) end },
     Vec2f = { new = function(x, y) return { x = x, y = y } end },
     enum = { TransportMode = { TRAIN = "TRAIN" } }, Mat4f = { rotZTransl = function() end } },
@@ -143,6 +143,8 @@ api = {
         return d and { edges = { { conns = { nid(d[1]), nid(d[2]) }, geometry = { e = entity } } } } or nil -- (a node's entity has no pieces of its own)
       end
       if ct == "BES" then return entity >= 9000 and {} or nil end
+      -- a junction knows where it is (the decoys, streets and footpaths, are not asked for)
+      if ct == "BN" then local p = nodes[entity]; return p and { position = { x = p[1], y = p[2], z = 0 } } or nil end
       if ct == "LINE" then return { stops = stops } end
       if ct == "SG" then return { stations = { entity + 100 } } end
       -- as the game's stations are: a stop node, a waiting area, and an EMPTY list of stopping places
@@ -281,5 +283,16 @@ M.replan(loop)
 assert(loop.routeState == "ok" and loop.routeReversals == 2 and loop.routeWarning == nil and loop.backFrom ~= nil, "two clicks: " .. fmt(loop) .. " / " .. tostring(loop.routeWarning) .. showLog())
 assert(logged("the track near could not be listed"), "said in the log" .. showLog())
 print("track can't be listed, two clicks:", fmt(loop))
+-- 6. The same, with ONE click on the loop (seen live: "no set of points ...;
+-- any node nearby tried instead: 100 of 476"). The nearby nodes are tried along
+-- the platform's line first, so the reversing places past the points are among
+-- the first tried, not lost behind hundreds of street nodes.
+log = {}; LOG = log
+loop = newLoop()
+loop.waypoints = { { entity = LOOP + 8, index = 0 } }
+M.replan(loop)
+assert(loop.routeState == "ok" and loop.routeReversals == 2 and loop.routeWarning == nil and loop.backFrom ~= nil, "one click: " .. fmt(loop) .. " / " .. tostring(loop.routeWarning) .. showLog())
+assert(logged("on the platform's line past its ends"), "the ranking is logged" .. showLog())
+print("track can't be listed, ONE click:", fmt(loop))
 listEdges = true
 print("auto route (station) ok")

@@ -667,10 +667,43 @@ function data()
 	end)
 
 	-- ------------------------------------------------------------------
-	-- Station window card: the run-arounds at this station's platforms. Setting
-	-- one up stays in a train's window (planning needs a line: which way its
-	-- trains come in).
+	-- Station window card: the run-arounds at this station's platforms, and
+	-- "Set up at platform N" for each platform with train lines and none yet.
+	-- Setting one up plans it from a line that stops there (which way its trains
+	-- come in), through the same command as the train window's.
 	-- ------------------------------------------------------------------
+	-- A line trains run on (or not known: kept).
+	local function isTrainLine(lineEntity)
+		local ok, modes = pcall(api.engine.util.getLineTransportModesUnion, lineEntity)
+		if not ok or type(modes) ~= "table" then return true end
+		local m = api.type.enum.TransportMode
+		return modes[m.TRAIN] == true or modes[m.ELECTRIC_TRAIN] == true
+	end
+
+	-- The station group's platforms that train lines stop at: { station,
+	-- terminal (0-based), number (1-based, for the player), stops = {{ line, stop }} }.
+	local function stationPlatforms(groupEntity)
+		local out = {}
+		pcall(function()
+			local g = api.engine.getComponent(groupEntity, api.type.ComponentType.STATION_GROUP)
+			for i = 1, #g.stations do
+				local stationEntity = g.stations[i]
+				local station = api.engine.getComponent(stationEntity, api.type.ComponentType.STATION)
+				for t = 1, (station and #station.terminals or 0) do
+					local stops = {}
+					pcall(function()
+						local list = api.engine.system.lineSystem.getLineStopsForTerminal(stationEntity, t - 1)
+						for k = 1, #list do
+							if isTrainLine(list[k][1]) then stops[#stops + 1] = { line = list[k][1], stop = list[k][2] } end
+						end
+					end)
+					if #stops > 0 then out[#out + 1] = { station = stationEntity, terminal = t - 1, number = t, stops = stops } end
+				end
+			end
+		end)
+		return out
+	end
+
 	local StationPanel = react.RegisterRecipe("RunAroundStationPanel", function(params)
 		local groupEntity = params.entityId
 		local st = react.useState(readState())
@@ -685,14 +718,45 @@ function data()
 			local g = api.engine.getComponent(groupEntity, api.type.ComponentType.STATION_GROUP)
 			for i = 1, #g.stations do stations[g.stations[i]] = true end
 		end)
-		local cards = {}
+		local cards, taken = {}, {}
 		for _, loop in ipairs(state.loops) do
 			if loop.station ~= nil and stations[loop.station] then
 				cards[#cards + 1] = LoopCard(loop, state, params, nil, groupEntity)
+				taken[tostring(loop.station) .. ":" .. tostring(loop.terminal)] = true
+			end
+		end
+		local stationName = entityName(groupEntity) or "this station"
+		local addButtons = {}
+		for _, pf in ipairs(stationPlatforms(groupEntity)) do
+			if not taken[tostring(pf.station) .. ":" .. tostring(pf.terminal)] then
+				local names = {}
+				for _, sp in ipairs(pf.stops) do names[#names + 1] = entityName(sp.line) or ("line " .. tostring(sp.line)) end
+				local first = pf.stops[1]
+				addButtons[#addButtons + 1] = IconButton(ICON.add, "Platform " .. pf.number,
+					"Trains of " .. table.concat(names, ", ") .. " will have their loco run around here. The way round is looked for automatically.",
+					function() sendGuiCmd("AddLoopAtStop", { lineEntity = first.line, stopIndex = first.stop, name = stationName .. ", platform " .. pf.number }) end,
+					(#cards == 0 and #addButtons == 0) and "primary" or "secondary")
+			end
+		end
+		if #addButtons > 0 then
+			local intro = Column({
+				Text(#cards == 0 and "At a terminus, the loco can uncouple, run around its train and couple on at the other end, instead of the train turning on the spot. Set it up at:"
+					or "Set up another at:", "font-scale-body"),
+				Buttons(addButtons),
+			}, "box-plugin-vertical-space")
+			if content_card ~= nil and #cards == 0 then
+				cards[#cards + 1] = content_card.ContentCard{
+					title = "Run-around",
+					extraChildrenPermanent = { intro },
+					hasPermanentFocusables = true,
+					gameCtx = params.gameCtx,
+					showOnRightSide = params.showCalloutOnRightSide,
+				}
+			else
+				cards[#cards + 1] = intro
 			end
 		end
 		if #cards == 0 then return Column({}) end
-		cards[#cards + 1] = Text("To set up another run-around here, open the window of a train that stops at the platform.", "font-scale-annotation")
 		return Column(cards, "box-plugin-vertical-space")
 	end)
 

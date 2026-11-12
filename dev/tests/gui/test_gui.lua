@@ -184,18 +184,40 @@ assert(findText(renderOpen(), "Trains of this line turn as usual here."), "switc
 local back = findButton(renderOpen(), "Run around on this line"); assert(back, "and can be switched back")
 back.p.onClick(); assert(sent[#sent].p.on == true)
 loops[1].skipLines = nil
--- the station window: the run-arounds at its platforms, and how to set up another
+-- the station window: the run-arounds at its platforms, and set-up for the others
 assert(exports.RunAroundHelperStationPlugin, "station window plugin registered")
-local sh = { id = 9, name = "AtStation", lineEntity = 999, stopIndex = 0, station = 600, terminal = 0, speed = 8, accel = 2, waypoints = {}, loopEdges = {} }
+-- station 600 has three platforms: 0 (lines 100 and 101), 1 (line 102, a bus line), 2 (no lines)
+api.type.ComponentType.STATION = "STN"
+api.type.enum = { TransportMode = { TRAIN = "TRAIN", ELECTRIC_TRAIN = "ETRAIN" } }
+local gc = api.engine.getComponent
+api.engine.getComponent = function(e, c) if c == "STN" then return { terminals = { {}, {}, {} } } end return gc(e, c) end
+api.engine.system.lineSystem = { getLineStopsForTerminal = function(st, t)
+  if st ~= 600 then return {} end
+  if t == 0 then return { { 100, 0 }, { 101, 2 } } end
+  if t == 1 then return { { 102, 4 } } end
+  return {} end }
+api.engine.util.getLineTransportModesUnion = function(l) return l == 102 and { BUS = true } or { TRAIN = true } end
 local keepLoop = loops[1]
-loops[1] = sh
-local stw = exports.RunAroundHelperStationPlugin({ entityId = 55, gameCtx = {} })
+local function stationWindow() return exports.RunAroundHelperStationPlugin({ entityId = 55, gameCtx = {} }) end
+-- none yet: platform 1 offered (train lines), not 2 (a bus line) or 3 (no lines)
+loops[1] = nil
+local stw = stationWindow()
+local p1 = findButton(stw, "Platform 1"); assert(p1, "platform 1 offered")
+assert(not findButton(stw, "Platform 2") and not findButton(stw, "Platform 3"), "no train lines there: not offered")
+p1.p.onClick()
+assert(sent[#sent].id == "AddLoopAtStop" and sent[#sent].p.lineEntity == 100 and sent[#sent].p.stopIndex == 0 and sent[#sent].p.name == "Name55, platform 1", "set up from a line stopping there")
+-- set up: its card, and not offered again
+loops[1] = { id = 9, name = "AtStation", lineEntity = 999, stopIndex = 0, station = 600, terminal = 0, speed = 8, accel = 2, waypoints = {}, loopEdges = {} }
+stw = stationWindow()
 assert(findCardTitle(stw) == "Run-around at AtStation", "the platform's run-around in the station window: " .. tostring(findCardTitle(stw)))
-assert(findText(stw, "To set up another run-around here, open the window of a train that stops at the platform."), "how to set up another")
+assert(not findButton(stw, "Platform 1"), "not offered again")
 assert(not findButton(stw, "Don't run around on this line"), "no per-line switch without a train")
+-- another station's run-around: not shown here, and platform 1 offered again
 loops[1].station = 601
-assert(findCardTitle(exports.RunAroundHelperStationPlugin({ entityId = 55, gameCtx = {} })) == nil, "another station's: nothing")
+assert(findCardTitle(stationWindow()) ~= "Run-around at AtStation", "another station's: not shown")
+assert(findButton(stationWindow(), "Platform 1"), "and this station's platform offered")
 loops[1] = keepLoop
+api.engine.getComponent = gc
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

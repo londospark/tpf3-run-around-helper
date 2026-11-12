@@ -3463,6 +3463,8 @@ local PROBLEM_TEXT = {
 	{ "at the other end of the train", "The loco arrived at the other end of the train from where this route starts." },
 	{ "towards the coaches", "The route starts by going back through the train. Change it so the loco pulls away from its coaches first." },
 	{ "no loco at either end", "There's no loco at either end of this train." },
+	{ "is a multiple unit", "Multiple units don't run around: they can be driven from either end." },
+	{ "powered vehicles", "This train has more than one loco or powered car, so it doesn't run around." },
 	{ "which part of the train is the loco", "Couldn't tell which vehicle of this train is the loco." },
 	{ "chosen loco is not on this train", "The loco chosen for this run-around isn't on this train." },
 	{ "chosen part has no engine", "The vehicle chosen as the loco has no engine." },
@@ -3495,6 +3497,23 @@ local function startRunAround(state, vehicleEntity, loop)
 		setLoopProblem(state, loop.id, problemText(why))
 	end
 	local n = #tvc.vehicles
+	-- Only a loco hauling coaches or wagons runs around. Not a multiple unit
+	-- (the game names the unit in the train's muFileNames, one entry per group,
+	-- empty for a plain vehicle), nor a train with more than one powered
+	-- vehicle (a loco at each end needs no run-around; double-heading isn't
+	-- done; and an unmarked unit of powered cars is caught here too).
+	local okMu, mu = pcall(function()
+		for _, name in ipairs(tvc.muFileNames or {}) do
+			if type(name) == "string" and name ~= "" then return name end
+		end
+		return nil
+	end)
+	if okMu and mu ~= nil then return refuse("the train is a multiple unit (" .. mu .. ")") end
+	local powered = 0
+	for i = 1, n do
+		if isPowered(tvc.vehicles[i].part.modelId) == true then powered = powered + 1 end
+	end
+	if powered > 1 then return refuse(string.format("the train has %d powered vehicles", powered)) end
 	local locoIdx = nil
 	if loop.locoManual then
 		locoIdx = findLocoIndex(tvc, loop)

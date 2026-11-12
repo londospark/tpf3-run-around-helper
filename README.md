@@ -93,8 +93,7 @@ In the train window, one card per run-around on the train's line.
     *gently*, *normally* or *briskly*.
   - **The loco**: *picked automatically* (the default) or a chosen vehicle of
     the train. Automatic picks the loco at whichever end of the train has one
-    (a vehicle with an engine, never a coach or wagon). With a loco at each
-    end, it picks the one nearer the start of the route. **Choose a different
+    (a vehicle with an engine, never a coach or wagon). **Choose a different
     loco** is only needed if the wrong vehicle runs around.
   - **Remove this run-around**: asks for confirmation first.
 - **Set up another at...**: buttons for the line's other stops.

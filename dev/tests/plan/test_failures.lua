@@ -40,7 +40,7 @@ api = {
         extent = L and { bbMin = { x = -L / 2 }, bbMax = { x = L / 2 } } or nil } }
     end } },
   engine = { getComponent = function(e, c)
-      if c == "TV" then if train.gone then return nil end return { transportVehicleConfig = { vehicles = train.parts } } end
+      if c == "TV" then if train.gone then return nil end return { transportVehicleConfig = { vehicles = train.parts, muFileNames = train.mu } } end
       if c == "CL" then local l = layout(); local cs = {} for i = 1, #l do cs[i] = i end; return { carriages = cs } end
       if c == "MIL" then local p = layout()[e]; return { fatInstances = { { modelId = p.m, transf = { cols = function(_, k) if k == 3 then return { x = p.x, y = 0, z = 0 } end return { x = 1, y = 0 } end } } } } end
       if c == "GT" then return { gameTime = 0 } end
@@ -324,6 +324,28 @@ start()
 assert(#saved.runs == 0 and #sent == 0, "no loco at an end: not started")
 assert(loop.lastProblem == "There's no loco at either end of this train.", tostring(loop.lastProblem))
 say("no loco at either end: " .. loop.lastProblem .. "\n")
+
+-- A multiple unit (the game names it in muFileNames): not started, and why.
+fresh()
+train.mu = { "multiple_unit/emu_class_365.mdl" }
+start()
+train.mu = nil
+assert(#saved.runs == 0 and #sent == 0, "multiple unit: not started")
+assert(loop.lastProblem == "Multiple units don't run around: they can be driven from either end.", tostring(loop.lastProblem))
+say("multiple unit: " .. loop.lastProblem .. "\n")
+-- ... but plain groups (empty names) are fine
+fresh()
+train.mu = { "", "" }
+start()
+train.mu = nil
+assert(#saved.runs == 1, "plain vehicles in groups: runs")
+-- A loco at each end (or any second powered vehicle): not started, and why.
+fresh()
+train.parts[4] = { part = { modelId = 4225, reversed = true, compartment2loadConfig = { {} }, color = { x = 0.4, y = 0.2, z = 0.3 } }, autoLoadConfig = { false }, purchaseTime = 1004 }
+start()
+assert(#saved.runs == 0 and #sent == 0, "two locos: not started")
+assert(loop.lastProblem == "This train has more than one loco or powered car, so it doesn't run around.", tostring(loop.lastProblem))
+say("loco at each end: " .. loop.lastProblem .. "\n")
 
 -- The route starts at the coaches' end of the platform: the loco is at the wrong end.
 fresh()

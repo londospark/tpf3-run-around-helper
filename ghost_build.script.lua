@@ -620,7 +620,7 @@ end
 -- getAsTable gives them in (a table, or an engine object that can be indexed
 -- or iterated): the parts specs set at load and other mods' (devers') must
 -- survive the setAsTable below. nil when there are none.
-local KNOWN_PARAMS = { "runaround_trf", "runaround_mdl", "runaround_probe", "runaround_frame", "devers_trf", "devers_mdl", "devers_carrier", "devers_flip" }
+local KNOWN_PARAMS = { "runaround_trf", "runaround_mdl", "runaround_frame", "devers_trf", "devers_mdl", "devers_carrier", "devers_flip" }
 for i = 1, 8 do KNOWN_PARAMS[#KNOWN_PARAMS + 1] = "runaround_parts" .. i; KNOWN_PARAMS[#KNOWN_PARAMS + 1] = "devers_rest" .. i end
 local function plainParams(p)
 	if p == nil then return nil end
@@ -688,12 +688,6 @@ local function patchLoco(modelId, modelName, src)
 	end
 	if trfOk then
 		md.transformatorConfig.transformator.name = wrappedTrf
-		-- PROBE (temporary): log where the engine puts a steam loco's parts
-		if type(soundName) == "string" and string.find(soundName, "steam", 1, true) then
-			if type(md.transformatorConfig.params) ~= "table" then md.transformatorConfig.params = {} end
-			md.transformatorConfig.params.runaround_probe = true
-			md.transformatorConfig.params.runaround_mdl = modelName
-		end
 	else
 		local trf = md.transformatorConfig and md.transformatorConfig.transformator and md.transformatorConfig.transformator.name
 		local why

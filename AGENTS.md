@@ -503,9 +503,9 @@ a model of each structure; the previous version fails it at 0.79 m):
   starting part-way along the train): the curvature is read per coach from its
   neighbours, so it follows, but only coarsely.
 
-**Temporary things to remove once seen right live:** the `PROBE` (logging
-only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;
-`PROBE` lines from real trains). It's kept for check 3 below.
+**Removed (2026-11-12, `41fcf62`, `da672dd`):** the `PROBE`, the
+`track bends ... parts turned` line every 3 s, and the `loco parts:` /
+`loco params at setup:` lines at start-up. `LOG_TRACES` is now off by default.
 
 **Next checks, in order** (restart first):
 
@@ -516,11 +516,9 @@ only: `runaround_probe` set in `patchLoco` for steam locos on the stock path;
 2. Up close and from far away (lower levels of detail).
 3. **Real trains are unaffected** by the added animations (never played on
    them; frame 0 is no turn): a real Su or Black 5 in normal running looks as
-   before. With *devers* off, the `PROBE` lines should still list the tender and
-   the small axles as moved.
+   before.
 4. With and without *devers*.
 5. The coupling: no snap (`coupling place: ...`).
-6. Then remove the probe.
 
 **Done offline, raised by the owner:** the coach copies' bogies on a curved
 platform (`2dce5ba`, `coachStrips`; see "Coach copies' bogies" above). Live

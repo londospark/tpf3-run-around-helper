@@ -55,6 +55,10 @@ local LOOP = stationTrack(5, 40, 200, "LP") -- the loop, a second station track
 piece(200, 5, 240, 0, "LE")                -- loop to the east points
 stationTrack(-5, 40, 200, "SD")            -- a dead-end siding the other side
 piece(200, -5, 220, 0, "SE")
+-- a station's many lane nodes: one a metre along the platform, the loop and
+-- the siding (they have a place but lead nowhere a pathfinder would go)
+local LANES = {}
+for x = 40, 200 do for _, y in ipairs({ 0, 5, -5 }) do LANES[#LANES + 1] = { x, y } end end
 local STREETS = {}
 for i = 1, 40 do STREETS[#STREETS + 1] = 9000 + i end
 
@@ -144,7 +148,7 @@ api = {
       end
       if ct == "BES" then return entity >= 9000 and {} or nil end
       -- a junction knows where it is (the decoys, streets and footpaths, are not asked for)
-      if ct == "BN" then local p = nodes[entity]; return p and { position = { x = p[1], y = p[2], z = 0 } } or nil end
+      if ct == "BN" then local p = nodes[entity] or LANES[entity - 30000]; return p and { position = { x = p[1], y = p[2], z = 0 } } or nil end
       if ct == "LINE" then return { stops = stops } end
       if ct == "SG" then return { stations = { entity + 100 } } end
       -- as the game's stations are: a stop node, a waiting area, and an EMPTY list of stopping places
@@ -157,6 +161,7 @@ api = {
         findTransportNetworkNodesInCircle = function(c, r)
           local out = {}
           for i = 1, 600 do out[#out + 1] = nid(20000 + i) end
+          for i = 1, #LANES do out[#out + 1] = nid(30000 + i) end
           local ids = {}
           for id, p in pairs(nodes) do if (p[1] - c.x) ^ 2 + (p[2] - c.y) ^ 2 <= r * r then ids[#ids + 1] = id end end
           table.sort(ids)
@@ -292,7 +297,7 @@ loop = newLoop()
 loop.waypoints = { { entity = LOOP + 8, index = 0 } }
 M.replan(loop)
 assert(loop.routeState == "ok" and loop.routeReversals == 2 and loop.routeWarning == nil and loop.backFrom ~= nil, "one click: " .. fmt(loop) .. " / " .. tostring(loop.routeWarning) .. showLog())
-assert(logged("on the platform's line past its ends"), "the ranking is logged" .. showLog())
+assert(logged("on the platform's line and"), "the ranking is logged" .. showLog())
 print("track can't be listed, ONE click:", fmt(loop))
 listEdges = true
 print("auto route (station) ok")

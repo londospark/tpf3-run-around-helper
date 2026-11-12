@@ -1041,34 +1041,49 @@ end
 -- A place to reverse is nearly always on the track running straight on from
 -- the platform, past the points at either end. So, when the points themselves
 -- can't be told (seen live: no junction found among the station's pieces),
--- nearby nodes are tried in that order: within CUSP_CORRIDOR metres of the
--- platform's line and at least CUSP_PAST metres along it from the stop, nearest
--- first; then any others. The pathfinder checks each, as before.
-local CUSP_CORRIDOR, CUSP_PAST = 30.0, 20.0
+-- nearby nodes are tried in that order: those on the platform's own line
+-- (within CUSP_ON_LINE metres of it) before those merely near it (within
+-- CUSP_CORRIDOR), and spread out, one per CUSP_STEP metres along the line on
+-- each side, nearest first. A station's track is cut into many short pieces
+-- with a node at every join, so without the spread the tries (CUSP_MAX_CANDIDATES)
+-- were used up on the platform and the loop themselves (seen live: 162 nodes
+-- on the line, the first 100 all short of the points). Then any others. The
+-- pathfinder checks each, as before.
+local CUSP_ON_LINE, CUSP_CORRIDOR, CUSP_PAST, CUSP_STEP = 3.0, 30.0, 20.0, 10.0
 local function rankAlongPlatform(nodes)
 	if planAxis == nil then return nodes, nil end
-	local near, rest, read = {}, {}, { junction = 0, track = 0, none = 0 }
+	local tiers, rest, read = { {}, {} }, {}, { junction = 0, track = 0, none = 0 }
 	for _, nd in ipairs(nodes) do
 		local p, how = trackNodePos(nd)
 		read[how or "none"] = read[how or "none"] + 1
+		local placed = false
 		if p ~= nil then
 			local dx, dy = p.x - planAxis.x, p.y - planAxis.y
 			local along = dx * planAxis.tx + dy * planAxis.ty
-			local side = -dx * planAxis.ty + dy * planAxis.tx
-			if math.abs(side) <= CUSP_CORRIDOR and math.abs(along) >= CUSP_PAST then
-				near[#near + 1] = { nd = nd, d = math.abs(along) }
-			else
-				rest[#rest + 1] = nd
+			local side = math.abs(-dx * planAxis.ty + dy * planAxis.tx)
+			if side <= CUSP_CORRIDOR and math.abs(along) >= CUSP_PAST then
+				local t = tiers[side <= CUSP_ON_LINE and 1 or 2]
+				local bin = (along < 0 and "-" or "+") .. tostring(math.floor(math.abs(along) / CUSP_STEP))
+				local have = t[bin]
+				if have == nil or side < have.side then t[bin] = { nd = nd, d = math.abs(along), side = side } end
+				if have ~= nil and side >= have.side then rest[#rest + 1] = nd end
+				if have ~= nil and side < have.side then rest[#rest + 1] = have.nd end
+				placed = true
 			end
-		else
-			rest[#rest + 1] = nd
 		end
+		if not placed then rest[#rest + 1] = nd end
 	end
-	table.sort(near, function(a, b) return a.d < b.d end)
-	local out = {}
-	for _, n in ipairs(near) do out[#out + 1] = n.nd end
+	local out, counts = {}, {}
+	for i, t in ipairs(tiers) do
+		local list = {}
+		for _, v in pairs(t) do list[#list + 1] = v end
+		table.sort(list, function(a, b) return a.d < b.d end)
+		counts[i] = #list
+		for _, v in ipairs(list) do out[#out + 1] = v.nd end
+	end
 	for _, nd in ipairs(rest) do out[#out + 1] = nd end
-	return out, string.format("%d on the platform's line past its ends (positions read: %d junction, %d track, %d not)", #near, read.junction, read.track, read.none)
+	return out, string.format("%d on the platform's line and %d beside it past its ends, one per %d m (positions read: %d junction, %d track, %d not)",
+		counts[1], counts[2], CUSP_STEP, read.junction, read.track, read.none)
 end
 
 local function cuspCandidates(centres)

@@ -154,8 +154,9 @@ A train is never left stuck or broken by a run-around:
 - **The card shows what's happening:** turning the train, drawing forward,
   uncoupling, running around, coupling on. It shows **Stuck** if the loco can't
   be coupled back on.
-- **One loco plus coaches or wagons.** Multiple units and double-heading are not
-  handled. A light engine (a loco with nothing behind it) is left alone.
+- **One loco plus coaches or wagons.** Multiple units, trains with a loco at
+  each end, and double-headed trains don't run around: they're left to turn as
+  usual, and the card says why. A light engine (a loco with nothing behind it) is left alone.
 - **The loco should be at the front of the train when it arrives**, which it is
   at a terminus. A loco chosen elsewhere in the train still runs around, but the
   coaches jump at the end instead of the train drawing forward.

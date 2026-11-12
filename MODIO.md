@@ -56,7 +56,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 
 <h2>Good to know</h2>
 <ul>
-<li><strong>One loco plus coaches or wagons.</strong> Multiple units and double-heading are not handled yet.</li>
+<li><strong>One loco plus coaches or wagons.</strong> Multiple units, trains with a loco at each end, and double-headed trains don't run around: they turn as usual, and the card says why.</li>
 <li><strong>The running loco ignores signals.</strong> Use a loop that other trains won't be on at the same time.</li>
 <li><strong>The coaches stay where they stopped.</strong> The loco uncouples, runs around and couples on, and the train leaves from where it stands. (Out of sight, the real train makes up a loco length as it departs, because the game keeps a turned train's middle fixed; so departures take a few seconds longer, and doors don't open while it loads.)</li>
 <li><strong>Nothing is bought or sold, and passengers and goods stay aboard.</strong> The loco, coaches and wagons never leave the train. They're only hidden while their copies are shown, and copies of goods wagons show their load.</li>

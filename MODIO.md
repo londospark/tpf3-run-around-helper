@@ -66,7 +66,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 <li><strong>Works alongside mods that change trains' animation</strong>, such as Real Track Cant: those trains still lean on curves.</li>
 <li><strong>Nothing is left stuck.</strong> If a run-around can't start or stalls, the train is put back as it was and goes on its way. If the loco can't couple back on, the train waits and the card says so.</li>
 <li><strong>Steam locos, known in this alpha:</strong> no chuffing while the loco runs around (the rest of its sound plays).</li>
-<li>Run-arounds belong to a platform: every line that stops there uses it (each line can be switched off), and editing a line's stops doesn't move it. You'll find them in the train window and the station window.</li>
+<li>Run-arounds belong to a platform: every line that stops there uses it (each line can be switched off), and editing a line's stops doesn't move it. Set them up from the station window (pick the platform) or a train's window (pick the station).</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
 <li><strong>Don't remove the mod while a run-around is happening.</strong> The train is hidden at that moment and would stay hidden (it shows up teal without the mod). Let the run-around finish first.</li>
 </ul>

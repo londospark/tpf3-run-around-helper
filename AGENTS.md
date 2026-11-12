@@ -325,7 +325,10 @@ read), `placeLoop` converting old run-arounds in `ensureData` (logged once:
 repeat-arrival record uses the train's own line (`run.arrivedLine`); the train
 window lists by platform; `loop.skipLines` and `SetLineRunsAround` (the
 per-line switch, in the train window's options); the station card
-(`runaround_station.res.lua`, `RunAroundHelperStationPlugin`, view only).
+(`runaround_station.res.lua`, `RunAroundHelperStationPlugin`): the
+run-arounds at its platforms, and "Platform N" set-up for each platform with
+train lines (`lineSystem.getLineStopsForTerminal`,
+`util.getLineTransportModesUnion`), planned from the first line there.
 Tests: `test_platform.lua`, `test_gui.lua`.
 **To confirm live:** the station window shows the card; an old run-around logs
 `now belongs to its platform`; a second line at the platform runs around
@@ -599,5 +602,6 @@ These are documented in the README:
    their video.
 3. Add a chapter on the hidden-coach technique to the modding guide (new source
    needed, see above).
-4. Later: setting a run-around up from the station window (needs a line to
-   plan from: which way trains come in).
+4. Later: double-headed trains running around as a pair (the owner's call:
+   real practice; see the conversation of 2026-11-12). Today any train with
+   more than one powered vehicle is refused.

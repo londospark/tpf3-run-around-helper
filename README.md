@@ -48,8 +48,9 @@ run-arounds set up is safe too: trains then flip as normal.
 
 ## Quick start
 
-1. **Open a train's window.** Pick any train on the line. It gets a
-   **Run-around** card.
+1. **Open a train's window, or the station's.** Either has a **Run-around**
+   card. In the station window, pick the platform; in a train's window, the
+   station.
 2. **Add a run-around.** The card lists the stops of that line, with the one the
    train is at first. Click the station where the loco should run around. The
    run-around is named after the station.
@@ -73,8 +74,9 @@ run-arounds set up is safe too: trains then flip as normal.
 ## The Run-around card
 
 In the train window, one card for each run-around at a platform the train's
-line stops at. The station window shows the run-arounds at its platforms too
-(set them up from a train's window: the way trains come in matters).
+line stops at. The station window shows the run-arounds at its platforms too,
+and offers **Platform N** for each platform that train lines stop at and that
+has none yet.
 
 - **The route, in a sentence**: *Ready*, with how far the loco goes and about
   how long it takes; or a warning (the route goes through the train, or comes

@@ -169,6 +169,20 @@ assert(not findButton(t5, "Name55  (this train's stop)"), "not offered again")
 loops[1].terminal = 1
 assert(findCardTitle(render()) ~= "Run-around at Shared", "another platform's: not shown")
 loops[1] = mine
+-- the per-line switch in the options: says what this train's line does, and switches it
+local openKeys = {}
+local function renderOpen() return exports.RunAroundHelperVehiclePlugin({ entityId = 42, gameCtx = {},
+  setCollapsibleExpanded = function(k, v) openKeys[k] = v end, getCollapsibleExpanded = function(k) return openKeys[k] == true end }) end
+findButton(renderOpen(), "Options").p.onClick()
+assert(findText(renderOpen(), "Trains of this line run around here."), "this line runs around")
+local dont = findButton(renderOpen(), "Don't run around on this line"); assert(dont, "switch offered")
+dont.p.onClick()
+assert(sent[#sent].id == "SetLineRunsAround" and sent[#sent].p.lineEntity == 100 and sent[#sent].p.on == false, "switches this line off")
+loops[1].skipLines = { ["100"] = true }
+assert(findText(renderOpen(), "Trains of this line turn as usual here."), "switched off: said so")
+local back = findButton(renderOpen(), "Run around on this line"); assert(back, "and can be switched back")
+back.p.onClick(); assert(sent[#sent].p.on == true)
+loops[1].skipLines = nil
 -- mod button panel
 assert(exports.RunAroundHelperButton == nil)
 print("gui ok")

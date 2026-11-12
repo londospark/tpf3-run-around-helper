@@ -17,7 +17,7 @@ api = {
 }
 LOG = {}
 local M = assert(load("local print = function(...) local t = {} for i = 1, select('#', ...) do t[i] = tostring(select(i, ...)) end LOG[#LOG + 1] = table.concat(t, ' ') end\n"
-  .. io.open(arg[1]):read("*a") .. "\nreturn {find=findLoopForArrival, place=stopPlace, ensure=ensureData, gui=handleGuiCmd}", "s"))()
+  .. io.open(arg[1]):read("*a") .. "\nreturn {find=findLoopForArrival, place=stopPlace, ensure=ensureData, gui=handleGuiCmd, data=data}", "s"))()
 
 -- a run-around set up from line 10 at its first stop (station 501, terminal 1)
 local data = { loops = {}, runs = {}, pending = {} }
@@ -54,4 +54,20 @@ for _ = 1, 101 do M.ensure(state) end
 assert(data.loops[1].station == nil and data.loops[1].unplaceable == true, "gave up converting a run-around whose line has gone")
 assert(M.find(data.loops, 99, 0) == data.loops[1], "still matched by its line and stop")
 print("old run-arounds: converted once; a gone line's kept as it was")
+-- a line switched off: its trains turn as usual there; other lines still run around
+data = { loops = {}, runs = {}, pending = {} }
+M.gui(data, "AddLoopAtStop", { lineEntity = 10, stopIndex = 0, name = "A" })
+local script = M.data()
+local function arrive(vehicle, line, stop)
+  script.handleEvent(nil, state, nil, "TransportVehicleSystem", "OnArriveAtStop", { vehicleEntity = vehicle, lineEntity = line, stopIndex = stop })
+end
+M.gui(data, "SetLineRunsAround", { loopId = data.loops[1].id, lineEntity = 20, on = false })
+arrive(1, 20, 1)
+assert(#data.pending == 0, "line 20 switched off: not queued")
+arrive(2, 10, 0)
+assert(#data.pending == 1 and data.pending[1].line == 10, "line 10 still runs around, and its own line goes with the run")
+M.gui(data, "SetLineRunsAround", { loopId = data.loops[1].id, lineEntity = 20, on = true })
+arrive(3, 20, 1)
+assert(#data.pending == 2 and data.pending[2].line == 20 and data.pending[2].stop == 1, "switched back on: line 20 runs around, with its own line and stop")
+print("per-line switch: a switched-off line turns as usual; others run around")
 print("platform ok")

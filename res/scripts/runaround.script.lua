@@ -3965,6 +3965,15 @@ local function handleGuiCmd(data, name, param)
 			replanLoop(loop)
 		end
 
+	elseif name == "SetLineRunsAround" then
+		-- Whether trains of one line run around at this platform (all do, until switched off).
+		local loop = findLoopById(data.loops, param.loopId)
+		if loop ~= nil and param.lineEntity ~= nil then
+			loop.skipLines = loop.skipLines or {}
+			loop.skipLines[tostring(param.lineEntity)] = (param.on == false) or nil
+			logInfo("GUI: run-around", loopLabel(loop), "- line", param.lineEntity, param.on == false and "turns as usual here" or "runs around here")
+		end
+
 	elseif name == "RemoveLoop" then
 		for i, loop in ipairs(data.loops) do
 			if loop.id == param.loopId then
@@ -4115,6 +4124,11 @@ return {
 			end
 
 			local loop = findLoopForArrival(data.loops, param.lineEntity, param.stopIndex)
+			-- (a line can be switched off for a platform's run-around: its trains turn as usual)
+			if loop ~= nil and loop.skipLines ~= nil and loop.skipLines[tostring(param.lineEntity)] then
+				logInfo("vehicle", param.vehicleEntity, "at run-around", loopLabel(loop), "- its line", param.lineEntity, "doesn't run around here")
+				loop = nil
+			end
 			if loop ~= nil then
 				if loop.locoManual and loop.locoModelId == nil then
 					logInfo("startRunAround: loop", loopLabel(loop), "has no locoModelId set yet (configure it from the GUI)")

@@ -467,6 +467,9 @@ function data()
 
 	local LoopSettings = react.RegisterRecipe("RunAroundLoopSettings", function(param)
 		local loop = param.loop
+		local trainLine = param.vehicleEntity ~= nil and vehicleLineAndStop(param.vehicleEntity) or nil
+		if trainLine ~= nil and trainLine < 0 then trainLine = nil end
+		local skipped = trainLine ~= nil and loop.skipLines ~= nil and loop.skipLines[tostring(trainLine)] == true
 		local renaming = react.useState(false)
 		local confirmDelete = react.useState(false)
 		local speed = kmh(loop.speed)
@@ -507,6 +510,12 @@ function data()
 					if pc ~= nil then sendGuiCmd("SetLoopNumberField", { loopId = loop.id, field = "accel", value = pc[1] }) end
 				end,
 			},
+			-- this train's line: does it run around here? (every line that stops at
+			-- the platform does, until switched off)
+			trainLine ~= nil and Text(skipped and "Trains of this line turn as usual here." or "Trains of this line run around here.", "font-scale-body") or nil,
+			trainLine ~= nil and IconButton(nil, skipped and "Run around on this line" or "Don't run around on this line",
+				"Only this train's line. Other lines that stop at this platform aren't affected.",
+				function() sendGuiCmd("SetLineRunsAround", { loopId = loop.id, lineEntity = trainLine, on = skipped }) end, "secondary") or nil,
 			Text("The loco: " .. locoText, "font-scale-body"),
 			param.vehicleEntity ~= nil and IconButton(ICON.train, "Choose a different loco", "Only needed if the wrong vehicle runs around. Each press picks the next vehicle of this train, then back to automatic.",
 				function() sendGuiCmd("CycleLocoCandidate", { loopId = loop.id, vehicleEntity = param.vehicleEntity }) end, "secondary") or nil,

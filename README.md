@@ -168,9 +168,13 @@ A train is never left stuck or broken by a run-around:
   coaches jump at the end instead of the train drawing forward.
 - **The running loco ignores signals** and doesn't reserve track. Use a loop
   that other trains won't be on at the same time.
-- **Don't remove the mod while a run-around is happening.** The loco and coaches
-  are hidden at that moment (painted a flag colour this mod draws as nothing),
-  and without the mod they'd show that colour (teal). Let the run finish first.
+- **Don't remove the mod while a run-around is happening**, and that includes
+  the train standing coupled on, waiting to leave. All that time the real
+  train is hidden (painted a flag colour this mod draws as nothing), and while
+  it moves off it is also held to a crawl. Without the mod it would show that
+  colour (teal) and could stay on the crawl for good. Let every run-around
+  finish, until the train has pulled away from the platform, then save and
+  remove the mod.
 - **Changes during a run** (speed, route) apply from the next arrival: a run
   keeps the settings it started with.
 - **The train must stop at the platform the route starts from.** A line can

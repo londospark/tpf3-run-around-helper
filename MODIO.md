@@ -68,7 +68,7 @@ run around, run-around, runaround, run round, run-round loop, locomotive, loco, 
 <li><strong>Steam locos, known in this alpha:</strong> no chuffing while the loco runs around (the rest of its sound plays).</li>
 <li>Run-arounds belong to a platform: every line that stops there uses it (each line can be switched off), and editing a line's stops doesn't move it. Set them up from the station window (pick the platform) or a train's window (pick the station).</li>
 <li>Install, then <strong>restart the game fully</strong>: script mods are only loaded at start-up.</li>
-<li><strong>Don't remove the mod while a run-around is happening.</strong> The train is hidden at that moment and would stay hidden (it shows up teal without the mod). Let the run-around finish first.</li>
+<li><strong>Don't remove the mod while a run-around is happening</strong>, including while the train stands coupled on, waiting to leave. The real train is hidden then, and held to a crawl as it moves off: without the mod it would show up teal and could stay on the crawl for good. Let every run-around finish, until the train has pulled away, then save and remove the mod.</li>
 </ul>
 
 <h2>Status and feedback</h2>

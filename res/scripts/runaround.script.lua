@@ -118,13 +118,45 @@ local function loopLabel(loop)
 end
 
 -- Finds the configured loop matching an arrival event, or nil.
+-- The platform a line's stop is at: the station entity and its terminal
+-- (raw, 0-based, as the line stores it), or nil. A run-around belongs to a
+-- platform, so every line stopping there shares it, and inserting stops in a
+-- line no longer moves it to another station.
+local function stopPlace(lineEntity, stopIndex)
+	local ok, place = pcall(function()
+		local line = api.engine.getComponent(lineEntity, api.type.ComponentType.LINE)
+		local stop = line.stops[stopIndex + 1]
+		local group = api.engine.getComponent(stop.stationGroup, api.type.ComponentType.STATION_GROUP)
+		local station = group.stations[stop.station + 1]
+		if station == nil or stop.terminal == nil then return nil end
+		return { station = station, terminal = stop.terminal }
+	end)
+	return ok and place or nil
+end
+
+-- The run-around for a train arriving at a line's stop: the one at that
+-- platform; for a run-around whose platform isn't known, the line and stop it
+-- was set up for, as before.
 local function findLoopForArrival(loops, lineEntity, stopIndex)
+	local place = stopPlace(lineEntity, stopIndex)
 	for _, loop in ipairs(loops) do
-		if loop.lineEntity == lineEntity and loop.stopIndex == stopIndex then
+		if place ~= nil and loop.station ~= nil then
+			if loop.station == place.station and loop.terminal == place.terminal then return loop end
+		elseif loop.lineEntity == lineEntity and loop.stopIndex == stopIndex then
 			return loop
 		end
 	end
 	return nil
+end
+
+-- Gives a run-around set up before platforms its platform (once, when the
+-- game script loads its data). False if it can't be read now.
+local function placeLoop(loop)
+	if loop.station ~= nil then return true end
+	local place = stopPlace(loop.lineEntity, loop.stopIndex)
+	if place == nil then return false end
+	loop.station, loop.terminal = place.station, place.terminal
+	return true
 end
 
 local function findLoopById(loops, loopId)
@@ -2620,7 +2652,8 @@ local function finalizeRun(state, run)
 	local data = state:get()
 	if data ~= nil and run.loop ~= nil then
 		data.ranAt = data.ranAt or {}
-		data.ranAt[tostring(run.vehicleEntity)] = { line = run.loop.lineEntity, stop = run.loop.stopIndex }
+		-- (the line and stop the train came in on: a platform's run-around serves every line there)
+		data.ranAt[tostring(run.vehicleEntity)] = { line = run.arrivedLine or run.loop.lineEntity, stop = run.arrivedStop or run.loop.stopIndex }
 		state:set(data)
 	end
 	if not run.ghostGone and run.ghost ~= nil then api.cmd.sendCommand(api.cmd.makeCustomEntityDestroyCmd(run.ghost)) end
@@ -3481,7 +3514,7 @@ local function problemText(why)
 	return string.upper(string.sub(why, 1, 1)) .. string.sub(why, 2) .. "."
 end
 
-local function startRunAround(state, vehicleEntity, loop)
+local function startRunAround(state, vehicleEntity, loop, arrivedLine, arrivedStop)
 	pieceLengths = {} -- (the track may have been rebuilt since the last run)
 	local tv = api.engine.getComponent(vehicleEntity, api.type.ComponentType.TRANSPORT_VEHICLE)
 	if tv == nil then
@@ -3692,6 +3725,8 @@ local function startRunAround(state, vehicleEntity, loop)
 		return {
 			vehicleEntity = vehicleEntity,
 			loop = loop,
+			arrivedLine = arrivedLine,
+			arrivedStop = arrivedStop,
 			locoPart = locoSnap,
 			locoIdx = locoIdx,
 			partCount = #tvc.vehicles,
@@ -3784,6 +3819,18 @@ local function ensureData(state)
 	if data.runs == nil then data.runs = {} end
 	if data.loops == nil then data.loops = {} end
 	if data.pending == nil then data.pending = {} end
+	-- run-arounds set up before they belonged to a platform get theirs (each
+	-- tick until it can be read; then never again)
+	for _, loop in ipairs(data.loops) do
+		if loop.station == nil and not loop.unplaceable then
+			if placeLoop(loop) then
+				logInfo("run-around", loopLabel(loop), "now belongs to its platform: station", loop.station, "terminal", loop.terminal)
+			else
+				loop.placeTries = (loop.placeTries or 0) + 1
+				if loop.placeTries > 100 then loop.unplaceable = true end -- (its line or stop has gone: kept by line and stop)
+			end
+		end
+	end
 	return data
 end
 
@@ -3821,15 +3868,18 @@ local function handleGuiCmd(data, name, param)
 		-- From the panel's "Add a run-around at <station>": any stop of the line,
 		-- named after its station.
 		if param.lineEntity == nil or param.stopIndex == nil then return end
-		for _, l in ipairs(data.loops) do
-			if l.lineEntity == param.lineEntity and l.stopIndex == param.stopIndex then return end
-		end
+		-- one run-around per platform, whichever line it is set up from
+		if findLoopForArrival(data.loops, param.lineEntity, param.stopIndex) ~= nil then return end
+		local place = stopPlace(param.lineEntity, param.stopIndex)
 		local snap = param.vehicleEntity and readVehicleSnapshot(param.vehicleEntity)
 		local loop = {
 			id = newLoopId(data),
 			name = param.name or ("Run-around " .. tostring(#data.loops + 1)),
 			lineEntity = param.lineEntity,
 			stopIndex = param.stopIndex,
+			-- its platform (the line and stop above are the line it was set up from)
+			station = place and place.station or nil,
+			terminal = place and place.terminal or nil,
 			locoModelId = snap and snap.vehicles[1] and snap.vehicles[1].part.modelId or nil,
 			locoManual = false,
 			locoCandidateIndex = 0,
@@ -4020,7 +4070,7 @@ return {
 			for _, p in ipairs(updateResult.starts) do
 				local loop = findLoopById(data.loops, p.loopId)
 				if loop ~= nil then
-					startRunAround(state, p.vehicleEntity, loop)
+					startRunAround(state, p.vehicleEntity, loop, p.line, p.stop)
 				end
 			end
 		end
@@ -4076,7 +4126,7 @@ return {
 				end
 				-- Queue only; update() sends the commands (see there).
 				if not vehicleBusy(data, param.vehicleEntity) then
-					data.pending[#data.pending + 1] = { vehicleEntity = param.vehicleEntity, loopId = loop.id }
+					data.pending[#data.pending + 1] = { vehicleEntity = param.vehicleEntity, loopId = loop.id, line = param.lineEntity, stop = param.stopIndex }
 					state:set(data)
 					logInfo("queued run-around for vehicle", param.vehicleEntity, "loop", loopLabel(loop))
 				end
